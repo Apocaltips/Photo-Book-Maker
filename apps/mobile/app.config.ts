@@ -7,6 +7,8 @@ export default ({ config }: ConfigContext): ExpoConfig => {
   const extra: NonNullable<ExpoConfig["extra"]> = {
     ...(config.extra ?? {}),
     apiBaseUrl: process.env.EXPO_PUBLIC_API_BASE_URL ?? defaultApiBaseUrl,
+    supabaseAnonKey: process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY ?? "",
+    supabaseUrl: process.env.EXPO_PUBLIC_SUPABASE_URL ?? "",
     eas: {
       projectId: process.env.EXPO_PUBLIC_EAS_PROJECT_ID ?? defaultEasProjectId,
     },
@@ -37,6 +39,10 @@ export default ({ config }: ConfigContext): ExpoConfig => {
     android: {
       package: "com.vince.photobookmaker",
       versionCode: 1,
+      blockedPermissions: [
+        "android.permission.CAMERA",
+        "android.permission.RECORD_AUDIO",
+      ],
       adaptiveIcon: {
         foregroundImage: "./assets/adaptive-icon.png",
         backgroundColor: "#ffffff",
@@ -51,6 +57,8 @@ export default ({ config }: ConfigContext): ExpoConfig => {
       [
         "expo-image-picker",
         {
+          cameraPermission: false,
+          microphonePermission: false,
           photosPermission:
             "Allow Photo Book Maker to import trip photos for book creation.",
         },

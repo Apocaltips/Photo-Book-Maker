@@ -1,10 +1,11 @@
 import { toggleMustIncludePhoto } from "@photo-book-maker/core";
 import { NextResponse } from "next/server";
+import { authorizeProjectRequest } from "@/lib/server/auth";
 import { updateProject } from "@/lib/server/project-store";
 import { hydrateProjectForClient } from "@/lib/server/project-response";
 
 export async function POST(
-  _request: Request,
+  request: Request,
   {
     params,
   }: {
@@ -12,6 +13,10 @@ export async function POST(
   },
 ) {
   const { projectId, photoId } = await params;
+  const auth = await authorizeProjectRequest(request, projectId, "edit");
+  if ("response" in auth) {
+    return auth.response;
+  }
   const project = await updateProject(projectId, (current) =>
     toggleMustIncludePhoto(current, photoId),
   );

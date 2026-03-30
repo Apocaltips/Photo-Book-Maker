@@ -1,15 +1,27 @@
 import { createMockProject } from "@photo-book-maker/core";
 import { NextResponse } from "next/server";
+import {
+  filterProjectsForUser,
+  getAuthenticatedUser,
+  unauthorizedResponse,
+} from "@/lib/server/auth";
 import { readProjects, writeProjects } from "@/lib/server/project-store";
 import {
   hydrateProjectForClient,
   hydrateProjectsForClient,
 } from "@/lib/server/project-response";
 
-export async function GET() {
+export async function GET(request: Request) {
   try {
+    const user = await getAuthenticatedUser(request);
+    if (!user) {
+      return unauthorizedResponse();
+    }
+
     return NextResponse.json({
-      projects: await hydrateProjectsForClient(await readProjects()),
+      projects: await hydrateProjectsForClient(
+        filterProjectsForUser(await readProjects(), user.email),
+      ),
     });
   } catch (error) {
     const message =
@@ -21,8 +33,17 @@ export async function GET() {
 
 export async function POST(request: Request) {
   try {
+    const user = await getAuthenticatedUser(request);
+    if (!user) {
+      return unauthorizedResponse();
+    }
+
     const body = await request.json();
-    const project = createMockProject(body);
+    const project = createMockProject({
+      ...body,
+      ownerEmail: user.email,
+      ownerName: user.name,
+    });
     const projects = await readProjects();
     await writeProjects([project, ...projects]);
 

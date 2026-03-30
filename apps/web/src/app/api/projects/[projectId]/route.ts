@@ -1,20 +1,19 @@
-import { findProjectById } from "@photo-book-maker/core";
 import { NextResponse } from "next/server";
-import { readProjects, updateProject } from "@/lib/server/project-store";
+import { authorizeProjectRequest } from "@/lib/server/auth";
+import { updateProject } from "@/lib/server/project-store";
 import { hydrateProjectForClient } from "@/lib/server/project-response";
 
 export async function GET(
-  _request: Request,
+  request: Request,
   { params }: { params: Promise<{ projectId: string }> },
 ) {
   const { projectId } = await params;
-  const project = findProjectById(await readProjects(), projectId);
-
-  if (!project) {
-    return NextResponse.json({ message: "Project not found." }, { status: 404 });
+  const auth = await authorizeProjectRequest(request, projectId, "view");
+  if ("response" in auth) {
+    return auth.response;
   }
 
-  return NextResponse.json({ project: await hydrateProjectForClient(project) });
+  return NextResponse.json({ project: await hydrateProjectForClient(auth.project) });
 }
 
 export async function PATCH(
@@ -22,6 +21,10 @@ export async function PATCH(
   { params }: { params: Promise<{ projectId: string }> },
 ) {
   const { projectId } = await params;
+  const auth = await authorizeProjectRequest(request, projectId, "edit");
+  if ("response" in auth) {
+    return auth.response;
+  }
   const body = (await request.json()) as { selectedThemeId?: string };
 
   const project = await updateProject(projectId, (current) => ({

@@ -1,4 +1,5 @@
 import {
+  createSeedProjects,
   findProjectById,
   formatProjectRange,
   getYearbookCycleLabel,
@@ -7,7 +8,6 @@ import {
 import { notFound } from "next/navigation";
 import type { ReactNode } from "react";
 import { StatusPill } from "@/components/status-pill";
-import { readProjects } from "@/lib/server/project-store";
 
 export const dynamic = "force-dynamic";
 
@@ -17,7 +17,7 @@ export default async function ProjectPage({
   params: Promise<{ projectId: string }>;
 }) {
   const { projectId } = await params;
-  const project = findProjectById(await readProjects(), projectId);
+  const project = findProjectById(createSeedProjects(), projectId);
 
   if (!project) {
     notFound();

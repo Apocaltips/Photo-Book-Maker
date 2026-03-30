@@ -1,12 +1,11 @@
 import Link from "next/link";
-import { listOpenTasks } from "@photo-book-maker/core";
+import { createSeedProjects, listOpenTasks } from "@photo-book-maker/core";
 import { ProjectCard } from "@/components/project-card";
-import { readProjects } from "@/lib/server/project-store";
 
 export const dynamic = "force-dynamic";
 
 export default async function Home() {
-  const projects = await readProjects();
+  const projects = createSeedProjects();
   const openTasks = listOpenTasks(projects);
   const totalPhotos = projects.reduce((sum, project) => sum + project.photos.length, 0);
   const totalPages = projects.reduce(

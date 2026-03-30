@@ -5,6 +5,7 @@ import * as Print from "expo-print";
 import * as Sharing from "expo-sharing";
 import { startTransition, useEffect, useState, type ReactNode } from "react";
 import {
+  ActivityIndicator,
   Alert,
   Image,
   Pressable,
@@ -54,6 +55,13 @@ import {
   type YearbookCycle,
 } from "./src/core";
 import { buildProofHtml } from "./src/proof";
+import {
+  authClient,
+  getAuthIdentityFromUser,
+  getCurrentAuthIdentity,
+  isSupabaseAuthConfigured,
+  type AuthIdentity,
+} from "./src/supabase";
 
 type AppTab = "projects" | "tasks" | "editor" | "print";
 type SyncMode = "checking" | "shared" | "local";
@@ -194,6 +202,14 @@ export default function App() {
   const [selectedProjectId, setSelectedProjectId] = useState("yellowstone-weekend");
   const [activeTab, setActiveTab] = useState<AppTab>("projects");
   const [hasHydrated, setHasHydrated] = useState(false);
+  const [authReady, setAuthReady] = useState(!isSupabaseAuthConfigured);
+  const [authIdentity, setAuthIdentity] = useState<AuthIdentity | null>(null);
+  const [authBusy, setAuthBusy] = useState(false);
+  const [authMode, setAuthMode] = useState<"sign_in" | "sign_up">("sign_in");
+  const [authError, setAuthError] = useState<string | null>(null);
+  const [authNameInput, setAuthNameInput] = useState("Vince");
+  const [authEmailInput, setAuthEmailInput] = useState("");
+  const [authPasswordInput, setAuthPasswordInput] = useState("");
   const [syncMode, setSyncMode] = useState<SyncMode>("checking");
   const [lastSyncedAt, setLastSyncedAt] = useState<string | null>(null);
   const [draftType, setDraftType] = useState<ProjectType>("trip");
@@ -287,14 +303,58 @@ export default function App() {
   }, [activeTab, hasHydrated, projects, selectedProjectId, testerEmail, testerName]);
 
   useEffect(() => {
-    if (!hasHydrated) {
+    if (!isSupabaseAuthConfigured || !authClient) {
+      setAuthReady(true);
+      return;
+    }
+
+    let isMounted = true;
+
+    async function hydrateAuth() {
+      const identity = await getCurrentAuthIdentity().catch(() => null);
+      if (!isMounted) {
+        return;
+      }
+
+      setAuthIdentity(identity);
+      setAuthReady(true);
+    }
+
+    void hydrateAuth();
+
+    const subscription = authClient.auth.onAuthStateChange((_event, session) => {
+      const identity = session?.user ? getAuthIdentityFromUser(session.user) : null;
+
+      setAuthIdentity(identity);
+      setAuthReady(true);
+    });
+
+    return () => {
+      isMounted = false;
+      subscription.data.subscription.unsubscribe();
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!authIdentity) {
+      return;
+    }
+
+    setTesterName(authIdentity.name);
+    setTesterEmail(authIdentity.email);
+    setAuthNameInput(authIdentity.name);
+    setAuthEmailInput(authIdentity.email);
+  }, [authIdentity]);
+
+  useEffect(() => {
+    if (!hasHydrated || (isSupabaseAuthConfigured && (!authReady || !authIdentity))) {
       return;
     }
 
     async function loadRemoteProjects() {
       try {
         const remoteProjects = await fetchProjectsRemote();
-        if (!remoteProjects?.length) {
+        if (!remoteProjects) {
           setSyncMode("local");
           return;
         }
@@ -307,7 +367,7 @@ export default function App() {
     }
 
     void loadRemoteProjects();
-  }, [hasHydrated]);
+  }, [authIdentity, authReady, hasHydrated]);
 
   const selectedProject =
     projects.find((project) => project.id === selectedProjectId) ?? projects[0];
@@ -322,7 +382,7 @@ export default function App() {
   const resolvedApiBaseUrl = getResolvedApiBaseUrl();
   const syncSummary =
     syncMode === "shared"
-      ? `Shared tester mode${lastSyncedAt ? ` - synced ${lastSyncedAt}` : ""}`
+      ? `Shared account mode${lastSyncedAt ? ` - synced ${lastSyncedAt}` : ""}`
       : syncMode === "local"
         ? "Local-only mode"
         : "Checking shared store";
@@ -383,9 +443,72 @@ export default function App() {
     setSelectedProjectId((current) =>
       remoteProjects.some((project) => project.id === current)
         ? current
-        : remoteProjects[0]?.id ?? current,
+        : remoteProjects[0]?.id ?? "",
     );
     markSharedSync();
+  }
+
+  async function handleAuthSubmit() {
+    if (!authClient || authBusy) {
+      return;
+    }
+
+    setAuthBusy(true);
+    setAuthError(null);
+
+    const email = authEmailInput.trim().toLowerCase();
+    const password = authPasswordInput;
+
+    try {
+      if (authMode === "sign_in") {
+        const { error } = await authClient.auth.signInWithPassword({
+          email,
+          password,
+        });
+
+        if (error) {
+          setAuthError(error.message);
+        }
+        return;
+      }
+
+      const { data, error } = await authClient.auth.signUp({
+        email,
+        password,
+        options: {
+          data: {
+            full_name: authNameInput.trim(),
+          },
+        },
+      });
+
+      if (error) {
+        setAuthError(error.message);
+        return;
+      }
+
+      if (!data.session) {
+        setAuthError(
+          "Your account was created, but Supabase still wants email verification. Verify the email or temporarily disable Confirm email in Supabase Auth settings for testing.",
+        );
+      }
+    } finally {
+      setAuthBusy(false);
+    }
+  }
+
+  async function handleSignOut() {
+    if (!authClient) {
+      return;
+    }
+
+    await authClient.auth.signOut();
+    setAuthIdentity(null);
+    setProjects([]);
+    setSelectedProjectId("");
+    setSyncMode("checking");
+    setLastSyncedAt(null);
+    setAuthPasswordInput("");
   }
 
   async function handleCreateProject() {
@@ -566,7 +689,7 @@ export default function App() {
     if (!permission.granted) {
       Alert.alert(
         "Photo access needed",
-        "Grant library access so this tester build can import trip photos.",
+        "Grant library access so Photo Book Maker can import trip photos.",
       );
       return;
     }
@@ -678,7 +801,7 @@ export default function App() {
   async function handleRefreshProjects() {
     const remoteProjects = await fetchProjectsRemote().catch(() => null);
 
-    if (remoteProjects?.length) {
+    if (remoteProjects) {
       applySharedProjects(remoteProjects);
       return;
     }
@@ -709,6 +832,49 @@ export default function App() {
     }
 
     Alert.alert("Proof exported", uri);
+  }
+
+  if (!authReady) {
+    return (
+      <SafeAreaView style={styles.safeArea}>
+        <StatusBar style="dark" />
+        <View style={styles.authLoadingScreen}>
+          <ActivityIndicator size="large" color={palette.accent} />
+          <Text style={styles.authLoadingTitle}>Checking your account</Text>
+          <Text style={styles.authLoadingBody}>
+            Restoring your Supabase session before we load your book library.
+          </Text>
+        </View>
+      </SafeAreaView>
+    );
+  }
+
+  if (isSupabaseAuthConfigured && !authIdentity) {
+    return (
+      <SafeAreaView style={styles.safeArea}>
+        <StatusBar style="dark" />
+        <View style={styles.appShell}>
+          <ScrollView
+            contentContainerStyle={styles.scrollContent}
+            showsVerticalScrollIndicator={false}
+          >
+            <AuthScreen
+              mode={authMode}
+              busy={authBusy}
+              error={authError}
+              name={authNameInput}
+              email={authEmailInput}
+              password={authPasswordInput}
+              onModeChange={setAuthMode}
+              onNameChange={setAuthNameInput}
+              onEmailChange={setAuthEmailInput}
+              onPasswordChange={setAuthPasswordInput}
+              onSubmit={handleAuthSubmit}
+            />
+          </ScrollView>
+        </View>
+      </SafeAreaView>
+    );
   }
 
   return (
@@ -795,6 +961,7 @@ export default function App() {
               draftSubtitle={draftSubtitle}
               draftStartDate={draftStartDate}
               draftEndDate={draftEndDate}
+              testerProfileLocked={Boolean(authIdentity)}
               testerName={testerName}
               testerEmail={testerEmail}
               inviteName={inviteName}
@@ -815,6 +982,7 @@ export default function App() {
               onInviteEmailChange={setInviteEmail}
               onNoteTitleChange={setNoteTitle}
               onNoteBodyChange={setNoteBody}
+              onSignOut={handleSignOut}
               onCreateProject={handleCreateProject}
               onInviteCollaborator={handleInviteCollaborator}
               onAddNote={handleAddNote}
@@ -891,6 +1059,7 @@ function ProjectsTab({
   draftSubtitle,
   draftStartDate,
   draftEndDate,
+  testerProfileLocked,
   testerName,
   testerEmail,
   inviteName,
@@ -911,6 +1080,7 @@ function ProjectsTab({
   onInviteEmailChange,
   onNoteTitleChange,
   onNoteBodyChange,
+  onSignOut,
   onCreateProject,
   onInviteCollaborator,
   onAddNote,
@@ -929,6 +1099,7 @@ function ProjectsTab({
   draftSubtitle: string;
   draftStartDate: string;
   draftEndDate: string;
+  testerProfileLocked: boolean;
   testerName: string;
   testerEmail: string;
   inviteName: string;
@@ -949,6 +1120,7 @@ function ProjectsTab({
   onInviteEmailChange: (value: string) => void;
   onNoteTitleChange: (value: string) => void;
   onNoteBodyChange: (value: string) => void;
+  onSignOut: () => void;
   onCreateProject: () => void;
   onInviteCollaborator: () => void;
   onAddNote: () => void;
@@ -1049,14 +1221,34 @@ function ProjectsTab({
         subtitle="Start on phone"
         body="Start a trip for one weekend or a yearbook that rolls on a calendar year, dating anniversary, or wedding anniversary."
       >
-        <Field label="Your name" value={testerName} onChangeText={onTesterNameChange} />
+        {testerProfileLocked ? (
+          <View style={styles.accountCard}>
+            <View style={styles.accountCardCopy}>
+              <Text style={styles.accountCardEyebrow}>Signed in account</Text>
+              <Text style={styles.accountCardTitle}>{testerName}</Text>
+              <Text style={styles.accountCardBody}>{testerEmail}</Text>
+            </View>
+            <PrimaryButton label="Sign out" onPress={onSignOut} compact dark />
+          </View>
+        ) : null}
+        <Field
+          label="Your name"
+          value={testerName}
+          onChangeText={onTesterNameChange}
+          editable={!testerProfileLocked}
+        />
         <Field
           label="Your email"
           value={testerEmail}
           onChangeText={onTesterEmailChange}
+          editable={!testerProfileLocked}
+          autoCapitalize="none"
+          keyboardType="email-address"
         />
         <Text style={styles.helperText}>
-          Use the same email on each phone that you plan to invite into the project so uploads and notes are attributed to the right person.
+          {testerProfileLocked
+            ? "Project ownership now comes from your real Supabase account, so these fields stay locked to avoid drift."
+            : "Use the same email on each phone that you plan to invite into the project so uploads and notes are attributed to the right person."}
         </Text>
         <View style={styles.segmentedRow}>
           {(["trip", "yearbook"] as ProjectType[]).map((type) => (
@@ -1256,6 +1448,112 @@ function ProjectsTab({
           </SurfaceCard>
         </>
       ) : null}
+    </View>
+  );
+}
+
+function AuthScreen({
+  mode,
+  busy,
+  error,
+  name,
+  email,
+  password,
+  onModeChange,
+  onNameChange,
+  onEmailChange,
+  onPasswordChange,
+  onSubmit,
+}: {
+  mode: "sign_in" | "sign_up";
+  busy: boolean;
+  error: string | null;
+  name: string;
+  email: string;
+  password: string;
+  onModeChange: (mode: "sign_in" | "sign_up") => void;
+  onNameChange: (value: string) => void;
+  onEmailChange: (value: string) => void;
+  onPasswordChange: (value: string) => void;
+  onSubmit: () => void;
+}) {
+  const isSignUp = mode === "sign_up";
+
+  return (
+    <View style={styles.sectionStack}>
+      <View style={styles.heroCard}>
+        <View style={styles.heroHeaderRow}>
+          <View style={styles.heroCopy}>
+            <Text style={styles.eyebrow}>Owner account</Text>
+            <Text style={styles.heroTitle}>
+              Sign in before you start building real trip books.
+            </Text>
+            <Text style={styles.heroBody}>
+              This first pass uses a single Supabase account so your phone is tied to a
+              real owner identity instead of the old tester-only profile fields.
+            </Text>
+          </View>
+        </View>
+      </View>
+
+      <SurfaceCard
+        title={isSignUp ? "Create your owner account" : "Sign in to your account"}
+        subtitle="Supabase auth"
+        body="Use email and password for now. Once this is stable, we can replace it with invite links and collaborator onboarding."
+      >
+        <View style={styles.segmentedRow}>
+          {(["sign_in", "sign_up"] as const).map((authMode) => (
+            <Pressable
+              key={authMode}
+              onPress={() => onModeChange(authMode)}
+              style={[
+                styles.segmentChip,
+                mode === authMode ? styles.segmentChipActive : null,
+              ]}
+            >
+              <Text
+                style={[
+                  styles.segmentChipText,
+                  mode === authMode ? styles.segmentChipTextActive : null,
+                ]}
+              >
+                {authMode === "sign_in" ? "Sign in" : "Create account"}
+              </Text>
+            </Pressable>
+          ))}
+        </View>
+
+        {isSignUp ? (
+          <Field label="Your name" value={name} onChangeText={onNameChange} />
+        ) : null}
+        <Field
+          label="Email"
+          value={email}
+          onChangeText={onEmailChange}
+          autoCapitalize="none"
+          keyboardType="email-address"
+        />
+        <Field
+          label="Password"
+          value={password}
+          onChangeText={onPasswordChange}
+          secureTextEntry
+          autoCapitalize="none"
+        />
+        {error ? <Text style={styles.authErrorText}>{error}</Text> : null}
+        <PrimaryButton
+          label={
+            busy
+              ? isSignUp
+                ? "Creating account..."
+                : "Signing in..."
+              : isSignUp
+                ? "Create account"
+                : "Sign in"
+          }
+          onPress={onSubmit}
+        />
+      </SurfaceCard>
     </View>
   );
 }
@@ -1538,20 +1836,33 @@ function Field({
   onChangeText,
   multiline,
   compact,
+  editable = true,
+  secureTextEntry,
+  keyboardType,
+  autoCapitalize = "sentences",
 }: {
   label: string;
   value: string;
   onChangeText: (value: string) => void;
   multiline?: boolean;
   compact?: boolean;
+  editable?: boolean;
+  secureTextEntry?: boolean;
+  keyboardType?: "default" | "email-address";
+  autoCapitalize?: "none" | "sentences" | "words" | "characters";
 }) {
   return (
     <View style={[styles.fieldWrap, compact ? styles.fieldWrapCompact : null]}>
       <Text style={styles.fieldLabel}>{label}</Text>
       <TextInput
+        autoCapitalize={autoCapitalize}
+        editable={editable}
+        keyboardType={keyboardType}
         multiline={multiline}
+        secureTextEntry={secureTextEntry}
         style={[
           styles.fieldInput,
+          !editable ? styles.fieldInputReadOnly : null,
           multiline ? styles.fieldInputMultiline : null,
         ]}
         value={value}
@@ -1610,6 +1921,26 @@ const styles = StyleSheet.create({
   },
   appShell: {
     flex: 1,
+  },
+  authLoadingScreen: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 28,
+    gap: 10,
+  },
+  authLoadingTitle: {
+    fontSize: 24,
+    lineHeight: 28,
+    color: palette.ink,
+    fontWeight: "700",
+  },
+  authLoadingBody: {
+    maxWidth: 320,
+    fontSize: 14,
+    lineHeight: 23,
+    textAlign: "center",
+    color: palette.muted,
   },
   scrollContent: {
     paddingHorizontal: 18,
@@ -1850,6 +2181,41 @@ const styles = StyleSheet.create({
     color: palette.forest,
     fontWeight: "600",
   },
+  authErrorText: {
+    fontSize: 13,
+    lineHeight: 22,
+    color: "#983d16",
+    fontWeight: "600",
+  },
+  accountCard: {
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: palette.line,
+    backgroundColor: "rgba(255,255,255,0.78)",
+    padding: 14,
+    gap: 10,
+  },
+  accountCardCopy: {
+    gap: 4,
+  },
+  accountCardEyebrow: {
+    fontSize: 11,
+    textTransform: "uppercase",
+    letterSpacing: 1.6,
+    color: palette.muted,
+    fontWeight: "700",
+  },
+  accountCardTitle: {
+    fontSize: 20,
+    lineHeight: 22,
+    color: palette.ink,
+    fontWeight: "700",
+  },
+  accountCardBody: {
+    fontSize: 14,
+    lineHeight: 22,
+    color: "#5d524a",
+  },
   fieldLabel: {
     fontSize: 12,
     letterSpacing: 1.5,
@@ -1866,6 +2232,10 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     color: palette.ink,
     fontSize: 15,
+  },
+  fieldInputReadOnly: {
+    backgroundColor: "rgba(239, 232, 225, 0.78)",
+    color: palette.muted,
   },
   fieldInputMultiline: {
     minHeight: 96,

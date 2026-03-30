@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { authorizeProjectRequest } from "@/lib/server/auth";
 import { createPhotoUploadTicket, isObjectStorageConfigured } from "@/lib/server/object-storage";
 
 export async function POST(
@@ -6,6 +7,10 @@ export async function POST(
   { params }: { params: Promise<{ projectId: string }> },
 ) {
   const { projectId } = await params;
+  const auth = await authorizeProjectRequest(request, projectId, "edit");
+  if ("response" in auth) {
+    return auth.response;
+  }
   const body = (await request.json()) as {
     contentType?: string;
     fileName?: string;

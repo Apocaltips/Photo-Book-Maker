@@ -6,6 +6,7 @@ import type {
 } from "./core";
 import Constants from "expo-constants";
 import { NativeModules, Platform } from "react-native";
+import { getAccessToken } from "./supabase";
 
 function normalizeBaseUrl(value: string | null | undefined) {
   if (!value) {
@@ -56,10 +57,13 @@ async function request<T>(path: string, init?: RequestInit): Promise<T | null> {
     return null;
   }
 
+  const accessToken = await getAccessToken();
+
   const response = await fetch(`${baseUrl}${path}`, {
     ...init,
     headers: {
       "Content-Type": "application/json",
+      ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
       ...(init?.headers ?? {}),
     },
   });
