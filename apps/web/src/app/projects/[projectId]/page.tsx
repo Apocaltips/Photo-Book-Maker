@@ -4,7 +4,11 @@ import {
   formatProjectRange,
   getYearbookCycleLabel,
   getProjectSummary,
+  type BookPage,
+  type PhotoAsset,
+  type Project,
 } from "@photo-book-maker/core";
+import Link from "next/link";
 import { notFound } from "next/navigation";
 import type { ReactNode } from "react";
 import { StatusPill } from "@/components/status-pill";
@@ -27,6 +31,13 @@ export default async function ProjectPage({
   const selectedTheme =
     project.bookThemes.find((theme) => theme.id === project.selectedThemeId) ??
     project.bookThemes[0];
+  const confirmedCopy = project.bookDraft.pages.filter(
+    (page) => page.copyStatus === "confirmed",
+  ).length;
+  const prefilledCopy = project.bookDraft.pages.length - confirmedCopy;
+  const storyBeatCount = new Set(
+    project.bookDraft.pages.map((page) => getPageStoryBeat(page)),
+  ).size;
 
   return (
     <main className="mx-auto flex w-full max-w-7xl flex-1 flex-col gap-6 px-5 py-6 md:px-8 lg:px-10">
@@ -49,6 +60,12 @@ export default async function ProjectPage({
             <div className="text-sm text-[#635851]">
               {formatProjectRange(project)} in {project.timezone}
             </div>
+            <Link
+              href={`/projects/${project.id}/preview`}
+              className="rounded-full border border-[#1f18141f] bg-white/70 px-4 py-2 text-sm font-medium text-[#1f1814] transition-colors hover:bg-white"
+            >
+              Open book preview
+            </Link>
             {project.type === "yearbook" && project.yearbookCycle ? (
               <div className="text-xs uppercase tracking-[0.18em] text-[#7b6f67]">
                 {getYearbookCycleLabel(project.yearbookCycle)}
@@ -190,29 +207,33 @@ export default async function ProjectPage({
 
           <Panel
             eyebrow="Book draft"
-            title="Professional auto-layout preview"
+            title="Curated proof board"
             body={`Theme: ${selectedTheme.name}. ${project.bookDraft.summary}`}
           >
-            <div className="space-y-4">
+            <div className="grid gap-3 md:grid-cols-3">
+              <Metric label="Copy confirmed" value={confirmedCopy} />
+              <Metric label="Awaiting review" value={prefilledCopy} />
+              <Metric label="Story beats used" value={storyBeatCount} />
+            </div>
+
+            <div className="mt-4">
+              <Link
+                href={`/projects/${project.id}/preview`}
+                className="inline-flex items-center rounded-full border border-[#1f18141f] bg-white/70 px-4 py-2 text-sm font-medium text-[#1f1814] transition-colors hover:bg-white"
+              >
+                Open full book preview
+              </Link>
+            </div>
+
+            <div className="mt-6 grid gap-5 xl:grid-cols-2">
               {project.bookDraft.pages.map((page, index) => (
-                <div
+                <SpreadPreviewCard
                   key={page.id}
-                  className="rounded-[1.75rem] border border-[#00000012] bg-[linear-gradient(180deg,rgba(255,255,255,0.92),rgba(248,241,234,0.95))] p-5"
-                >
-                  <div className="flex items-center justify-between gap-3">
-                    <span className="text-xs uppercase tracking-[0.18em] text-[#7d7067]">
-                      Spread {index + 1}
-                    </span>
-                    <span className="rounded-full bg-[#ece4db] px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.16em] text-[#7c6656]">
-                      {page.style.replaceAll("_", " ")}
-                    </span>
-                  </div>
-                  <h3 className="display mt-4 text-3xl text-[#211a16]">{page.title}</h3>
-                  <p className="mt-3 text-sm leading-7 text-[#5d524b]">{page.caption}</p>
-                  <div className="mt-4 border-t border-[#00000012] pt-4 text-sm text-[#625750]">
-                    {page.layoutNote}
-                  </div>
-                </div>
+                  page={page}
+                  pageNumber={index + 1}
+                  project={project}
+                  accent={selectedTheme.accent}
+                />
               ))}
             </div>
           </Panel>
@@ -274,6 +295,309 @@ function Metric({ label, value }: { label: string; value: number }) {
       </div>
     </div>
   );
+}
+
+function SpreadPreviewCard({
+  page,
+  pageNumber,
+  project,
+  accent,
+}: {
+  page: BookPage;
+  pageNumber: number;
+  project: Project;
+  accent: string;
+}) {
+  const pagePhotos = page.photoIds
+    .map((photoId) => project.photos.find((photo) => photo.id === photoId))
+    .filter((photo): photo is PhotoAsset => Boolean(photo));
+  const storyBeat = getPageStoryBeat(page);
+  const copyStatus = page.copyStatus ?? "prefilled";
+
+  return (
+    <article className="overflow-hidden rounded-[1.85rem] border border-[#00000012] bg-[linear-gradient(180deg,rgba(255,255,255,0.96),rgba(247,240,233,0.94))]">
+      <div className="flex items-center justify-between gap-3 border-b border-[#00000012] px-5 py-4">
+        <span className="text-xs uppercase tracking-[0.18em] text-[#7d7067]">
+          Spread {pageNumber}
+        </span>
+        <div className="flex flex-wrap items-center justify-end gap-2">
+          <Tag>{page.style.replaceAll("_", " ")}</Tag>
+          <Tag tone="accent">{storyBeat.replaceAll("_", " ")}</Tag>
+          <Tag tone={copyStatus === "confirmed" ? "success" : "neutral"}>
+            {copyStatus === "confirmed" ? "Copy confirmed" : "Prefilled copy"}
+          </Tag>
+        </div>
+      </div>
+
+      <div className="grid gap-0 lg:grid-cols-[1.08fr_0.92fr]">
+        <div
+          className="border-b border-[#00000010] bg-[radial-gradient(circle_at_top_left,rgba(255,255,255,0.88),rgba(238,228,219,0.96))] p-5 lg:border-b-0 lg:border-r"
+          style={{ borderColor: `${accent}22` }}
+        >
+          <SpreadCanvas page={page} photos={pagePhotos} accent={accent} />
+        </div>
+
+        <div className="space-y-4 px-5 py-5">
+          <div>
+            <h3 className="display text-3xl leading-none text-[#211a16]">
+              {page.title}
+            </h3>
+            <p className="mt-3 text-sm leading-7 text-[#5d524b]">{page.caption}</p>
+          </div>
+
+          <div className="rounded-[1.2rem] border border-[#00000010] bg-white/70 p-4">
+            <div className="text-xs uppercase tracking-[0.18em] text-[#8b5a40]">
+              Curation note
+            </div>
+            <p className="mt-2 text-sm leading-7 text-[#5d524b]">
+              {page.curationNote ?? page.layoutNote}
+            </p>
+          </div>
+
+          <div className="rounded-[1.2rem] border border-[#00000010] bg-white/70 p-4">
+            <div className="text-xs uppercase tracking-[0.18em] text-[#6f625b]">
+              Layout note
+            </div>
+            <p className="mt-2 text-sm leading-7 text-[#5d524b]">{page.layoutNote}</p>
+          </div>
+
+          <div className="space-y-3">
+            <div className="text-xs uppercase tracking-[0.18em] text-[#6f625b]">
+              Photos on this spread
+            </div>
+            <div className="grid gap-2 sm:grid-cols-2">
+              {pagePhotos.length ? (
+                pagePhotos.map((photo) => (
+                  <div
+                    key={photo.id}
+                    className="rounded-[1rem] border border-[#00000010] bg-[#fff9f4] px-3 py-3"
+                  >
+                    <div className="font-medium text-[#211a16]">{photo.title}</div>
+                    <div className="mt-1 text-xs uppercase tracking-[0.16em] text-[#766a61]">
+                      {photo.orientation}
+                      {photo.locationLabel ? ` - ${photo.locationLabel}` : ""}
+                    </div>
+                  </div>
+                ))
+              ) : (
+                <div className="rounded-[1rem] border border-dashed border-[#00000018] px-3 py-4 text-sm text-[#6f625b]">
+                  No linked photos yet.
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      </div>
+    </article>
+  );
+}
+
+function SpreadCanvas({
+  page,
+  photos,
+  accent,
+}: {
+  page: BookPage;
+  photos: PhotoAsset[];
+  accent: string;
+}) {
+  switch (page.style) {
+    case "hero":
+    case "full_bleed":
+      return (
+        <div className="space-y-4">
+          <CanvasBlock
+            photo={photos[0]}
+            accent={accent}
+            className="min-h-[20rem] rounded-[1.7rem]"
+            emphasis="large"
+          />
+          <div className="max-w-xs text-xs uppercase tracking-[0.18em] text-[#73665e]">
+            Large opening image with restrained copy placement
+          </div>
+        </div>
+      );
+    case "diptych":
+      return (
+        <div className="grid gap-3 md:grid-cols-2">
+          {photos.slice(0, 2).map((photo) => (
+            <CanvasBlock
+              key={photo.id}
+              photo={photo}
+              accent={accent}
+              className="min-h-[15rem] rounded-[1.4rem]"
+            />
+          ))}
+        </div>
+      );
+    case "chapter":
+      return (
+        <div className="grid gap-4 lg:grid-cols-[0.95fr_1.05fr]">
+          <div className="rounded-[1.5rem] border border-[#00000010] bg-white/75 p-5">
+            <div className="h-2 w-14 rounded-full" style={{ backgroundColor: accent }} />
+            <div className="mt-4 space-y-3">
+              <div className="h-3 w-24 rounded-full bg-[#e8ded4]" />
+              <div className="h-6 w-4/5 rounded-full bg-[#ddd1c5]" />
+              <div className="h-20 rounded-[1rem] bg-[#f2ebe4]" />
+            </div>
+          </div>
+          <CanvasBlock
+            photo={photos[0]}
+            accent={accent}
+            className="min-h-[16rem] rounded-[1.5rem]"
+          />
+        </div>
+      );
+    case "mosaic":
+    case "collage":
+      return (
+        <div className="grid gap-3 md:grid-cols-2">
+          <CanvasBlock
+            photo={photos[0]}
+            accent={accent}
+            className="min-h-[12rem] rounded-[1.4rem] md:col-span-2"
+            emphasis="large"
+          />
+          {photos.slice(1).map((photo) => (
+            <CanvasBlock
+              key={photo.id}
+              photo={photo}
+              accent={accent}
+              className="min-h-[10rem] rounded-[1.2rem]"
+            />
+          ))}
+        </div>
+      );
+    case "closing":
+    case "recap":
+      return (
+        <div className="space-y-4">
+          <div className="max-w-sm rounded-[1.4rem] border border-[#00000010] bg-white/75 p-4">
+            <div className="h-3 w-20 rounded-full bg-[#e7ddd3]" />
+            <div className="mt-3 h-6 w-2/3 rounded-full bg-[#ddd1c5]" />
+            <div className="mt-4 h-16 rounded-[1rem] bg-[#f2ebe4]" />
+          </div>
+          <div className="grid gap-3 md:grid-cols-2">
+            {photos.map((photo) => (
+              <CanvasBlock
+                key={photo.id}
+                photo={photo}
+                accent={accent}
+                className="min-h-[10rem] rounded-[1.2rem]"
+              />
+            ))}
+          </div>
+        </div>
+      );
+    default:
+      return (
+        <div className="grid gap-3 md:grid-cols-[1.05fr_0.95fr]">
+          <CanvasBlock
+            photo={photos[0]}
+            accent={accent}
+            className="min-h-[18rem] rounded-[1.5rem]"
+            emphasis="large"
+          />
+          <div className="space-y-3">
+            <div className="rounded-[1.3rem] border border-[#00000010] bg-white/75 p-4">
+              <div className="h-3 w-20 rounded-full bg-[#e7ddd3]" />
+              <div className="mt-3 h-6 w-3/4 rounded-full bg-[#ddd1c5]" />
+              <div className="mt-4 h-16 rounded-[1rem] bg-[#f2ebe4]" />
+            </div>
+            {photos[1] ? (
+              <CanvasBlock
+                photo={photos[1]}
+                accent={accent}
+                className="min-h-[8rem] rounded-[1.3rem]"
+              />
+            ) : null}
+          </div>
+        </div>
+      );
+  }
+}
+
+function CanvasBlock({
+  photo,
+  accent,
+  className,
+  emphasis,
+}: {
+  photo?: PhotoAsset;
+  accent: string;
+  className: string;
+  emphasis?: "large";
+}) {
+  return (
+    <div
+      className={`relative overflow-hidden border border-[#00000010] bg-[linear-gradient(180deg,rgba(255,255,255,0.86),rgba(234,225,216,0.96))] ${className}`}
+      style={{
+        boxShadow:
+          emphasis === "large" ? `inset 0 0 0 1px ${accent}22` : undefined,
+      }}
+    >
+      <div
+        className="absolute inset-x-0 top-0 h-20 opacity-70"
+        style={{
+          background: `linear-gradient(135deg, ${accent}20, transparent)`,
+        }}
+      />
+      <div className="absolute inset-0 flex flex-col justify-between p-4">
+        <div className="text-[11px] uppercase tracking-[0.18em] text-[#786b62]">
+          {photo?.orientation ?? "layout"}
+        </div>
+        <div>
+          <div className="text-sm font-semibold text-[#211a16]">
+            {photo?.title ?? "Reserved image field"}
+          </div>
+          <div className="mt-1 text-xs uppercase tracking-[0.16em] text-[#7a6e65]">
+            {photo?.locationLabel ?? "Editorial crop zone"}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function Tag({
+  children,
+  tone = "default",
+}: {
+  children: ReactNode;
+  tone?: "default" | "accent" | "neutral" | "success";
+}) {
+  const toneClass =
+    tone === "accent"
+      ? "bg-[#f7dfcf] text-[#98461d]"
+      : tone === "success"
+        ? "bg-[#dfeee7] text-[#2d624b]"
+        : tone === "neutral"
+          ? "bg-[#ece4db] text-[#6f625b]"
+          : "bg-[#f1ebe4] text-[#6f625b]";
+
+  return (
+    <span
+      className={`rounded-full px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.16em] ${toneClass}`}
+    >
+      {children}
+    </span>
+  );
+}
+
+function getPageStoryBeat(page: BookPage) {
+  if (page.storyBeat) {
+    return page.storyBeat;
+  }
+
+  if (page.style === "hero" || page.style === "full_bleed") {
+    return "opener";
+  }
+
+  if (page.style === "recap" || page.style === "closing") {
+    return "closing";
+  }
+
+  return "details";
 }
 
 function Panel({

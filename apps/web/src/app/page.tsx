@@ -12,6 +12,13 @@ export default async function Home() {
     (sum, project) => sum + project.bookDraft.pages.length,
     0,
   );
+  const confirmedCopy = projects.reduce(
+    (sum, project) =>
+      sum +
+      project.bookDraft.pages.filter((page) => page.copyStatus === "confirmed").length,
+    0,
+  );
+  const flagship = projects[0];
 
   return (
     <main className="mx-auto flex w-full max-w-7xl flex-1 flex-col gap-10 px-5 py-6 md:px-8 lg:px-10">
@@ -32,21 +39,27 @@ export default async function Home() {
           <div className="grid gap-3 sm:grid-cols-3">
             <Highlight label="Projects in motion" value={projects.length} />
             <Highlight label="Photos curated" value={totalPhotos} />
-            <Highlight label="Draft pages laid out" value={totalPages} />
+            <Highlight label="Spreads drafted" value={totalPages} />
           </div>
         </div>
 
         <div className="rounded-[2rem] border border-[#00000012] bg-[linear-gradient(180deg,rgba(255,255,255,0.88),rgba(242,230,220,0.9))] p-6">
-          <div className="eyebrow">Professional output system</div>
-          <ul className="mt-4 space-y-4 text-sm leading-7 text-[#4d433d]">
-            <li>12x12 square print format with curated hero, spread, collage, and recap layouts.</li>
-            <li>Conservative enhancement only: exposure, color, noise, and straightening.</li>
-            <li>Location fallback uses trip context before asking humans to resolve gaps.</li>
+          <div className="eyebrow">Editorial system</div>
+          <div className="mt-4 grid gap-3 sm:grid-cols-2">
+            <EditorialStat label="Copy confirmed" value={confirmedCopy} />
+            <EditorialStat
+              label="Active theme"
+              valueText={flagship.bookThemes.find((theme) => theme.id === flagship.selectedThemeId)?.name ?? "Golden Hour"}
+            />
+          </div>
+          <ul className="mt-5 space-y-4 text-sm leading-7 text-[#4d433d]">
+            <li>Story-driven spreads now alternate between opener, chapter break, diptych, mosaic, and closing beats.</li>
+            <li>Captions are prefilled first, then explicitly confirmed by the user before print export.</li>
+            <li>Layout notes and curation notes stay separate so the draft can explain both visual intent and narrative role.</li>
             <li>Mock print checkout is wired now so the flow feels real before a vendor exists.</li>
           </ul>
           <div className="mt-6 rounded-[1.5rem] bg-[#1f1814] px-5 py-4 text-sm text-[#f7efe7]">
-            The current prototype keeps everything visually editorial so the eventual PDF
-            export has the right design DNA from day one.
+            The web companion is now reading the same editorial model as the phone app, so proof review and export decisions line up across both surfaces.
           </div>
         </div>
       </section>
@@ -111,6 +124,27 @@ function Highlight({ label, value }: { label: string; value: number }) {
   return (
     <div className="rounded-[1.5rem] border border-[#00000012] bg-white/64 px-4 py-4">
       <div className="text-3xl font-semibold text-[#1f1814]">{value}</div>
+      <div className="mt-2 text-xs uppercase tracking-[0.18em] text-[#796d65]">
+        {label}
+      </div>
+    </div>
+  );
+}
+
+function EditorialStat({
+  label,
+  value,
+  valueText,
+}: {
+  label: string;
+  value?: number;
+  valueText?: string;
+}) {
+  return (
+    <div className="rounded-[1.4rem] border border-[#00000012] bg-white/68 px-4 py-4">
+      <div className="text-2xl font-semibold text-[#1f1814]">
+        {typeof value === "number" ? value : valueText}
+      </div>
       <div className="mt-2 text-xs uppercase tracking-[0.18em] text-[#796d65]">
         {label}
       </div>

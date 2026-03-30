@@ -51,6 +51,10 @@ const sharedMembers: ProjectMember[] = [
   },
 ];
 
+function commonsImage(fileName: string) {
+  return `https://commons.wikimedia.org/wiki/Special:FilePath/${encodeURIComponent(fileName)}?width=1600`;
+}
+
 function cloneThemes() {
   return editorialThemes.map((theme) => ({ ...theme }));
 }
@@ -68,7 +72,9 @@ function photo(
     id: input.id,
     title: input.title,
     uploaderId: input.uploaderId,
-    imageUri: undefined,
+    imageUri: input.imageUri,
+    storagePath: input.storagePath,
+    mimeType: input.mimeType,
     capturedAt: input.capturedAt,
     locationLabel: input.locationLabel,
     locationConfidence: input.locationConfidence,
@@ -146,10 +152,11 @@ export function createSeedProjects(): Project[] {
     photos: [
       photo({
         id: "photo-1",
-        title: "Steam basin arrival",
+        title: "Grand Prismatic from above",
         uploaderId: "vince",
+        imageUri: commonsImage("Grand prismatic spring edit.jpg"),
         capturedAt: "2026-05-14T19:21:00.000Z",
-        locationLabel: "Midway Geyser Basin",
+        locationLabel: "Grand Prismatic Spring",
         locationConfidence: "exact",
         orientation: "landscape",
         mustInclude: true,
@@ -161,10 +168,11 @@ export function createSeedProjects(): Project[] {
       }),
       photo({
         id: "photo-2",
-        title: "Campfire portrait",
+        title: "Splendid Geyser portrait",
         uploaderId: "emma",
+        imageUri: commonsImage("Splendid geyser yellowstone national park.jpg"),
         capturedAt: "2026-05-14T22:47:00.000Z",
-        locationLabel: "Madison Campground",
+        locationLabel: "Splendid Geyser",
         locationConfidence: "inferred",
         orientation: "portrait",
         mustInclude: true,
@@ -176,8 +184,9 @@ export function createSeedProjects(): Project[] {
       }),
       photo({
         id: "photo-3",
-        title: "Elk crossing",
+        title: "Bison at dawn",
         uploaderId: "vince",
+        imageUri: commonsImage("American bison in Yellowstone National Park.jpg"),
         capturedAt: "2026-05-15T08:10:00.000Z",
         locationLabel: undefined,
         locationConfidence: "missing",
@@ -191,10 +200,13 @@ export function createSeedProjects(): Project[] {
       }),
       photo({
         id: "photo-4",
-        title: "Boardwalk laugh",
+        title: "Old Faithful in evening light",
         uploaderId: "emma",
+        imageUri: commonsImage(
+          "Yellowstone National Park (WY, USA), Old Faithful Geyser -- 2022 -- 2589.jpg",
+        ),
         capturedAt: "2026-05-15T11:52:00.000Z",
-        locationLabel: "Norris Geyser Basin",
+        locationLabel: "Old Faithful",
         locationConfidence: "exact",
         orientation: "square",
         mustInclude: true,
@@ -206,10 +218,11 @@ export function createSeedProjects(): Project[] {
       }),
       photo({
         id: "photo-5",
-        title: "Trail recap",
+        title: "Lower Falls overlook",
         uploaderId: "vince",
+        imageUri: commonsImage("Yellowstone Lower Falls.jpg"),
         capturedAt: "2026-05-16T17:25:00.000Z",
-        locationLabel: "Grand Prismatic overlook",
+        locationLabel: "Artist Point",
         locationConfidence: "exact",
         orientation: "landscape",
         mustInclude: false,

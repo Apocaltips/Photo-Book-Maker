@@ -16,6 +16,13 @@ const statusTone: Record<Project["status"], string> = {
 
 export function ProjectCard({ project }: { project: Project }) {
   const summary = getProjectSummary(project);
+  const confirmedCopy = project.bookDraft.pages.filter(
+    (page) => page.copyStatus === "confirmed",
+  ).length;
+  const selectedTheme =
+    project.bookThemes.find((theme) => theme.id === project.selectedThemeId) ??
+    project.bookThemes[0];
+  const leadPage = project.bookDraft.pages[0];
 
   return (
     <Link
@@ -54,6 +61,31 @@ export function ProjectCard({ project }: { project: Project }) {
             {getYearbookCycleLabel(project.yearbookCycle)}
           </div>
         ) : null}
+
+        <div className="rounded-[1.25rem] border border-[#00000012] bg-[linear-gradient(180deg,rgba(255,255,255,0.86),rgba(248,240,232,0.92))] px-4 py-4">
+          <div className="flex items-center justify-between gap-3">
+            <span className="text-xs uppercase tracking-[0.18em] text-[#7a6e65]">
+              {selectedTheme.name}
+            </span>
+            <span className="rounded-full bg-[#efe6dd] px-2 py-1 text-[11px] font-semibold uppercase tracking-[0.16em] text-[#755f50]">
+              {confirmedCopy}/{summary.pageCount} copy confirmed
+            </span>
+          </div>
+          {leadPage ? (
+            <>
+              <div className="mt-3 text-lg font-semibold text-[#1f1814]">
+                {leadPage.title}
+              </div>
+              <p className="mt-2 line-clamp-3 text-sm leading-7 text-[#5d524b]">
+                {leadPage.caption}
+              </p>
+            </>
+          ) : (
+            <p className="mt-3 text-sm leading-7 text-[#5d524b]">
+              No curated spreads yet. Upload photos and notes to start the first proof.
+            </p>
+          )}
+        </div>
 
         <div className="grid grid-cols-2 gap-3 text-sm">
           <Stat label="Approved photos" value={summary.approvedPhotos} />
