@@ -144,6 +144,21 @@ export async function togglePageApprovalRemote(projectId: string, pageId: string
   return data?.project ?? null;
 }
 
+export async function updatePageCopyRemote(
+  projectId: string,
+  pageId: string,
+  input: { title: string; caption: string; confirmed?: boolean },
+) {
+  const data = await request<{ project: Project }>(
+    `/projects/${projectId}/pages/${pageId}`,
+    {
+      method: "PATCH",
+      body: JSON.stringify(input),
+    },
+  );
+  return data?.project ?? null;
+}
+
 export async function toggleMustIncludeRemote(projectId: string, photoId: string) {
   const data = await request<{ project: Project }>(
     `/projects/${projectId}/photos/${photoId}/must-include`,

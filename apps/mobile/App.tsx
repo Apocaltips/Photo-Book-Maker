@@ -32,6 +32,7 @@ import {
   setThemeRemote,
   toggleMustIncludeRemote,
   togglePageApprovalRemote,
+  updatePageCopyRemote,
   uploadFileToRemoteStorage,
 } from "./src/api";
 import {
@@ -51,6 +52,7 @@ import {
   resolveProjectTask,
   toggleMustIncludePhoto,
   togglePageApproval,
+  updateBookPageCopy,
   type Project,
   type ProjectType,
   type YearbookCycle,
@@ -687,6 +689,24 @@ export default function App() {
     replaceProject(remoteProject ?? localProject);
   }
 
+  async function handleUpdatePageCopy(
+    pageId: string,
+    input: { title: string; caption: string; confirmed?: boolean },
+  ) {
+    if (!selectedProject) {
+      return;
+    }
+
+    const localProject = updateBookPageCopy(selectedProject, pageId, input);
+    const remoteProject = await updatePageCopyRemote(selectedProject.id, pageId, input).catch(
+      () => null,
+    );
+    if (remoteProject) {
+      markSharedSync();
+    }
+    replaceProject(remoteProject ?? localProject);
+  }
+
   async function handleToggleMustInclude(photoId: string) {
     if (!selectedProject) {
       return;
@@ -1100,6 +1120,7 @@ export default function App() {
             <EditorTab
               project={selectedProject}
               onTogglePage={handleTogglePage}
+              onUpdatePageCopy={handleUpdatePageCopy}
               onThemeSelect={handleThemeSelect}
               onExportProof={handleExportProof}
             />
@@ -1758,16 +1779,81 @@ function TasksTab({
 function EditorTab({
   project,
   onTogglePage,
+  onUpdatePageCopy,
   onThemeSelect,
   onExportProof,
 }: {
   project?: Project;
   onTogglePage: (pageId: string) => void;
+  onUpdatePageCopy: (
+    pageId: string,
+    input: { title: string; caption: string; confirmed?: boolean },
+  ) => void;
   onThemeSelect: (themeId: string) => void;
   onExportProof: () => void;
 }) {
+  const [pageDrafts, setPageDrafts] = useState<
+    Record<string, { caption: string; title: string }>
+  >({});
+
+  useEffect(() => {
+    if (!project) {
+      setPageDrafts({});
+      return;
+    }
+
+    setPageDrafts(
+      Object.fromEntries(
+        project.bookDraft.pages.map((page) => [
+          page.id,
+          {
+            title: page.title,
+            caption: page.caption,
+          },
+        ]),
+      ),
+    );
+  }, [project]);
+
   if (!project) {
     return null;
+  }
+
+  const confirmedCopyCount = project.bookDraft.pages.filter(
+    (page) => page.copyStatus === "confirmed",
+  ).length;
+  const unconfirmedCopyCount = project.bookDraft.pages.length - confirmedCopyCount;
+
+  function getStoryBeatLabel(page: Project["bookDraft"]["pages"][number]) {
+    const beat =
+      page.storyBeat ??
+      (page.style === "full_bleed" || page.style === "hero"
+        ? "opener"
+        : page.style === "recap" || page.style === "closing"
+          ? "closing"
+          : "details");
+
+    return beat.replaceAll("_", " ");
+  }
+
+  function getDraftValue(page: Project["bookDraft"]["pages"][number]) {
+    return pageDrafts[page.id] ?? {
+      title: page.title,
+      caption: page.caption,
+    };
+  }
+
+  function getCopySourceLabel(page: Project["bookDraft"]["pages"][number]) {
+    switch (page.copySource) {
+      case "hybrid":
+        return "Notes + metadata draft";
+      case "note":
+        return "Note-led draft";
+      case "manual":
+        return "Manually edited copy";
+      default:
+        return "Metadata draft";
+    }
   }
 
   return (
@@ -1775,10 +1861,24 @@ function EditorTab({
       <SurfaceCard
         title={`${project.title} layout engine`}
         subtitle="Professional proofing"
-        body="The book draft regenerates from approved photos and notes so testers can feel the real shape of the product."
+        body="The draft now sequences like a real album: opener, slower transitions, detail spreads, and a quieter close. Review the prefilled copy before export."
       >
         <View style={styles.inlineActionRow}>
           <PrimaryButton label="Export proof PDF" onPress={onExportProof} />
+        </View>
+        <View style={styles.editorSummaryRow}>
+          <View style={styles.editorSummaryCard}>
+            <Text style={styles.editorSummaryValue}>{project.bookDraft.pages.length}</Text>
+            <Text style={styles.editorSummaryLabel}>Curated spreads</Text>
+          </View>
+          <View style={styles.editorSummaryCard}>
+            <Text style={styles.editorSummaryValue}>{confirmedCopyCount}</Text>
+            <Text style={styles.editorSummaryLabel}>Copy confirmed</Text>
+          </View>
+          <View style={styles.editorSummaryCard}>
+            <Text style={styles.editorSummaryValue}>{unconfirmedCopyCount}</Text>
+            <Text style={styles.editorSummaryLabel}>Needs review</Text>
+          </View>
         </View>
         <View style={styles.segmentedRow}>
           {project.bookThemes.map((theme) => (
@@ -1800,20 +1900,51 @@ function EditorTab({
       <SurfaceCard
         title="Draft pages"
         subtitle="Approve or tweak"
-        body="Hero pages, full-bleed spreads, and recap pages should all feel composed, not machine-dumped."
+        body="Every spread should feel professionally curated. Tighten the title, refine the caption, and explicitly confirm the copy that is ready to print."
       >
         <View style={styles.cardStack}>
           {project.bookDraft.pages.map((page, index) => {
             const pagePhotos = page.photoIds
               .map((photoId) => project.photos.find((photo) => photo.id === photoId))
               .filter((photo): photo is Project["photos"][number] => Boolean(photo));
+            const draft = getDraftValue(page);
 
             return (
               <View key={page.id} style={styles.pageCard}>
-                <View style={styles.rowBetween}>
-                  <Text style={styles.pageEyebrow}>
-                    Spread {index + 1} - {page.style.replaceAll("_", " ")}
-                  </Text>
+                <View style={styles.pageCardHeader}>
+                  <View style={styles.pageMetaGroup}>
+                    <Text style={styles.pageEyebrow}>
+                      Spread {index + 1} - {page.style.replaceAll("_", " ")}
+                    </Text>
+                    <View style={styles.pageTagRow}>
+                      <View style={styles.pageTag}>
+                        <Text style={styles.pageTagText}>
+                          {getStoryBeatLabel(page)}
+                        </Text>
+                      </View>
+                      <View
+                        style={[
+                          styles.pageTag,
+                          (page.copyStatus ?? "prefilled") === "confirmed"
+                            ? styles.pageTagConfirmed
+                            : styles.pageTagPending,
+                        ]}
+                      >
+                        <Text
+                          style={[
+                            styles.pageTagText,
+                            (page.copyStatus ?? "prefilled") === "confirmed"
+                              ? styles.pageTagTextConfirmed
+                              : styles.pageTagTextPending,
+                          ]}
+                        >
+                          {(page.copyStatus ?? "prefilled") === "confirmed"
+                            ? "Copy confirmed"
+                            : "Prefilled copy"}
+                        </Text>
+                      </View>
+                    </View>
+                  </View>
                   <Pressable
                     style={[
                       styles.inlineButton,
@@ -1831,8 +1962,40 @@ function EditorTab({
                     </Text>
                   </Pressable>
                 </View>
-                <Text style={styles.pageTitle}>{page.title}</Text>
-                <Text style={styles.pageBody}>{page.caption}</Text>
+                <Field
+                  label="Spread headline"
+                  value={draft.title}
+                  onChangeText={(value) =>
+                    setPageDrafts((current) => ({
+                      ...current,
+                      [page.id]: {
+                        ...(current[page.id] ?? {
+                          title: page.title,
+                          caption: page.caption,
+                        }),
+                        title: value,
+                      },
+                    }))
+                  }
+                />
+                <Field
+                  label="Spread caption"
+                  value={draft.caption}
+                  onChangeText={(value) =>
+                    setPageDrafts((current) => ({
+                      ...current,
+                      [page.id]: {
+                        ...(current[page.id] ?? {
+                          title: page.title,
+                          caption: page.caption,
+                        }),
+                        caption: value,
+                      },
+                    }))
+                  }
+                  multiline
+                />
+                <Text style={styles.pageSupportText}>{getCopySourceLabel(page)}</Text>
                 {pagePhotos.length ? (
                   <View style={styles.pagePhotoStrip}>
                     {pagePhotos.map((photo) => (
@@ -1854,6 +2017,33 @@ function EditorTab({
                     ))}
                   </View>
                 ) : null}
+                <View style={styles.pageCopyActions}>
+                  <PrimaryButton
+                    label="Save draft copy"
+                    onPress={() =>
+                      onUpdatePageCopy(page.id, {
+                        title: draft.title,
+                        caption: draft.caption,
+                      })
+                    }
+                    compact
+                    dark
+                  />
+                  <PrimaryButton
+                    label={page.copyStatus === "confirmed" ? "Refresh confirmed copy" : "Confirm copy"}
+                    onPress={() =>
+                      onUpdatePageCopy(page.id, {
+                        title: draft.title,
+                        caption: draft.caption,
+                        confirmed: true,
+                      })
+                    }
+                    compact
+                  />
+                </View>
+                <Text style={styles.pageCurationNote}>
+                  {page.curationNote ?? page.layoutNote}
+                </Text>
                 <Text style={styles.pageNote}>{page.layoutNote}</Text>
               </View>
             );
@@ -2903,13 +3093,52 @@ const styles = StyleSheet.create({
     lineHeight: 20,
     color: palette.muted,
   },
+  editorSummaryRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 10,
+  },
+  editorSummaryCard: {
+    flex: 1,
+    minWidth: 96,
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: palette.line,
+    backgroundColor: "rgba(255,255,255,0.76)",
+    paddingVertical: 12,
+    paddingHorizontal: 14,
+    gap: 3,
+  },
+  editorSummaryValue: {
+    fontSize: 24,
+    lineHeight: 26,
+    color: palette.ink,
+    fontWeight: "700",
+  },
+  editorSummaryLabel: {
+    fontSize: 11,
+    textTransform: "uppercase",
+    letterSpacing: 1.5,
+    color: palette.muted,
+    fontWeight: "700",
+  },
   pageCard: {
     borderRadius: 24,
     borderWidth: 1,
     borderColor: palette.line,
     backgroundColor: "rgba(255,255,255,0.82)",
     padding: 16,
-    gap: 8,
+    gap: 10,
+  },
+  pageCardHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "flex-start",
+    gap: 10,
+  },
+  pageMetaGroup: {
+    flex: 1,
+    gap: 6,
   },
   pageEyebrow: {
     fontSize: 11,
@@ -2917,6 +3146,36 @@ const styles = StyleSheet.create({
     textTransform: "uppercase",
     color: palette.muted,
     fontWeight: "700",
+  },
+  pageTagRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 8,
+  },
+  pageTag: {
+    borderRadius: 999,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    backgroundColor: "rgba(31,24,20,0.06)",
+  },
+  pageTagConfirmed: {
+    backgroundColor: palette.forestSoft,
+  },
+  pageTagPending: {
+    backgroundColor: palette.accentSoft,
+  },
+  pageTagText: {
+    fontSize: 11,
+    textTransform: "uppercase",
+    letterSpacing: 1.4,
+    color: palette.muted,
+    fontWeight: "700",
+  },
+  pageTagTextConfirmed: {
+    color: palette.forest,
+  },
+  pageTagTextPending: {
+    color: palette.accent,
   },
   pageTitle: {
     fontSize: 24,
@@ -2961,6 +3220,23 @@ const styles = StyleSheet.create({
     fontSize: 12,
     lineHeight: 18,
     color: palette.muted,
+    fontWeight: "600",
+  },
+  pageSupportText: {
+    fontSize: 12,
+    lineHeight: 19,
+    color: palette.muted,
+    fontWeight: "600",
+  },
+  pageCopyActions: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 10,
+  },
+  pageCurationNote: {
+    fontSize: 13,
+    lineHeight: 21,
+    color: palette.ink,
     fontWeight: "600",
   },
   pageNote: {

@@ -18,7 +18,20 @@ export type PageLayoutStyle =
   | "full_bleed"
   | "balanced"
   | "collage"
-  | "recap";
+  | "recap"
+  | "diptych"
+  | "chapter"
+  | "mosaic"
+  | "closing";
+export type BookPageStoryBeat =
+  | "opener"
+  | "scene_setter"
+  | "highlight"
+  | "details"
+  | "reflection"
+  | "closing";
+export type BookPageCopyStatus = "prefilled" | "confirmed";
+export type BookPageCopySource = "metadata" | "note" | "hybrid" | "manual";
 export type PrintOrderStatus =
   | "draft"
   | "reviewing"
@@ -108,10 +121,14 @@ export interface BookTheme {
 export interface BookPage {
   id: string;
   style: PageLayoutStyle;
+  storyBeat: BookPageStoryBeat;
   title: string;
   caption: string;
+  copyStatus: BookPageCopyStatus;
+  copySource: BookPageCopySource;
   photoIds: string[];
   layoutNote: string;
+  curationNote: string;
   approved: boolean;
 }
 

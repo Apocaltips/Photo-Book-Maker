@@ -276,31 +276,46 @@ export function createSeedProjects(): Project[] {
         {
           id: "page-1",
           style: "hero",
+          storyBeat: "opener",
           title: "We arrived with the steam already glowing.",
           caption:
             "The first boardwalk stop set the tone for the whole weekend: dramatic sky, cool air, and just enough quiet to hear the pools breathe.",
+          copyStatus: "confirmed",
+          copySource: "hybrid",
           photoIds: ["photo-4"],
           layoutNote: "Use the square portrait as an opener with generous margin and title lockup.",
+          curationNote:
+            "The opener lands on one image and one line of memory so the book immediately feels curated instead of crowded.",
           approved: true,
         },
         {
           id: "page-2",
-          style: "balanced",
+          style: "diptych",
+          storyBeat: "details",
           title: "Night one at Madison",
           caption:
             "Low-light cleanup keeps the campfire warmth without pushing it into fake orange territory.",
+          copyStatus: "prefilled",
+          copySource: "metadata",
           photoIds: ["photo-2", "photo-1"],
           layoutNote: "Pair the portrait with a tighter supporting landscape on the right.",
+          curationNote:
+            "This pairing moves from atmosphere to detail, which is the difference between an album spread and a phone gallery.",
           approved: false,
         },
         {
           id: "page-3",
-          style: "recap",
+          style: "closing",
+          storyBeat: "closing",
           title: "By morning, Yellowstone had its own traffic.",
           caption:
             "Add the wildlife stop once the missing location is confirmed, then hold the recap copy over lots of whitespace.",
+          copyStatus: "prefilled",
+          copySource: "hybrid",
           photoIds: ["photo-3", "photo-5"],
           layoutNote: "Keep this page airy so the copy breathes.",
+          curationNote:
+            "The ending should land softer than the opener, with more space and a quieter rhythm.",
           approved: false,
         },
       ],
@@ -417,31 +432,46 @@ export function createSeedProjects(): Project[] {
         {
           id: "page-y-1",
           style: "hero",
+          storyBeat: "opener",
           title: "A year told in little escapes.",
           caption:
             "Open with the strongest portrait, then let the rest of the year unfurl around it.",
+          copyStatus: "confirmed",
+          copySource: "hybrid",
           photoIds: ["year-photo-1"],
           layoutNote: "Use a large serif opener and tight copy block.",
+          curationNote:
+            "The opener frames the whole year in one restrained image before the book expands into bigger moments.",
           approved: true,
         },
         {
           id: "page-y-2",
           style: "full_bleed",
+          storyBeat: "highlight",
           title: "Summer needed a full spread.",
           caption:
             "The canyon overlook carries the whole middle act, with enough margin on the caption to keep it premium.",
+          copyStatus: "confirmed",
+          copySource: "metadata",
           photoIds: ["year-photo-2"],
           layoutNote: "Full-bleed landscape with a restrained lower-third caption.",
+          curationNote:
+            "Reserve the single-image cinematic spread for the frame that can carry a whole season by itself.",
           approved: true,
         },
         {
           id: "page-y-3",
-          style: "collage",
+          style: "mosaic",
+          storyBeat: "reflection",
           title: "The cozy part of the year",
           caption:
             "Pair smaller moments late in the book so the annual story ends warm instead of busy.",
+          copyStatus: "prefilled",
+          copySource: "hybrid",
           photoIds: ["year-photo-3", "year-photo-1"],
           layoutNote: "Two-photo collage with asymmetrical whitespace.",
+          curationNote:
+            "Late-book detail pages should feel warm and gathered, not like leftover images filling space.",
           approved: false,
         },
       ],
@@ -525,7 +555,7 @@ export function createMockProject(input: CreateProjectInput): Project {
       status: "draft",
       themeId: editorialThemes[0].id,
       summary:
-        "The draft book will appear here once uploads, captions, and layout generation have enough material to work with.",
+        "The draft book will appear here once uploads and memory notes give the layout engine enough material to curate a real first proof.",
       pages: [],
     },
     mockPrintOrder: {
