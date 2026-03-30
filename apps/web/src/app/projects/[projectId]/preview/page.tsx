@@ -41,6 +41,12 @@ export default async function ProjectPreviewPage({
           >
             Back to proof board
           </Link>
+          <Link
+            href={`/projects/${project.id}/editor`}
+            className="rounded-full border border-[#1f18141f] bg-white/72 px-4 py-2 text-sm font-medium text-[#1f1814] transition-colors hover:bg-white"
+          >
+            Open draft editor
+          </Link>
           <span className="rounded-full bg-[#1f1814] px-4 py-2 text-sm font-medium text-[#f7efe7]">
             Preview mode
           </span>

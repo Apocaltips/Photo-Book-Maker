@@ -66,6 +66,12 @@ export default async function ProjectPage({
             >
               Open book preview
             </Link>
+            <Link
+              href={`/projects/${project.id}/editor`}
+              className="rounded-full border border-[#1f18141f] bg-[#1f1814] px-4 py-2 text-sm font-medium text-[#f8efe7] transition-colors hover:bg-[#302721]"
+            >
+              Open draft editor
+            </Link>
             {project.type === "yearbook" && project.yearbookCycle ? (
               <div className="text-xs uppercase tracking-[0.18em] text-[#7b6f67]">
                 {getYearbookCycleLabel(project.yearbookCycle)}
@@ -217,15 +223,23 @@ export default async function ProjectPage({
             </div>
 
             <div className="mt-4">
-              <Link
-                href={`/projects/${project.id}/preview`}
-                className="inline-flex items-center rounded-full border border-[#1f18141f] bg-white/70 px-4 py-2 text-sm font-medium text-[#1f1814] transition-colors hover:bg-white"
-              >
-                Open full book preview
-              </Link>
+              <div className="flex flex-wrap gap-3">
+                <Link
+                  href={`/projects/${project.id}/preview`}
+                  className="inline-flex items-center rounded-full border border-[#1f18141f] bg-white/70 px-4 py-2 text-sm font-medium text-[#1f1814] transition-colors hover:bg-white"
+                >
+                  Open full book preview
+                </Link>
+                <Link
+                  href={`/projects/${project.id}/editor`}
+                  className="inline-flex items-center rounded-full border border-[#1f18141f] bg-[#1f1814] px-4 py-2 text-sm font-medium text-[#f8efe7] transition-colors hover:bg-[#302721]"
+                >
+                  Edit this draft
+                </Link>
+              </div>
             </div>
 
-            <div className="mt-6 grid gap-5 xl:grid-cols-2">
+            <div className="mt-6 space-y-5">
               {project.bookDraft.pages.map((page, index) => (
                 <SpreadPreviewCard
                   key={page.id}
@@ -329,7 +343,7 @@ function SpreadPreviewCard({
         </div>
       </div>
 
-      <div className="grid gap-0 lg:grid-cols-[1.08fr_0.92fr]">
+      <div className="grid gap-0 lg:grid-cols-[1.02fr_0.98fr]">
         <div
           className="border-b border-[#00000010] bg-[radial-gradient(circle_at_top_left,rgba(255,255,255,0.88),rgba(238,228,219,0.96))] p-5 lg:border-b-0 lg:border-r"
           style={{ borderColor: `${accent}22` }}
@@ -536,12 +550,19 @@ function CanvasBlock({
           emphasis === "large" ? `inset 0 0 0 1px ${accent}22` : undefined,
       }}
     >
-      <div
-        className="absolute inset-x-0 top-0 h-20 opacity-70"
-        style={{
-          background: `linear-gradient(135deg, ${accent}20, transparent)`,
-        }}
-      />
+      {photo?.imageUri ? (
+        <>
+          <img src={photo.imageUri} alt={photo.title} className="absolute inset-0 h-full w-full object-cover" />
+          <div className="absolute inset-0 bg-[linear-gradient(180deg,rgba(17,11,8,0.06),rgba(17,11,8,0.28))]" />
+        </>
+      ) : (
+        <div
+          className="absolute inset-x-0 top-0 h-20 opacity-70"
+          style={{
+            background: `linear-gradient(135deg, ${accent}20, transparent)`,
+          }}
+        />
+      )}
       <div className="absolute inset-0 flex flex-col justify-between p-4">
         <div className="text-[11px] uppercase tracking-[0.18em] text-[#786b62]">
           {photo?.orientation ?? "layout"}
