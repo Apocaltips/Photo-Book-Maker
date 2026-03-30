@@ -157,6 +157,77 @@ export function updateTaskStatus(
   } satisfies Project;
 }
 
+function getPhotoIdForTask(taskId: string) {
+  if (!taskId.startsWith("task-")) {
+    return null;
+  }
+
+  return taskId.slice(5);
+}
+
+export function resolveProjectTask(
+  project: Project,
+  taskId: string,
+  input?: { locationLabel?: string },
+): Project {
+  const task = project.resolutionTasks.find((entry) => entry.id === taskId);
+  if (!task) {
+    return project;
+  }
+
+  let nextPhotos = project.photos;
+
+  if (task.type === "location") {
+    const photoId = getPhotoIdForTask(taskId);
+    const trimmedLocation = input?.locationLabel?.trim();
+
+    nextPhotos = project.photos.map((photo) => {
+      if (photo.id !== photoId) {
+        return photo;
+      }
+
+      if (!trimmedLocation) {
+        return photo;
+      }
+
+      const qualityNotes = photo.qualityNotes.includes(
+        "Location confirmed manually in the app.",
+      )
+        ? photo.qualityNotes
+        : [...photo.qualityNotes, "Location confirmed manually in the app."];
+
+      return {
+        ...photo,
+        locationLabel: trimmedLocation,
+        locationConfidence: photo.locationConfidence === "exact" ? "exact" : "inferred",
+        qualityNotes,
+      };
+    });
+  }
+
+  const resolutionTasks = project.resolutionTasks.map((entry) =>
+    entry.id === taskId
+      ? {
+          ...entry,
+          status: "resolved" as const,
+          detail:
+            task.type === "location" && input?.locationLabel?.trim()
+              ? `Location confirmed as ${input.locationLabel.trim()}.`
+              : entry.detail,
+        }
+      : entry,
+  );
+
+  const hasOpenTasks = resolutionTasks.some((entry) => entry.status !== "resolved");
+
+  return regenerateBookDraft({
+    ...project,
+    status: hasOpenTasks ? "needs_resolution" : "reviewing",
+    photos: nextPhotos,
+    resolutionTasks,
+  });
+}
+
 export function togglePageApproval(project: Project, pageId: string): Project {
   return {
     ...project,

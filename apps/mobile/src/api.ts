@@ -114,12 +114,21 @@ export async function inviteCollaboratorRemote(
   return data?.project ?? null;
 }
 
-export async function resolveTaskRemote(projectId: string, taskId: string) {
+export async function resolveTaskRemote(
+  projectId: string,
+  taskId: string,
+  input?: { locationLabel?: string },
+) {
   const data = await request<{ project: Project }>(
     `/projects/${projectId}/tasks/${taskId}/resolve`,
     {
       method: "POST",
-      body: JSON.stringify({ status: "resolved" }),
+      body: JSON.stringify({
+        status: "resolved",
+        ...(input?.locationLabel?.trim()
+          ? { locationLabel: input.locationLabel.trim() }
+          : {}),
+      }),
     },
   );
   return data?.project ?? null;

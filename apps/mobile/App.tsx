@@ -8,6 +8,8 @@ import {
   ActivityIndicator,
   Alert,
   Image,
+  KeyboardAvoidingView,
+  Platform,
   Pressable,
   SafeAreaView,
   ScrollView,
@@ -47,9 +49,9 @@ import {
   getProjectSummary,
   getYearbookCycleLabel,
   listOpenTasks,
+  resolveProjectTask,
   toggleMustIncludePhoto,
   togglePageApproval,
-  updateTaskStatus,
   type Project,
   type ProjectType,
   type YearbookCycle,
@@ -65,6 +67,7 @@ import {
 
 type AppTab = "projects" | "tasks" | "editor" | "print";
 type SyncMode = "checking" | "shared" | "local";
+type OpenTask = ReturnType<typeof listOpenTasks>[number];
 
 const STORAGE_KEY = "photo-book-maker-state-v2";
 const tabOrder: AppTab[] = ["projects", "tasks", "editor", "print"];
@@ -197,6 +200,14 @@ function getProjectStageLabel(project: Project) {
   }
 }
 
+function getPhotoIdForTask(taskId: string) {
+  if (!taskId.startsWith("task-")) {
+    return null;
+  }
+
+  return taskId.slice(5);
+}
+
 export default function App() {
   const [projects, setProjects] = useState<Project[]>(() => createSeedProjects());
   const [selectedProjectId, setSelectedProjectId] = useState("yellowstone-weekend");
@@ -231,6 +242,13 @@ export default function App() {
   const [noteBody, setNoteBody] = useState(
     "The kind of photo sequence that feels better once it has room to breathe in print.",
   );
+  const [activeResolutionTaskId, setActiveResolutionTaskId] = useState<string | null>(
+    null,
+  );
+  const [activeResolutionProjectId, setActiveResolutionProjectId] = useState<string | null>(
+    null,
+  );
+  const [resolutionLocationInput, setResolutionLocationInput] = useState("");
 
   useEffect(() => {
     let isMounted = true;
@@ -431,6 +449,26 @@ export default function App() {
     );
   }
 
+  function getProjectById(projectId: string) {
+    return projects.find((project) => project.id === projectId);
+  }
+
+  function getLocationDraftForTask(projectId: string, taskId: string) {
+    const project = getProjectById(projectId);
+    if (!project) {
+      return "";
+    }
+
+    const photoId = getPhotoIdForTask(taskId);
+    if (!photoId) {
+      return "";
+    }
+
+    return (
+      project.photos.find((photo) => photo.id === photoId)?.locationLabel ?? ""
+    );
+  }
+
   function markSharedSync() {
     setSyncMode("shared");
     setLastSyncedAt(
@@ -580,19 +618,57 @@ export default function App() {
     setInviteEmail("friend@example.com");
   }
 
-  async function handleResolveTask(taskId: string) {
-    if (!selectedProject) {
+  function handleStartTaskResolution(task: OpenTask) {
+    if (task.type === "location") {
+      setActiveResolutionTaskId(task.id);
+      setActiveResolutionProjectId(task.projectId);
+      setResolutionLocationInput(getLocationDraftForTask(task.projectId, task.id));
       return;
     }
 
-    const localProject = updateTaskStatus(selectedProject, taskId, "resolved");
-    const remoteProject = await resolveTaskRemote(selectedProject.id, taskId).catch(
-      () => null,
-    );
+    void handleResolveTask(task.projectId, task.id);
+  }
+
+  function handleCancelTaskResolution() {
+    setActiveResolutionTaskId(null);
+    setActiveResolutionProjectId(null);
+    setResolutionLocationInput("");
+  }
+
+  async function handleResolveTask(
+    projectId: string,
+    taskId: string,
+    input?: { locationLabel?: string },
+  ) {
+    const project = getProjectById(projectId);
+    if (!project) {
+      return;
+    }
+
+    const task = project.resolutionTasks.find((entry) => entry.id === taskId);
+    const trimmedLocation = input?.locationLabel?.trim();
+    if (task?.type === "location" && !trimmedLocation) {
+      Alert.alert(
+        "Add the location first",
+        "Type the place name or town for this photo before marking the task resolved.",
+      );
+      return;
+    }
+
+    const localProject = resolveProjectTask(project, taskId, {
+      locationLabel: trimmedLocation,
+    });
+    const remoteProject = await resolveTaskRemote(projectId, taskId, {
+      locationLabel: trimmedLocation,
+    }).catch(() => null);
     if (remoteProject) {
       markSharedSync();
     }
     replaceProject(remoteProject ?? localProject);
+    if (selectedProjectId === projectId) {
+      setSelectedProjectId(projectId);
+    }
+    handleCancelTaskResolution();
   }
 
   async function handleTogglePage(pageId: string) {
@@ -853,9 +929,14 @@ export default function App() {
     return (
       <SafeAreaView style={styles.safeArea}>
         <StatusBar style="dark" />
-        <View style={styles.appShell}>
+        <KeyboardAvoidingView
+          style={styles.appShell}
+          behavior={Platform.OS === "ios" ? "padding" : "height"}
+        >
           <ScrollView
             contentContainerStyle={styles.scrollContent}
+            keyboardDismissMode={Platform.OS === "ios" ? "interactive" : "on-drag"}
+            keyboardShouldPersistTaps="handled"
             showsVerticalScrollIndicator={false}
           >
             <AuthScreen
@@ -872,7 +953,7 @@ export default function App() {
               onSubmit={handleAuthSubmit}
             />
           </ScrollView>
-        </View>
+        </KeyboardAvoidingView>
       </SafeAreaView>
     );
   }
@@ -880,9 +961,14 @@ export default function App() {
   return (
     <SafeAreaView style={styles.safeArea}>
       <StatusBar style="dark" />
-      <View style={styles.appShell}>
+      <KeyboardAvoidingView
+        style={styles.appShell}
+        behavior={Platform.OS === "ios" ? "padding" : "height"}
+      >
         <ScrollView
           contentContainerStyle={styles.scrollContent}
+          keyboardDismissMode={Platform.OS === "ios" ? "interactive" : "on-drag"}
+          keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}
         >
           <View style={styles.heroCard}>
@@ -987,6 +1073,7 @@ export default function App() {
               onInviteCollaborator={handleInviteCollaborator}
               onAddNote={handleAddNote}
               onPickPhotos={handlePickPhotos}
+              onOpenEditor={() => setActiveTab("editor")}
               onSelectProject={(projectId) => {
                 startTransition(() => {
                   setSelectedProjectId(projectId);
@@ -997,7 +1084,16 @@ export default function App() {
           ) : null}
 
           {activeTab === "tasks" ? (
-            <TasksTab tasks={openTasks} onResolveTask={handleResolveTask} />
+            <TasksTab
+              tasks={openTasks}
+              activeResolutionTaskId={activeResolutionTaskId}
+              activeResolutionProjectId={activeResolutionProjectId}
+              resolutionLocationInput={resolutionLocationInput}
+              onLocationInputChange={setResolutionLocationInput}
+              onResolveTask={handleResolveTask}
+              onStartTaskResolution={handleStartTaskResolution}
+              onCancelTaskResolution={handleCancelTaskResolution}
+            />
           ) : null}
 
           {activeTab === "editor" ? (
@@ -1042,7 +1138,7 @@ export default function App() {
             </Pressable>
           ))}
         </View>
-      </View>
+      </KeyboardAvoidingView>
     </SafeAreaView>
   );
 }
@@ -1085,6 +1181,7 @@ function ProjectsTab({
   onInviteCollaborator,
   onAddNote,
   onPickPhotos,
+  onOpenEditor,
   onSelectProject,
   onToggleMustInclude,
 }: {
@@ -1125,6 +1222,7 @@ function ProjectsTab({
   onInviteCollaborator: () => void;
   onAddNote: () => void;
   onPickPhotos: () => void;
+  onOpenEditor: () => void;
   onSelectProject: (projectId: string) => void;
   onToggleMustInclude: (photoId: string) => void;
 }) {
@@ -1164,6 +1262,7 @@ function ProjectsTab({
 
             <View style={styles.featuredWorkspaceActions}>
               <PrimaryButton label="Import photos" onPress={onPickPhotos} compact />
+              <PrimaryButton label="Open layout" onPress={onOpenEditor} compact />
               <PrimaryButton label="Save note" onPress={onAddNote} compact dark />
             </View>
           </View>
@@ -1362,6 +1461,7 @@ function ProjectsTab({
           >
             <View style={styles.inlineActionRow}>
               <PrimaryButton label="Import from library" onPress={onPickPhotos} />
+              <PrimaryButton label="Open draft layout" onPress={onOpenEditor} compact />
               <PrimaryButton label="Add note" onPress={onAddNote} compact dark />
             </View>
             <Field
@@ -1375,8 +1475,18 @@ function ProjectsTab({
               onChangeText={onNoteBodyChange}
               multiline
             />
+            <View style={styles.galleryHeader}>
+              <View style={styles.galleryHeaderCopy}>
+                <Text style={styles.galleryTitle}>Every photo in this book</Text>
+                <Text style={styles.galleryBody}>
+                  This is the full import gallery. The Layout tab below shows how the draft
+                  is currently using these frames.
+                </Text>
+              </View>
+              <Text style={styles.galleryCount}>{selectedProject.photos.length} photos</Text>
+            </View>
             <View style={styles.photoGrid}>
-              {selectedProject.photos.slice(0, 6).map((photo) => (
+              {selectedProject.photos.map((photo) => (
                 <View key={photo.id} style={styles.photoCard}>
                   {photo.imageUri ? (
                     <Image source={{ uri: photo.imageUri }} style={styles.photoThumb} />
@@ -1410,11 +1520,6 @@ function ProjectsTab({
                 </View>
               ))}
             </View>
-            {selectedProject.photos.length > 6 ? (
-              <Text style={styles.archiveHint}>
-                Showing the first six moments here so the workspace stays scannable on phone.
-              </Text>
-            ) : null}
           </SurfaceCard>
 
           <SurfaceCard
@@ -1560,10 +1665,26 @@ function AuthScreen({
 
 function TasksTab({
   tasks,
+  activeResolutionTaskId,
+  activeResolutionProjectId,
+  resolutionLocationInput,
+  onLocationInputChange,
   onResolveTask,
+  onStartTaskResolution,
+  onCancelTaskResolution,
 }: {
   tasks: ReturnType<typeof listOpenTasks>;
-  onResolveTask: (taskId: string) => void;
+  activeResolutionTaskId: string | null;
+  activeResolutionProjectId: string | null;
+  resolutionLocationInput: string;
+  onLocationInputChange: (value: string) => void;
+  onResolveTask: (
+    projectId: string,
+    taskId: string,
+    input?: { locationLabel?: string },
+  ) => void;
+  onStartTaskResolution: (task: OpenTask) => void;
+  onCancelTaskResolution: () => void;
 }) {
   return (
     <SurfaceCard
@@ -1579,13 +1700,47 @@ function TasksTab({
             </Text>
             <Text style={styles.taskTitle}>{task.title}</Text>
             <Text style={styles.taskBody}>{task.detail}</Text>
+            {activeResolutionTaskId === task.id &&
+            activeResolutionProjectId === task.projectId &&
+            task.type === "location" ? (
+              <View style={styles.taskResolutionEditor}>
+                <Field
+                  label="Confirmed location"
+                  value={resolutionLocationInput}
+                  onChangeText={onLocationInputChange}
+                />
+                <Text style={styles.helperText}>
+                  Use the place name people would expect in the book, like a park, trail,
+                  town, or neighborhood.
+                </Text>
+                <View style={styles.inlineActionRow}>
+                  <PrimaryButton
+                    label="Save location"
+                    onPress={() =>
+                      onResolveTask(task.projectId, task.id, {
+                        locationLabel: resolutionLocationInput,
+                      })
+                    }
+                    compact
+                  />
+                  <PrimaryButton
+                    label="Cancel"
+                    onPress={onCancelTaskResolution}
+                    compact
+                    dark
+                  />
+                </View>
+              </View>
+            ) : null}
             <View style={styles.rowBetween}>
               <Text style={styles.taskDue}>{task.dueLabel}</Text>
               <Pressable
                 style={styles.inlineButton}
-                onPress={() => onResolveTask(task.id)}
+                onPress={() => onStartTaskResolution(task)}
               >
-                <Text style={styles.inlineButtonText}>Resolve</Text>
+                <Text style={styles.inlineButtonText}>
+                  {task.type === "location" ? "Add location" : "Resolve"}
+                </Text>
               </Pressable>
             </View>
           </View>
@@ -1648,34 +1803,61 @@ function EditorTab({
         body="Hero pages, full-bleed spreads, and recap pages should all feel composed, not machine-dumped."
       >
         <View style={styles.cardStack}>
-          {project.bookDraft.pages.map((page, index) => (
-            <View key={page.id} style={styles.pageCard}>
-              <View style={styles.rowBetween}>
-                <Text style={styles.pageEyebrow}>
-                  Spread {index + 1} - {page.style.replaceAll("_", " ")}
-                </Text>
-                <Pressable
-                  style={[
-                    styles.inlineButton,
-                    page.approved ? styles.inlineButtonApproved : null,
-                  ]}
-                  onPress={() => onTogglePage(page.id)}
-                >
-                  <Text
-                    style={[
-                      styles.inlineButtonText,
-                      page.approved ? styles.inlineButtonTextApproved : null,
-                    ]}
-                  >
-                    {page.approved ? "Approved" : "Approve"}
+          {project.bookDraft.pages.map((page, index) => {
+            const pagePhotos = page.photoIds
+              .map((photoId) => project.photos.find((photo) => photo.id === photoId))
+              .filter((photo): photo is Project["photos"][number] => Boolean(photo));
+
+            return (
+              <View key={page.id} style={styles.pageCard}>
+                <View style={styles.rowBetween}>
+                  <Text style={styles.pageEyebrow}>
+                    Spread {index + 1} - {page.style.replaceAll("_", " ")}
                   </Text>
-                </Pressable>
+                  <Pressable
+                    style={[
+                      styles.inlineButton,
+                      page.approved ? styles.inlineButtonApproved : null,
+                    ]}
+                    onPress={() => onTogglePage(page.id)}
+                  >
+                    <Text
+                      style={[
+                        styles.inlineButtonText,
+                        page.approved ? styles.inlineButtonTextApproved : null,
+                      ]}
+                    >
+                      {page.approved ? "Approved" : "Approve"}
+                    </Text>
+                  </Pressable>
+                </View>
+                <Text style={styles.pageTitle}>{page.title}</Text>
+                <Text style={styles.pageBody}>{page.caption}</Text>
+                {pagePhotos.length ? (
+                  <View style={styles.pagePhotoStrip}>
+                    {pagePhotos.map((photo) => (
+                      <View key={photo.id} style={styles.pagePhotoFrame}>
+                        {photo.imageUri ? (
+                          <Image
+                            source={{ uri: photo.imageUri }}
+                            style={styles.pagePhotoThumb}
+                          />
+                        ) : (
+                          <View style={styles.pagePhotoFallback}>
+                            <Text style={styles.pagePhotoFallbackText}>
+                              {photo.orientation}
+                            </Text>
+                          </View>
+                        )}
+                        <Text style={styles.pagePhotoCaption}>{photo.title}</Text>
+                      </View>
+                    ))}
+                  </View>
+                ) : null}
+                <Text style={styles.pageNote}>{page.layoutNote}</Text>
               </View>
-              <Text style={styles.pageTitle}>{page.title}</Text>
-              <Text style={styles.pageBody}>{page.caption}</Text>
-              <Text style={styles.pageNote}>{page.layoutNote}</Text>
-            </View>
-          ))}
+            );
+          })}
         </View>
       </SurfaceCard>
     </View>
@@ -2343,6 +2525,30 @@ const styles = StyleSheet.create({
     flexWrap: "wrap",
     gap: 10,
   },
+  galleryHeader: {
+    gap: 8,
+  },
+  galleryHeaderCopy: {
+    gap: 4,
+  },
+  galleryTitle: {
+    fontSize: 18,
+    lineHeight: 22,
+    color: palette.ink,
+    fontWeight: "700",
+  },
+  galleryBody: {
+    fontSize: 13,
+    lineHeight: 22,
+    color: palette.muted,
+  },
+  galleryCount: {
+    fontSize: 12,
+    textTransform: "uppercase",
+    letterSpacing: 1.5,
+    color: palette.forest,
+    fontWeight: "700",
+  },
   boardColumns: {
     flexDirection: "row",
     gap: 12,
@@ -2635,6 +2841,13 @@ const styles = StyleSheet.create({
     lineHeight: 24,
     color: "#5d524a",
   },
+  taskResolutionEditor: {
+    gap: 10,
+    borderTopWidth: 1,
+    borderTopColor: palette.line,
+    paddingTop: 12,
+    marginTop: 4,
+  },
   taskDue: {
     fontSize: 12,
     textTransform: "uppercase",
@@ -2715,6 +2928,40 @@ const styles = StyleSheet.create({
     fontSize: 14,
     lineHeight: 24,
     color: "#5d524a",
+  },
+  pagePhotoStrip: {
+    flexDirection: "row",
+    gap: 10,
+  },
+  pagePhotoFrame: {
+    flex: 1,
+    gap: 6,
+  },
+  pagePhotoThumb: {
+    width: "100%",
+    height: 148,
+    borderRadius: 18,
+    backgroundColor: "#e7ddd2",
+  },
+  pagePhotoFallback: {
+    height: 148,
+    borderRadius: 18,
+    backgroundColor: palette.accentSoft,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  pagePhotoFallbackText: {
+    fontSize: 11,
+    textTransform: "uppercase",
+    letterSpacing: 1.8,
+    color: palette.accent,
+    fontWeight: "700",
+  },
+  pagePhotoCaption: {
+    fontSize: 12,
+    lineHeight: 18,
+    color: palette.muted,
+    fontWeight: "600",
   },
   pageNote: {
     fontSize: 13,

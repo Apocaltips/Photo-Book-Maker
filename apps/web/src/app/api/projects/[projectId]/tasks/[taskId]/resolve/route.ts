@@ -1,4 +1,5 @@
 import {
+  resolveProjectTask,
   updateTaskStatus,
 } from "@photo-book-maker/core";
 import { NextResponse } from "next/server";
@@ -21,8 +22,12 @@ export async function POST(
   }
   const body = await request.json().catch(() => ({ status: "resolved" }));
   const status = body.status ?? "resolved";
+  const locationLabel =
+    typeof body.locationLabel === "string" ? body.locationLabel : undefined;
   const project = await updateProject(projectId, (current) =>
-    updateTaskStatus(current, taskId, status),
+    status === "resolved"
+      ? resolveProjectTask(current, taskId, { locationLabel })
+      : updateTaskStatus(current, taskId, status),
   );
 
   if (!project) {
