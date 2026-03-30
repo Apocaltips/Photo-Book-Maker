@@ -10,7 +10,6 @@
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
-    "@react-native-async-storage/async-storage": "2.2.0",
     "@supabase/supabase-js": "^2.101.0",
     "expo": "~54.0.33",
     "expo-image-picker": "~17.0.10",

@@ -1,7 +1,7 @@
 import "react-native-url-polyfill/auto";
-import AsyncStorage from "@react-native-async-storage/async-storage";
 import Constants from "expo-constants";
 import { createClient, type Session, type User } from "@supabase/supabase-js";
+import { localStorage } from "./local-storage";
 
 export type AuthIdentity = {
   email: string;
@@ -36,7 +36,7 @@ export const authClient = isSupabaseAuthConfigured
         autoRefreshToken: true,
         detectSessionInUrl: false,
         persistSession: true,
-        storage: AsyncStorage,
+        storage: localStorage,
       },
     })
   : null;

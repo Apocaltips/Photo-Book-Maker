@@ -1,4 +1,3 @@
-import AsyncStorage from "@react-native-async-storage/async-storage";
 import { StatusBar } from "expo-status-bar";
 import * as ImagePicker from "expo-image-picker";
 import * as Print from "expo-print";
@@ -57,6 +56,7 @@ import {
   type YearbookCycle,
 } from "./src/core";
 import { buildProofHtml } from "./src/proof";
+import { localStorage } from "./src/local-storage";
 import {
   authClient,
   getAuthIdentityFromUser,
@@ -255,7 +255,7 @@ export default function App() {
 
     async function hydrate() {
       try {
-        const raw = await AsyncStorage.getItem(STORAGE_KEY);
+        const raw = await localStorage.getItem(STORAGE_KEY);
         if (!raw) {
           return;
         }
@@ -308,7 +308,7 @@ export default function App() {
       return;
     }
 
-    void AsyncStorage.setItem(
+    void localStorage.setItem(
       STORAGE_KEY,
       JSON.stringify({
         activeTab,
