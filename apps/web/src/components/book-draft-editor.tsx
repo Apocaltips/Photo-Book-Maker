@@ -985,50 +985,61 @@ function EditorPhotoTile({
   treatment?: "default" | "hero" | "compact";
   onSelect: () => void;
 }) {
-  const cardPadding =
-    treatment === "compact" ? "p-3" : treatment === "hero" ? "p-5" : "p-4";
   const titleClass =
-    treatment === "compact" ? "text-sm" : treatment === "hero" ? "text-lg" : "text-base";
+    treatment === "compact" ? "text-[0.95rem]" : treatment === "hero" ? "text-lg" : "text-base";
+  const footerPadding =
+    treatment === "compact" ? "px-3 py-2.5" : treatment === "hero" ? "px-4 py-4" : "px-4 py-3";
+  const captionText = caption || photo.locationLabel || "Add a photo caption";
+  const showSecondaryCopy = treatment !== "compact";
 
   return (
     <button
       type="button"
       onClick={onSelect}
-      className={`group relative flex w-full overflow-hidden rounded-[1.8rem] border text-left transition-transform hover:-translate-y-0.5 ${className} ${selected ? "border-[#8f4f2e66] shadow-[0_0_0_3px_rgba(143,79,46,0.16)]" : "border-white/45"}`}
+      className={`group grid w-full overflow-hidden rounded-[1.8rem] border bg-[#fffdf9] text-left transition-transform hover:-translate-y-0.5 [grid-template-rows:minmax(0,1fr)_auto] ${className} ${selected ? "border-[#8f4f2e66] shadow-[0_0_0_3px_rgba(143,79,46,0.16)]" : "border-white/45"}`}
       style={{
         boxShadow: `inset 0 0 0 1px ${accent}22`,
       }}
     >
-      {photo.imageUri ? (
-        <>
-          <img
-            src={photo.imageUri}
-            alt={photo.title}
-            className="absolute inset-0 h-full w-full object-cover"
-          />
-          <div className="absolute inset-0 bg-[linear-gradient(180deg,rgba(20,13,10,0.1),rgba(20,13,10,0.38))]" />
-        </>
-      ) : (
-        <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(255,255,255,0.9),rgba(234,225,216,0.96))]" />
-      )}
-
-      <div className={`relative flex w-full flex-col justify-between ${cardPadding}`}>
-        <div className="text-[11px] uppercase tracking-[0.18em] text-[#f6eee8] drop-shadow-sm">
+      <div className="relative min-h-0 overflow-hidden bg-[#e9dfd3]">
+        {photo.imageUri ? (
+          <>
+            <img
+              src={photo.imageUri}
+              alt={photo.title}
+              className="absolute inset-0 h-full w-full object-cover transition-transform duration-300 group-hover:scale-[1.015]"
+            />
+            <div className="absolute inset-0 bg-[linear-gradient(180deg,rgba(24,17,12,0.08),rgba(24,17,12,0.2))]" />
+          </>
+        ) : (
+          <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(255,255,255,0.95),rgba(234,225,216,0.98))]" />
+        )}
+        <div className="absolute left-3 top-3 rounded-full border border-white/45 bg-[rgba(18,12,9,0.42)] px-2.5 py-1 text-[10px] uppercase tracking-[0.18em] text-[#f9f3ed] backdrop-blur-sm">
           {photo.orientation}
         </div>
-        <div className="rounded-[1.2rem] border border-white/45 bg-white/78 px-4 py-3 backdrop-blur-sm">
+        {selected ? (
+          <div className="absolute right-3 top-3 rounded-full border border-[#fff0e6] bg-[#fff7f1] px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.18em] text-[#8f4f2e]">
+            selected
+          </div>
+        ) : null}
+      </div>
+
+      <div className={`border-t border-[#0000000d] bg-[linear-gradient(180deg,rgba(255,251,247,0.98),rgba(246,238,231,0.98))] ${footerPadding}`}>
+        <div className="min-w-0">
           <div
             className={`${titleClass} font-semibold text-[#1f1814]`}
             style={{ fontFamily: fontPreset.headline }}
           >
             {photo.title}
           </div>
-          <div
-            className="mt-1 text-xs uppercase tracking-[0.16em] text-[#7a6d64]"
-            style={{ fontFamily: fontPreset.body }}
-          >
-            {caption || photo.locationLabel || "Add a photo caption"}
-          </div>
+          {showSecondaryCopy ? (
+            <div
+              className="mt-1.5 text-[11px] leading-5 text-[#6f635b]"
+              style={{ fontFamily: fontPreset.body }}
+            >
+              {captionText}
+            </div>
+          ) : null}
         </div>
       </div>
     </button>
