@@ -9,6 +9,7 @@ import type {
 import Link from "next/link";
 import type { CSSProperties, ReactNode } from "react";
 import { useEffect, useState } from "react";
+import { FONT_PRESETS, type FontPresetId } from "@/lib/font-presets";
 
 type DraftFormatId =
   | "8x8-square"
@@ -16,7 +17,6 @@ type DraftFormatId =
   | "12x12-square"
   | "11x8.5-landscape";
 type DraftStyleId = "editorial" | "minimal" | "romance" | "adventure";
-type FontPresetId = "gallery" | "modern" | "novel" | "journal";
 
 type EditorState = {
   fontPresetId: FontPresetId;
@@ -102,38 +102,6 @@ const STYLE_OPTIONS: Array<{
     shellClass:
       "bg-[linear-gradient(180deg,rgba(252,249,244,0.98),rgba(232,223,207,0.96))]",
     chipClass: "bg-[#e7dbc3] text-[#6b5432]",
-  },
-];
-
-const FONT_OPTIONS: Array<{
-  body: string;
-  headline: string;
-  id: FontPresetId;
-  label: string;
-}> = [
-  {
-    id: "gallery",
-    label: "Gallery serif",
-    headline: '"Cormorant Garamond", Georgia, serif',
-    body: '"Avenir Next", "Segoe UI", sans-serif',
-  },
-  {
-    id: "modern",
-    label: "Modern clean",
-    headline: '"Iowan Old Style", Georgia, serif',
-    body: '"Helvetica Neue", Arial, sans-serif',
-  },
-  {
-    id: "novel",
-    label: "Novel classic",
-    headline: '"Palatino Linotype", "Book Antiqua", serif',
-    body: '"Trebuchet MS", "Segoe UI", sans-serif',
-  },
-  {
-    id: "journal",
-    label: "Journal",
-    headline: '"Baskerville", "Times New Roman", serif',
-    body: '"Gill Sans", "Helvetica Neue", sans-serif',
   },
 ];
 
@@ -225,7 +193,7 @@ export function BookDraftEditor({ project }: { project: Project }) {
   const selectedStyle =
     STYLE_OPTIONS.find((style) => style.id === editorState.styleId) ?? STYLE_OPTIONS[0];
   const selectedFont =
-    FONT_OPTIONS.find((font) => font.id === editorState.fontPresetId) ?? FONT_OPTIONS[0];
+    FONT_PRESETS.find((font) => font.id === editorState.fontPresetId) ?? FONT_PRESETS[0];
   const selectedTheme =
     editorState.project.bookThemes.find(
       (theme) => theme.id === editorState.project.selectedThemeId,
@@ -462,7 +430,7 @@ export function BookDraftEditor({ project }: { project: Project }) {
         <section className="rounded-[2rem] border border-[#00000012] bg-white/92 p-5">
           <div className="eyebrow">Book controls</div>
           <div className="mt-4 space-y-4">
-            <OptionGroup
+            <SelectField
               label="Book size"
               helper="Switch the trim before saving a new draft."
               options={FORMAT_OPTIONS.map((option) => ({
@@ -475,7 +443,7 @@ export function BookDraftEditor({ project }: { project: Project }) {
                 setEditorState((current) => ({ ...current, formatId: formatId as DraftFormatId }))
               }
             />
-            <OptionGroup
+            <SelectField
               label="Book style"
               helper="Change the overall art direction."
               options={STYLE_OPTIONS.map((option) => ({
@@ -488,11 +456,11 @@ export function BookDraftEditor({ project }: { project: Project }) {
                 setEditorState((current) => ({ ...current, styleId: styleId as DraftStyleId }))
               }
             />
-            <OptionGroup
+            <SelectField
               label="Font direction"
               helper="Preview the same draft with a different voice."
-              options={FONT_OPTIONS.map((option) => ({
-                helper: option.label,
+              options={FONT_PRESETS.map((option) => ({
+                helper: option.description,
                 id: option.id,
                 label: option.label,
               }))}
@@ -751,69 +719,249 @@ function EditorSpreadCanvas({
         : "0 18px 48px rgba(31, 24, 20, 0.08)",
     maxWidth: formatId === "11x8.5-landscape" ? "52rem" : undefined,
   } satisfies CSSProperties;
-
-  const tiles = pagePhotos.map((photo) => (
+  const renderPhotoTile = (
+    photo: PhotoAsset,
+    className = "min-h-[16rem]",
+    treatment: "default" | "hero" | "compact" = "default",
+  ) => (
     <EditorPhotoTile
       key={photo.id}
       accent={accent}
-      photo={photo}
       caption={photoCaptions[photo.id]}
+      className={className}
       fontPreset={fontPreset}
+      photo={photo}
       selected={photo.id === selectedPhotoId}
+      treatment={treatment}
       onSelect={() => onSelectPhoto(photo.id)}
     />
-  ));
-  const emptyTile = (
-    <div className="flex min-h-[16rem] items-center justify-center rounded-[1.8rem] border border-dashed border-[#00000018] bg-white/56 px-6 text-center text-sm leading-7 text-[#6f625b]">
-      Move a photo onto this spread to keep building the draft.
-    </div>
   );
+  const renderEmptyTile = () => (
+    <EmptyPhotoSlot className="min-h-[16rem]">
+      Move a photo onto this spread to keep building the draft.
+    </EmptyPhotoSlot>
+  );
+  const renderCompactEmptyTile = () => (
+    <EmptyPhotoSlot className="min-h-[10rem]">
+      Extra photos will stack here.
+    </EmptyPhotoSlot>
+  );
+
+  const primaryPhoto = pagePhotos[0];
+  const supportPhotos = pagePhotos.slice(1);
+  const tertiaryPhotos = pagePhotos.slice(2);
+
+  const denseGrid = (
+    photos: PhotoAsset[],
+    {
+      columns = 2,
+      minHeight = "min-h-[10rem]",
+      treatment = "compact" as const,
+    } = {},
+    ) => {
+      if (!photos.length) {
+        return renderCompactEmptyTile();
+      }
+
+    const columnClass =
+      columns === 1
+        ? "grid-cols-1"
+        : columns === 2
+          ? "sm:grid-cols-2"
+          : "sm:grid-cols-2 lg:grid-cols-3";
+
+    return (
+      <div className={`grid gap-4 ${columnClass}`}>
+        {photos.map((photo) => renderPhotoTile(photo, minHeight, treatment))}
+      </div>
+    );
+  };
+
+  const contactSheet = (
+    photos: PhotoAsset[],
+    pattern: string[] = [
+      "min-h-[18rem] md:col-span-2 md:row-span-2",
+      "min-h-[10rem]",
+      "min-h-[10rem]",
+      "min-h-[11rem] md:col-span-2",
+      "min-h-[11rem]",
+      "min-h-[11rem]",
+    ],
+  ) => {
+    if (!photos.length) {
+      return (
+          <div className="grid auto-rows-[9rem] gap-4 md:grid-cols-3">
+            <EmptyPhotoSlot className="min-h-[18rem] md:col-span-3">
+              Add a few detail shots and the collage will rebalance automatically.
+          </EmptyPhotoSlot>
+        </div>
+      );
+    }
+
+    return (
+      <div className="grid auto-rows-[9rem] gap-4 md:grid-cols-3">
+        {photos.map((photo, index) =>
+          renderPhotoTile(
+            photo,
+            pattern[index % pattern.length] ?? "min-h-[11rem]",
+            index === 0 ? "hero" : "compact",
+          ),
+        )}
+      </div>
+    );
+  };
+
+  const preview = (() => {
+    switch (page.style) {
+      case "hero":
+        return (
+          <div className="space-y-4">
+            {primaryPhoto
+              ? renderPhotoTile(primaryPhoto, "min-h-[25rem] md:min-h-[30rem]", "hero")
+              : renderEmptyTile()}
+            {denseGrid(supportPhotos, {
+              columns: supportPhotos.length >= 3 ? 3 : 2,
+              minHeight: "min-h-[10rem]",
+            })}
+            {copyCard}
+          </div>
+        );
+      case "full_bleed":
+        return (
+          <div className="grid gap-4 lg:grid-cols-[1.18fr_0.82fr]">
+            <div>
+              {primaryPhoto
+                ? renderPhotoTile(primaryPhoto, "min-h-[28rem] md:min-h-[33rem]", "hero")
+                : renderEmptyTile()}
+            </div>
+            <div className="space-y-4">
+              {copyCard}
+              {denseGrid(supportPhotos, {
+                columns: supportPhotos.length >= 3 ? 3 : 2,
+                minHeight: "min-h-[9rem]",
+              })}
+            </div>
+          </div>
+        );
+      case "diptych":
+        return (
+          <div className="space-y-4">
+            <div className={`grid gap-4 ${pagePhotos.length > 1 ? "md:grid-cols-2" : ""}`}>
+              {primaryPhoto
+                ? renderPhotoTile(primaryPhoto, "min-h-[21rem] md:min-h-[24rem]", "hero")
+                : renderEmptyTile()}
+              {pagePhotos[1]
+                ? renderPhotoTile(pagePhotos[1], "min-h-[21rem] md:min-h-[24rem]", "hero")
+                : pagePhotos.length > 1
+                  ? renderCompactEmptyTile()
+                  : null}
+            </div>
+            {denseGrid(tertiaryPhotos, {
+              columns: tertiaryPhotos.length >= 3 ? 3 : 2,
+              minHeight: "min-h-[9.5rem]",
+            })}
+            {copyCard}
+          </div>
+        );
+      case "chapter":
+        return (
+          <div className="grid gap-4 lg:grid-cols-[0.86fr_1.14fr]">
+            <div className="space-y-4">
+              {copyCard}
+              {denseGrid(tertiaryPhotos, {
+                columns: tertiaryPhotos.length >= 3 ? 3 : 2,
+                minHeight: "min-h-[9rem]",
+              })}
+            </div>
+            <div className="space-y-4">
+              {primaryPhoto
+                ? renderPhotoTile(primaryPhoto, "min-h-[23rem] md:min-h-[27rem]", "hero")
+                : renderEmptyTile()}
+              {pagePhotos[1]
+                ? renderPhotoTile(pagePhotos[1], "min-h-[11rem]", "default")
+                : renderCompactEmptyTile()}
+            </div>
+          </div>
+        );
+      case "mosaic":
+        return (
+          <div className="space-y-4">
+            <div className="grid gap-4 lg:grid-cols-[1.16fr_0.84fr]">
+              <div>
+                {primaryPhoto
+                  ? renderPhotoTile(primaryPhoto, "min-h-[24rem] md:min-h-[30rem]", "hero")
+                  : renderEmptyTile()}
+              </div>
+              <div className="space-y-4">
+                {pagePhotos[1]
+                  ? renderPhotoTile(pagePhotos[1], "min-h-[13rem]", "default")
+                  : renderCompactEmptyTile()}
+                {denseGrid(pagePhotos.slice(2), {
+                  columns: 2,
+                  minHeight: "min-h-[9rem]",
+                })}
+              </div>
+            </div>
+            {copyCard}
+          </div>
+        );
+      case "collage":
+        return (
+          <div className="space-y-4">
+            {copyCard}
+            {contactSheet(pagePhotos)}
+          </div>
+        );
+      case "recap":
+        return (
+          <div className="space-y-4">
+            {copyCard}
+            {denseGrid(pagePhotos, {
+              columns: pagePhotos.length >= 5 ? 3 : 2,
+              minHeight: pagePhotos.length >= 5 ? "min-h-[8.5rem]" : "min-h-[11rem]",
+            })}
+          </div>
+        );
+      case "closing":
+        return (
+          <div className="space-y-4">
+            <div className="grid gap-4 lg:grid-cols-[1.02fr_0.98fr]">
+              <div className="space-y-4">
+                {primaryPhoto
+                  ? renderPhotoTile(primaryPhoto, "min-h-[22rem] md:min-h-[26rem]", "hero")
+                  : renderEmptyTile()}
+                {supportPhotos.length
+                  ? denseGrid(supportPhotos, { columns: 2 })
+                  : renderCompactEmptyTile()}
+              </div>
+              <div className="flex flex-col justify-end">{copyCard}</div>
+            </div>
+          </div>
+        );
+      case "balanced":
+      default:
+        return (
+          <div className="grid gap-4 lg:grid-cols-[1.05fr_0.95fr]">
+            <div>
+              {primaryPhoto
+                ? renderPhotoTile(primaryPhoto, "min-h-[23rem] md:min-h-[28rem]", "hero")
+                : renderEmptyTile()}
+            </div>
+            <div className="space-y-4">
+              {copyCard}
+              {denseGrid(supportPhotos, {
+                columns: supportPhotos.length >= 3 ? 3 : 2,
+                minHeight: supportPhotos.length >= 3 ? "min-h-[8.5rem]" : "min-h-[10rem]",
+              })}
+            </div>
+          </div>
+        );
+    }
+  })();
 
   return (
     <div className="mx-auto w-full space-y-4" style={canvasStyle}>
-      {page.style === "hero" || page.style === "full_bleed" ? (
-        <div className="space-y-4">
-          {tiles[0] ?? emptyTile}
-          {copyCard}
-        </div>
-      ) : page.style === "diptych" ? (
-        <div className="space-y-4">
-          <div className="grid gap-4 md:grid-cols-2">
-            {tiles[0] ?? emptyTile}
-            {tiles[1] ?? emptyTile}
-          </div>
-          {copyCard}
-        </div>
-      ) : page.style === "chapter" ? (
-        <div className="grid gap-4 lg:grid-cols-[0.95fr_1.05fr]">
-          {copyCard}
-          <div>{tiles[0] ?? emptyTile}</div>
-        </div>
-      ) : page.style === "mosaic" || page.style === "collage" ? (
-        <div className="grid gap-4 lg:grid-cols-[1.05fr_0.95fr]">
-          {copyCard}
-          <div className="grid gap-4 md:grid-cols-2">
-            <div className="md:col-span-2">{tiles[0] ?? emptyTile}</div>
-            {tiles.slice(1).length ? tiles.slice(1) : emptyTile}
-          </div>
-        </div>
-      ) : page.style === "recap" || page.style === "closing" ? (
-        <div className="space-y-4">
-          {copyCard}
-          <div className="grid gap-4 md:grid-cols-2">
-            {tiles[0] ?? emptyTile}
-            {tiles[1] ?? emptyTile}
-          </div>
-        </div>
-      ) : (
-        <div className="grid gap-4 lg:grid-cols-[1.05fr_0.95fr]">
-          <div>{tiles[0] ?? emptyTile}</div>
-          <div className="space-y-4">
-            {copyCard}
-            <div>{tiles[1] ?? emptyTile}</div>
-          </div>
-        </div>
-      )}
+      {preview}
     </div>
   );
 }
@@ -821,23 +969,32 @@ function EditorSpreadCanvas({
 function EditorPhotoTile({
   accent,
   caption,
+  className = "min-h-[16rem]",
   fontPreset,
   photo,
   selected,
+  treatment = "default",
   onSelect,
 }: {
   accent: string;
   caption?: string;
+  className?: string;
   fontPreset: { body: string; headline: string };
   photo: PhotoAsset;
   selected: boolean;
+  treatment?: "default" | "hero" | "compact";
   onSelect: () => void;
 }) {
+  const cardPadding =
+    treatment === "compact" ? "p-3" : treatment === "hero" ? "p-5" : "p-4";
+  const titleClass =
+    treatment === "compact" ? "text-sm" : treatment === "hero" ? "text-lg" : "text-base";
+
   return (
     <button
       type="button"
       onClick={onSelect}
-      className={`group relative flex min-h-[16rem] w-full overflow-hidden rounded-[1.8rem] border text-left transition-transform hover:-translate-y-0.5 ${selected ? "border-[#8f4f2e66] shadow-[0_0_0_3px_rgba(143,79,46,0.16)]" : "border-white/45"}`}
+      className={`group relative flex w-full overflow-hidden rounded-[1.8rem] border text-left transition-transform hover:-translate-y-0.5 ${className} ${selected ? "border-[#8f4f2e66] shadow-[0_0_0_3px_rgba(143,79,46,0.16)]" : "border-white/45"}`}
       style={{
         boxShadow: `inset 0 0 0 1px ${accent}22`,
       }}
@@ -855,13 +1012,13 @@ function EditorPhotoTile({
         <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(255,255,255,0.9),rgba(234,225,216,0.96))]" />
       )}
 
-      <div className="relative flex w-full flex-col justify-between p-4">
+      <div className={`relative flex w-full flex-col justify-between ${cardPadding}`}>
         <div className="text-[11px] uppercase tracking-[0.18em] text-[#f6eee8] drop-shadow-sm">
           {photo.orientation}
         </div>
         <div className="rounded-[1.2rem] border border-white/45 bg-white/78 px-4 py-3 backdrop-blur-sm">
           <div
-            className="text-base font-semibold text-[#1f1814]"
+            className={`${titleClass} font-semibold text-[#1f1814]`}
             style={{ fontFamily: fontPreset.headline }}
           >
             {photo.title}
@@ -878,7 +1035,23 @@ function EditorPhotoTile({
   );
 }
 
-function OptionGroup({
+function EmptyPhotoSlot({
+  children,
+  className,
+}: {
+  children: ReactNode;
+  className: string;
+}) {
+  return (
+    <div
+      className={`flex items-center justify-center rounded-[1.8rem] border border-dashed border-[#00000018] bg-white/56 px-6 text-center text-sm leading-7 text-[#6f625b] ${className}`}
+    >
+      {children}
+    </div>
+  );
+}
+
+function SelectField({
   helper,
   label,
   onSelect,
@@ -891,24 +1064,35 @@ function OptionGroup({
   options: Array<{ helper: string; id: string; label: string }>;
   selectedId: string;
 }) {
+  const selectedOption =
+    options.find((option) => option.id === selectedId) ?? options[0];
+
   return (
     <div className="space-y-3">
       <div>
         <div className="text-xs uppercase tracking-[0.18em] text-[#7a6e65]">{label}</div>
         <div className="mt-1 text-sm leading-6 text-[#6a5f58]">{helper}</div>
       </div>
-      <div className="grid gap-2">
-        {options.map((option) => (
-          <button
-            key={option.id}
-            type="button"
-            onClick={() => onSelect(option.id)}
-            className={`rounded-[1.2rem] border px-4 py-3 text-left transition-colors ${selectedId === option.id ? "border-[#8f4f2e44] bg-[#fff1e6]" : "border-[#00000010] bg-[#fffaf5] hover:bg-white"}`}
+      <div className="space-y-2">
+        <div className="relative">
+          <select
+            value={selectedId}
+            onChange={(event) => onSelect(event.target.value)}
+            className="w-full appearance-none rounded-[1.2rem] border border-[#00000012] bg-[#fffaf5] px-4 py-3 pr-12 text-sm font-medium text-[#1f1814] outline-none transition-colors focus:border-[#8f4f2e44]"
           >
-            <div className="font-medium text-[#1f1814]">{option.label}</div>
-            <div className="mt-1 text-sm text-[#6a5f58]">{option.helper}</div>
-          </button>
-        ))}
+            {options.map((option) => (
+              <option key={option.id} value={option.id}>
+                {option.label}
+              </option>
+            ))}
+          </select>
+          <span className="pointer-events-none absolute inset-y-0 right-4 flex items-center text-[#7a6e65]">
+            ▾
+          </span>
+        </div>
+        <div className="rounded-[1rem] border border-[#0000000d] bg-[#fff9f4] px-4 py-3 text-sm text-[#6a5f58]">
+          {selectedOption?.helper}
+        </div>
       </div>
     </div>
   );
