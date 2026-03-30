@@ -1,0 +1,13 @@
+node_modules
+.next
+.expo
+dist
+*.tsbuildinfo
+npm-debug.log*
+.DS_Store
+.env
+.env.local
+.env.*.local
+.eas-inspect
+.vercel
+.codex-logs

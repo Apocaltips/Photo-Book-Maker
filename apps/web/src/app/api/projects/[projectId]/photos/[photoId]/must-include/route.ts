@@ -1,0 +1,24 @@
+import { toggleMustIncludePhoto } from "@photo-book-maker/core";
+import { NextResponse } from "next/server";
+import { updateProject } from "@/lib/server/project-store";
+import { hydrateProjectForClient } from "@/lib/server/project-response";
+
+export async function POST(
+  _request: Request,
+  {
+    params,
+  }: {
+    params: Promise<{ projectId: string; photoId: string }>;
+  },
+) {
+  const { projectId, photoId } = await params;
+  const project = await updateProject(projectId, (current) =>
+    toggleMustIncludePhoto(current, photoId),
+  );
+
+  if (!project) {
+    return NextResponse.json({ message: "Project not found." }, { status: 404 });
+  }
+
+  return NextResponse.json({ project: await hydrateProjectForClient(project) });
+}

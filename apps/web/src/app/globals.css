@@ -1,0 +1,76 @@
+@import "tailwindcss";
+
+:root {
+  --background: #f5eee4;
+  --foreground: #231c17;
+  --panel: rgba(255, 251, 246, 0.78);
+  --panel-strong: rgba(255, 251, 246, 0.94);
+  --line: rgba(35, 28, 23, 0.12);
+  --muted: #74675f;
+  --accent: #bf6a3d;
+  --accent-deep: #7d472c;
+  --forest: #27493c;
+  --shadow: 0 20px 80px rgba(79, 53, 35, 0.14);
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --font-sans: "Avenir Next", "Segoe UI", sans-serif;
+  --font-serif: "Iowan Old Style", "Palatino Linotype", "Book Antiqua", serif;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html {
+  background:
+    radial-gradient(circle at top left, rgba(255, 214, 186, 0.48), transparent 24rem),
+    radial-gradient(circle at 80% 0%, rgba(97, 132, 112, 0.16), transparent 20rem),
+    linear-gradient(180deg, #fcf5ee 0%, #f5eee4 44%, #efe5d8 100%);
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family: "Avenir Next", "Segoe UI", sans-serif;
+  min-height: 100vh;
+}
+
+a {
+  color: inherit;
+}
+
+::selection {
+  background: rgba(191, 106, 61, 0.18);
+}
+
+.surface {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  box-shadow: var(--shadow);
+  backdrop-filter: blur(20px);
+}
+
+.surface-strong {
+  background: var(--panel-strong);
+  border: 1px solid var(--line);
+  box-shadow: var(--shadow);
+  backdrop-filter: blur(20px);
+}
+
+.eyebrow {
+  letter-spacing: 0.24em;
+  text-transform: uppercase;
+  color: var(--muted);
+  font-size: 0.72rem;
+}
+
+.display {
+  font-family: "Iowan Old Style", "Palatino Linotype", "Book Antiqua", serif;
+}
+
+.muted {
+  color: var(--muted);
+}

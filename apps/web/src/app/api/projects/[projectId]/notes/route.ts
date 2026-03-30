@@ -1,0 +1,21 @@
+import { addNoteToProject } from "@photo-book-maker/core";
+import { NextResponse } from "next/server";
+import { updateProject } from "@/lib/server/project-store";
+import { hydrateProjectForClient } from "@/lib/server/project-response";
+
+export async function POST(
+  request: Request,
+  { params }: { params: Promise<{ projectId: string }> },
+) {
+  const { projectId } = await params;
+  const body = await request.json();
+  const project = await updateProject(projectId, (current) =>
+    addNoteToProject(current, body),
+  );
+
+  if (!project) {
+    return NextResponse.json({ message: "Project not found." }, { status: 404 });
+  }
+
+  return NextResponse.json({ project: await hydrateProjectForClient(project) });
+}

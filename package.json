@@ -1,0 +1,15 @@
+{
+  "name": "photo-book-maker",
+  "private": true,
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "dev:web": "npm run dev -w @photo-book-maker/web",
+    "dev:mobile": "npm run start -w @photo-book-maker/mobile",
+    "build": "npm run build -w @photo-book-maker/web",
+    "lint": "npm run lint -w @photo-book-maker/web",
+    "typecheck": "npm run typecheck -w @photo-book-maker/core && npm run typecheck -w @photo-book-maker/web && npm run typecheck -w @photo-book-maker/mobile"
+  }
+}
