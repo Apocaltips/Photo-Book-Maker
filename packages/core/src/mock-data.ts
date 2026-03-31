@@ -56,6 +56,10 @@ function commonsImage(fileName: string) {
   return `https://commons.wikimedia.org/wiki/Special:FilePath/${encodeURIComponent(fileName)}?width=1600`;
 }
 
+function seededImage(seed: string, width = 1600, height = 1200) {
+  return `https://picsum.photos/seed/${encodeURIComponent(seed)}/${width}/${height}`;
+}
+
 function cloneThemes() {
   return editorialThemes.map((theme) => ({ ...theme }));
 }
@@ -233,6 +237,102 @@ export function createSeedProjects(): Project[] {
         qualityNotes: ["Ready for balanced spread."],
         dimensions: [2400, 1600],
       }),
+      photo({
+        id: "photo-6",
+        title: "Camp coffee at Madison",
+        uploaderId: "emma",
+        imageUri: seededImage("yellowstone-camp-coffee"),
+        capturedAt: "2026-05-15T13:18:00.000Z",
+        locationLabel: "Madison Campground",
+        locationConfidence: "exact",
+        orientation: "landscape",
+        mustInclude: false,
+        approved: true,
+        peopleIds: ["emma"],
+        faceClusterIds: ["cluster-2"],
+        qualityNotes: ["Perfect support frame for a quieter details spread."],
+        dimensions: [1600, 1200],
+      }),
+      photo({
+        id: "photo-7",
+        title: "Boardwalk texture study",
+        uploaderId: "vince",
+        imageUri: seededImage("yellowstone-boardwalk-texture", 1400, 1400),
+        capturedAt: "2026-05-15T15:02:00.000Z",
+        locationLabel: "Upper Geyser Basin",
+        locationConfidence: "inferred",
+        orientation: "square",
+        mustInclude: false,
+        approved: true,
+        peopleIds: [],
+        faceClusterIds: [],
+        qualityNotes: ["Small detail that works better in a grid than as a hero image."],
+        dimensions: [1400, 1400],
+      }),
+      photo({
+        id: "photo-8",
+        title: "Mammoth terrace detail",
+        uploaderId: "emma",
+        imageUri: seededImage("yellowstone-terrace-detail", 1500, 2000),
+        capturedAt: "2026-05-16T09:24:00.000Z",
+        locationLabel: "Mammoth Hot Springs",
+        locationConfidence: "exact",
+        orientation: "portrait",
+        mustInclude: false,
+        approved: true,
+        peopleIds: ["emma"],
+        faceClusterIds: ["cluster-2"],
+        qualityNotes: ["A good texture-led portrait to break up the wide landscapes."],
+        dimensions: [1500, 2000],
+      }),
+      photo({
+        id: "photo-9",
+        title: "Yellowstone Lake morning",
+        uploaderId: "vince",
+        imageUri: seededImage("yellowstone-lake-morning", 2200, 1500),
+        capturedAt: "2026-05-16T11:12:00.000Z",
+        locationLabel: "Yellowstone Lake",
+        locationConfidence: "exact",
+        orientation: "landscape",
+        mustInclude: true,
+        approved: true,
+        peopleIds: ["vince"],
+        faceClusterIds: ["cluster-1"],
+        qualityNotes: ["This should have enough room to function as a hero landscape."],
+        dimensions: [2200, 1500],
+      }),
+      photo({
+        id: "photo-10",
+        title: "Trail marker and lodgepoles",
+        uploaderId: "vince",
+        imageUri: seededImage("yellowstone-trail-marker", 1500, 2100),
+        capturedAt: "2026-05-16T14:46:00.000Z",
+        locationLabel: "West Thumb",
+        locationConfidence: "inferred",
+        orientation: "portrait",
+        mustInclude: false,
+        approved: true,
+        peopleIds: [],
+        faceClusterIds: [],
+        qualityNotes: ["Useful as a place-setting image between bigger scenic pages."],
+        dimensions: [1500, 2100],
+      }),
+      photo({
+        id: "photo-11",
+        title: "Campfire after dark",
+        uploaderId: "emma",
+        imageUri: seededImage("yellowstone-campfire-dark", 1800, 1200),
+        capturedAt: "2026-05-16T22:04:00.000Z",
+        locationLabel: "Madison Campground",
+        locationConfidence: "exact",
+        orientation: "landscape",
+        mustInclude: false,
+        approved: true,
+        peopleIds: ["vince", "emma"],
+        faceClusterIds: ["cluster-1", "cluster-2"],
+        qualityNotes: ["Pairs well with handwritten-note or journal-led closers."],
+        dimensions: [1800, 1200],
+      }),
     ],
     faceClusters: [
       {
@@ -285,7 +385,7 @@ export function createSeedProjects(): Project[] {
       status: "reviewing",
       themeId: "golden-hour",
       summary:
-        "A warm, steam-heavy travel edit with slow openers, one full-bleed landscape spread, and a final recap page anchored by your campfire notes.",
+        "A warm, steam-heavy travel edit with quiet detail pages, a lake hero spread, and a softer campfire close that feels more curated than chronological.",
       pages: [
         {
           id: "page-1",
@@ -304,7 +404,7 @@ export function createSeedProjects(): Project[] {
         },
         {
           id: "page-2",
-          style: "diptych",
+          style: "balanced_two_up",
           storyBeat: "details",
           title: "Night one at Madison",
           caption:
@@ -319,6 +419,51 @@ export function createSeedProjects(): Project[] {
         },
         {
           id: "page-3",
+          style: "four_up_grid",
+          storyBeat: "details",
+          title: "The little details kept the trip from feeling generic.",
+          caption:
+            "Coffee steam, wooden walkways, trail markers, and mineral textures belong together on one collected spread instead of getting lost between hero pages.",
+          copyStatus: "prefilled",
+          copySource: "hybrid",
+          photoIds: ["photo-6", "photo-7", "photo-8", "photo-10"],
+          layoutNote: "Keep these smaller and structured so the page feels edited rather than busy.",
+          curationNote:
+            "A denser grid gives the in-between material its own rhythm instead of making it compete with the scenic highlights.",
+          approved: false,
+        },
+        {
+          id: "page-4",
+          style: "hero_full_bleed",
+          storyBeat: "highlight",
+          title: "The lake morning deserved a full spread.",
+          caption:
+            "This is the point in the sequence where the book should exhale and let one image carry the whole pace for a minute.",
+          copyStatus: "confirmed",
+          copySource: "hybrid",
+          photoIds: ["photo-9"],
+          layoutNote: "Treat this like a cinematic midpoint reset with very restrained copy.",
+          curationNote:
+            "One quiet, wide landscape in the middle keeps the book from feeling like every page is trying to prove something.",
+          approved: true,
+        },
+        {
+          id: "page-5",
+          style: "memorabilia_spread",
+          storyBeat: "reflection",
+          title: "The campground deserved its own memory page.",
+          caption:
+            "Between coffee, smoke, and the last light on the picnic table, the trip started feeling like a place instead of just a list of stops.",
+          copyStatus: "prefilled",
+          copySource: "note",
+          photoIds: ["photo-6", "photo-11", "photo-7"],
+          layoutNote: "Use this spread to hold object-level details and warmer, more tactile copy.",
+          curationNote:
+            "This is where the book stops being scenic and starts feeling personal.",
+          approved: false,
+        },
+        {
+          id: "page-6",
           style: "closing",
           storyBeat: "closing",
           title: "By morning, Yellowstone had its own traffic.",

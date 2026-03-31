@@ -33,6 +33,7 @@ import {
   type StoryChapter,
 } from "@/lib/book-editor";
 import { FONT_PRESETS, type FontPresetId } from "@/lib/font-presets";
+import { getBookThemePresentation } from "@/lib/book-theme-styles";
 
 type EditorState = BookDraftEditorState & {
   project: Project;
@@ -277,6 +278,11 @@ export function BookDraftEditor({
       (theme) => theme.id === editorState.project.selectedThemeId,
     ) ?? editorState.project.bookThemes[0];
   const publishedDrafts = editorState.project.publishedDrafts ?? [];
+  const selectedPageIndex = Math.max(
+    0,
+    editorState.project.bookDraft.pages.findIndex((page) => page.id === selectedPage?.id),
+  );
+  const pageCount = editorState.project.bookDraft.pages.length;
 
   const storyModeOptions = getStoryModeOptions(editorState.project);
   const captionToneOptions = getCaptionToneOptions();
@@ -284,16 +290,6 @@ export function BookDraftEditor({
     () => deriveStoryChapters(editorState.project, editorState.storyMode),
     [editorState.project, editorState.storyMode],
   );
-  const chapterStarts = useMemo(() => {
-    const entries = new Map<string, StoryChapter>();
-    for (const chapter of chapters) {
-      const firstPageId = chapter.pageIds[0];
-      if (firstPageId) {
-        entries.set(firstPageId, chapter);
-      }
-    }
-    return entries;
-  }, [chapters]);
   const selectedChapter = chapters.find((chapter) =>
     chapter.pageIds.includes(selectedPage?.id ?? ""),
   );
@@ -303,6 +299,10 @@ export function BookDraftEditor({
   const selectedWarnings = selectedPage
     ? getPageWarnings(selectedPage, selectedPagePhotos, editorState.formatId)
     : [];
+  const themePresentation = getBookThemePresentation(
+    selectedTheme,
+    editorState.styleMode,
+  );
 
   function updateEditorState(updater: (current: EditorState) => EditorState) {
     setEditorState((current) => updater(current));
@@ -488,36 +488,47 @@ export function BookDraftEditor({
   }
 
   return (
-    <div className="grid gap-6 xl:grid-cols-[minmax(0,1.35fr)_24rem]">
-      <div className="space-y-6">
-        <section className="surface-strong rounded-[2.35rem] px-6 py-6 md:px-8">
+    <div className="grid gap-6 xl:grid-cols-[minmax(0,1.16fr)_24rem]">
+      <div className="space-y-5">
+        <section
+          className="rounded-[2.35rem] px-6 py-6 md:px-8"
+          style={themePresentation.appStyle}
+        >
           <div className="flex flex-col gap-5 md:flex-row md:items-end md:justify-between">
             <div className="max-w-3xl">
               <div className="eyebrow">Book art direction</div>
-              <h2 className="display mt-2 text-4xl text-[#1f1814] sm:text-5xl">
-                Build the story first, then lock the spreads.
+              <h2
+                className="display mt-2 text-4xl sm:text-5xl"
+                style={{ color: themePresentation.textColor }}
+              >
+                Flip through one spread at a time.
               </h2>
-              <p className="mt-3 text-sm leading-7 text-[#5d524b]">
-                This workspace follows a constrained premium-book system: chapters
-                first, hero image choices second, approved spread types third, then
-                print-safe checks and caption polish.
+              <p className="mt-3 text-sm leading-7" style={{ color: themePresentation.textMuted }}>
+                This editor keeps the whole workspace anchored around the active spread:
+                theme, book settings, copy, photo movement, and publish controls stay
+                in one place while you page through the book.
               </p>
             </div>
 
             <div className="flex flex-wrap gap-3">
               <Link
                 href={`/projects/${project.id}`}
-                className="rounded-full border border-[#1f18141f] bg-white/72 px-4 py-2 text-sm font-medium text-[#1f1814] transition-colors hover:bg-white"
+                className="rounded-full px-4 py-2 text-sm font-medium transition-colors hover:bg-white"
+                style={themePresentation.secondaryButtonStyle}
               >
                 Back to proof board
               </Link>
               <Link
                 href={previewHref?.() ?? `/projects/${project.id}/preview`}
-                className="rounded-full border border-[#1f18141f] bg-[#1f1814] px-4 py-2 text-sm font-medium text-[#f8efe7] transition-colors hover:bg-[#302721]"
+                className="rounded-full px-4 py-2 text-sm font-medium transition-colors"
+                style={themePresentation.primaryButtonStyle}
               >
                 Open clean preview
               </Link>
-              <span className="rounded-full border border-[#00000010] bg-white/75 px-4 py-2 text-sm font-medium text-[#685d55]">
+              <span
+                className="rounded-full px-4 py-2 text-sm font-medium"
+                style={themePresentation.secondaryButtonStyle}
+              >
                 {workspaceMode === "authenticated"
                   ? isSaving
                     ? "Saving..."
@@ -539,240 +550,172 @@ export function BookDraftEditor({
             />
             <EditorStat
               label="Spread library"
-              value={`${APPROVED_SPREAD_LIBRARY.length} approved`}
+              value={`${selectedPageIndex + 1}/${pageCount || 1} active`}
             />
           </div>
         </section>
 
-        <section className="rounded-[2.2rem] border border-[#00000012] bg-white/88 px-5 py-5 shadow-[0_18px_48px_rgba(40,28,18,0.06)] md:px-6">
-          <div className="flex flex-wrap items-end justify-between gap-4">
-            <div className="max-w-3xl">
-              <div className="eyebrow">Story architecture</div>
-              <h3 className="display mt-2 text-3xl text-[#1f1814]">
-                Chapters, dividers, and pacing.
-              </h3>
-              <p className="mt-3 text-sm leading-7 text-[#5d524b]">
-                Every chapter should read as opener, hero, support, detail, then
-                closer. The chapter plan below keeps the book from collapsing into a
-                flat camera-roll collage.
-              </p>
+        {selectedPage ? (
+          <section
+            className="grid gap-5 overflow-hidden rounded-[2.35rem] p-4 lg:grid-cols-[15rem_minmax(0,1fr)] lg:p-5 xl:min-h-[calc(100vh-12rem)]"
+            style={themePresentation.chromeStyle}
+          >
+            <div className="space-y-4">
+              <div className="rounded-[1.7rem] p-4" style={themePresentation.mutedPanelStyle}>
+                <div className="text-xs uppercase tracking-[0.18em]" style={{ color: themePresentation.textMuted }}>
+                  Story map
+                </div>
+                <div className="mt-4 space-y-3">
+                  {chapters.map((chapter, index) => (
+                    <button
+                      key={chapter.id}
+                      type="button"
+                      onClick={() => {
+                        const firstPageId = chapter.pageIds[0];
+                        if (firstPageId) {
+                          setSelectedPageId(firstPageId);
+                        }
+                      }}
+                      className="w-full rounded-[1.2rem] border px-4 py-3 text-left transition-colors"
+                      style={
+                        chapter.pageIds.includes(selectedPage.id)
+                          ? themePresentation.pagerActiveStyle
+                          : themePresentation.secondaryButtonStyle
+                      }
+                    >
+                      <div className="text-[11px] uppercase tracking-[0.18em] opacity-70">
+                        Chapter {index + 1}
+                      </div>
+                      <div className="mt-1 font-semibold">{chapter.title}</div>
+                      <div className="mt-1 text-xs leading-5 opacity-75">
+                        {chapter.pageIds.length} spreads
+                      </div>
+                    </button>
+                  ))}
+                </div>
+                <div className="mt-4 rounded-[1.2rem] border border-black/5 bg-white/66 px-4 py-4 text-sm leading-7" style={{ color: themePresentation.textMuted }}>
+                  {selectedTheme.name} is active, and every theme shift now updates the page chrome, controls, and book canvas instead of just a small accent chip.
+                </div>
+              </div>
+
+              {selectedWarnings.length ? (
+                <div className="rounded-[1.7rem] border border-[#f0d1bf] bg-[#fff7f1] p-4">
+                  <div className="text-xs uppercase tracking-[0.18em] text-[#a55d35]">
+                    Print warnings
+                  </div>
+                  <div className="mt-3 space-y-2">
+                    {selectedWarnings.map((warning) => (
+                      <div
+                        key={warning}
+                        className="rounded-[1rem] border border-[#f2ddd0] bg-white/86 px-3 py-3 text-sm text-[#6e5342]"
+                      >
+                        {warning}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ) : null}
             </div>
 
-            <div className="rounded-[1.4rem] border border-[#00000010] bg-[#faf4ee] px-4 py-3 text-sm leading-7 text-[#6a5f58]">
-              {editorState.showChapterDividers
-                ? "Chapter dividers are active in the editorial plan."
-                : "Chapter dividers are off. Turn them on to break the rhythm into cleaner acts."}
-            </div>
-          </div>
-
-          <div className="mt-5 grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-            {chapters.map((chapter, index) => (
-              <StoryChapterCard
-                key={chapter.id}
-                chapter={chapter}
-                index={index}
-                selected={chapter.pageIds.includes(selectedPage?.id ?? "")}
-              />
-            ))}
-          </div>
-        </section>
-
-        {editorState.project.bookDraft.pages.map((page, index) => {
-          const pagePhotos = getPagePhotos(editorState.project, page);
-          const isSelectedPage = page.id === selectedPage?.id;
-          const chapter = chapters.find((entry) => entry.pageIds.includes(page.id));
-          const pageWarnings = getPageWarnings(page, pagePhotos, editorState.formatId);
-          const chapterStart = chapterStarts.get(page.id);
-
-          return (
-            <div key={page.id} className="space-y-4">
-              {editorState.showChapterDividers && chapterStart ? (
+            <div className="min-h-0 space-y-4">
+              {editorState.showChapterDividers && selectedChapter ? (
                 <ChapterDividerPreview
-                  chapter={chapterStart}
+                  chapter={selectedChapter}
                   fontPreset={selectedFont}
                   styleMode={editorState.styleMode}
                 />
               ) : null}
 
-              <article
-                className={`rounded-[2.2rem] border p-5 shadow-[0_18px_48px_rgba(40,28,18,0.08)] transition-colors md:p-6 ${isSelectedPage ? "border-[#8f4f2e33] bg-[#fffaf5]" : "border-[#00000012] bg-white/88"}`}
+              <div
+                className="rounded-[2rem] p-4 md:p-5"
+                style={themePresentation.canvasFrameStyle}
               >
-                <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[#00000010] pb-4">
+                <div className="mb-4 flex flex-wrap items-center justify-between gap-3 border-b border-black/5 pb-4">
                   <div>
-                    <div className="text-xs uppercase tracking-[0.18em] text-[#7a6d64]">
-                      {chapter ? `${chapter.title} / ` : ""}Spread {index + 1}
+                    <div className="text-xs uppercase tracking-[0.18em]" style={{ color: themePresentation.textMuted }}>
+                      {selectedChapter ? `${selectedChapter.title} / ` : ""}Spread {selectedPageIndex + 1} of {pageCount}
                     </div>
-                    <button
-                      type="button"
-                      onClick={() => setSelectedPageId(page.id)}
-                      className="mt-2 text-left text-2xl font-semibold text-[#1f1814]"
-                      style={{ fontFamily: selectedFont.headline }}
+                    <div
+                      className="mt-2 text-2xl font-semibold"
+                      style={{ color: themePresentation.textColor, fontFamily: selectedFont.headline }}
                     >
-                      {page.title}
-                    </button>
+                      {selectedPage.title}
+                    </div>
                   </div>
 
                   <div className="flex flex-wrap items-center gap-2">
                     <EditorTag className={selectedStyle.chipClass}>
-                      {getSpreadLabel(page.style)}
+                      {getSpreadLabel(selectedPage.style)}
                     </EditorTag>
                     <EditorTag className="bg-[#f2ebe4] text-[#6f625b]">
-                      {page.storyBeat.replaceAll("_", " ")}
+                      {selectedPage.storyBeat.replaceAll("_", " ")}
                     </EditorTag>
                     <EditorTag
                       className={
-                        page.copyStatus === "confirmed"
+                        selectedPage.copyStatus === "confirmed"
                           ? "bg-[#dfeee7] text-[#2d624b]"
                           : "bg-[#f5e9dc] text-[#8f5a33]"
                       }
                     >
-                      {page.copyStatus === "confirmed" ? "copy confirmed" : "needs review"}
+                      {selectedPage.copyStatus === "confirmed" ? "copy confirmed" : "needs review"}
                     </EditorTag>
-                    {editorState.lockedPageIds.includes(page.id) ? (
-                      <EditorTag className="bg-[#efe4fb] text-[#6e4aa1]">
-                        page locked
-                      </EditorTag>
-                    ) : null}
                   </div>
                 </div>
 
-                <div className="mt-5 grid gap-6 xl:grid-cols-[minmax(0,1.08fr)_21rem]">
-                  <div
-                    className={`mx-auto w-full overflow-hidden rounded-[2rem] border border-[#00000010] p-4 md:p-5 ${selectedStyle.shellClass}`}
-                    style={{ maxWidth: selectedFormat.maxWidth }}
-                  >
-                    <EditorSpreadCanvas
-                      accent={selectedTheme.accent}
-                      controls={{
-                        captionTone: editorState.captionTone,
-                        density: editorState.density,
-                        printPreviewMode: editorState.printPreviewMode,
-                        showDates: editorState.showDates,
-                        showHandwrittenNotes: editorState.showHandwrittenNotes,
-                        showLocations: editorState.showLocations,
-                        showMaps: editorState.showMaps,
-                        showMemorabilia: editorState.showMemorabilia,
-                      }}
-                      fontPreset={selectedFont}
-                      formatId={selectedFormat.id}
-                      page={page}
-                      pageIndex={index}
-                      pagePhotos={pagePhotos}
-                      photoCaptions={editorState.photoCaptions}
-                      project={editorState.project}
-                      selectedPhotoId={selectedPhotoId}
-                      styleMode={editorState.styleMode}
-                      onSelectPhoto={(photoId) => {
-                        setSelectedPageId(page.id);
-                        setSelectedPhotoId(photoId);
-                      }}
-                    />
-                  </div>
-
-                  <div className="space-y-4">
-                    <div className="rounded-[1.6rem] border border-[#00000010] bg-[#fbf6f1] p-4">
-                      <div className="text-xs uppercase tracking-[0.18em] text-[#8b5a40]">
-                        Spread intent
-                      </div>
-                      <h3
-                        className="mt-3 text-3xl leading-none text-[#1f1814]"
-                        style={{ fontFamily: selectedFont.headline }}
-                      >
-                        {page.title}
-                      </h3>
-                      <p
-                        className="mt-4 text-sm leading-7 text-[#5d524b]"
-                        style={{ fontFamily: selectedFont.body }}
-                      >
-                        {buildDisplayCaption(
-                          page,
-                          pagePhotos,
-                          editorState.project,
-                          editorState.captionTone,
-                        )}
-                      </p>
-                      <div className="mt-4 rounded-[1.2rem] border border-[#0000000d] bg-white/78 px-4 py-4 text-sm leading-7 text-[#615650]">
-                        {page.curationNote}
-                      </div>
-
-                      {getLayoutAlternatives(editorState.project, page, pagePhotos).length > 1 ? (
-                        <div className="mt-4 flex flex-wrap gap-2">
-                          {getLayoutAlternatives(editorState.project, page, pagePhotos).map(
-                            (alternative) => (
-                              <button
-                                key={alternative}
-                                type="button"
-                                onClick={() =>
-                                  updatePage(page.id, (currentPage) => ({
-                                    ...currentPage,
-                                    style: alternative as PageLayoutStyle,
-                                  }))
-                                }
-                                className={`rounded-full border px-3 py-1.5 text-xs font-semibold uppercase tracking-[0.15em] transition-colors ${normalizeSpreadType(page.style) === alternative ? "border-[#8f4f2e44] bg-[#fff0e4] text-[#8f4f2e]" : "border-[#00000012] bg-white/75 text-[#665b54] hover:bg-white"}`}
-                              >
-                                {getSpreadLabel(alternative)}
-                              </button>
-                            ),
-                          )}
-                        </div>
-                      ) : null}
-                    </div>
-
-                    {pageWarnings.length ? (
-                      <div className="rounded-[1.6rem] border border-[#f0d1bf] bg-[#fff7f1] p-4">
-                        <div className="text-xs uppercase tracking-[0.18em] text-[#a55d35]">
-                          Print warnings
-                        </div>
-                        <div className="mt-3 space-y-2">
-                          {pageWarnings.map((warning) => (
-                            <div
-                              key={warning}
-                              className="rounded-[1rem] border border-[#f2ddd0] bg-white/86 px-3 py-3 text-sm text-[#6e5342]"
-                            >
-                              {warning}
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                    ) : null}
-
-                    <div className="rounded-[1.6rem] border border-[#00000010] bg-white/82 p-4">
-                      <div className="text-xs uppercase tracking-[0.18em] text-[#7a6e65]">
-                        Photos on this spread
-                      </div>
-                      <div className="mt-3 grid gap-3">
-                        {pagePhotos.map((photo) => (
-                          <button
-                            key={photo.id}
-                            type="button"
-                            onClick={() => {
-                              setSelectedPageId(page.id);
-                              setSelectedPhotoId(photo.id);
-                            }}
-                            className={`rounded-[1.2rem] border px-4 py-3 text-left transition-colors ${photo.id === selectedPhotoId ? "border-[#8f4f2e44] bg-[#fff1e6]" : "border-[#00000010] bg-[#fff9f4]"}`}
-                          >
-                            <div className="font-medium text-[#211a16]">{photo.title}</div>
-                            <div className="mt-1 text-xs uppercase tracking-[0.16em] text-[#7b6f67]">
-                              {buildPhotoMetaLine(
-                                photo,
-                                editorState.project,
-                                editorState.showDates,
-                                editorState.showLocations,
-                              )}
-                            </div>
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-                  </div>
+                <div
+                  className={`mx-auto w-full overflow-hidden rounded-[2rem] p-4 md:p-5 ${selectedStyle.shellClass}`}
+                  style={{
+                    ...themePresentation.canvasStyle,
+                    maxWidth: selectedFormat.maxWidth,
+                  }}
+                >
+                  <EditorSpreadCanvas
+                    accent={selectedTheme.accent}
+                    controls={{
+                      captionTone: editorState.captionTone,
+                      density: editorState.density,
+                      printPreviewMode: editorState.printPreviewMode,
+                      showDates: editorState.showDates,
+                      showHandwrittenNotes: editorState.showHandwrittenNotes,
+                      showLocations: editorState.showLocations,
+                      showMaps: editorState.showMaps,
+                      showMemorabilia: editorState.showMemorabilia,
+                    }}
+                    fontPreset={selectedFont}
+                    formatId={selectedFormat.id}
+                    page={selectedPage}
+                    pageIndex={selectedPageIndex}
+                    pagePhotos={selectedPagePhotos}
+                    photoCaptions={editorState.photoCaptions}
+                    project={editorState.project}
+                    selectedPhotoId={selectedPhotoId}
+                    styleMode={editorState.styleMode}
+                    onSelectPhoto={(photoId) => {
+                      setSelectedPageId(selectedPage.id);
+                      setSelectedPhotoId(photoId);
+                    }}
+                  />
                 </div>
-              </article>
+
+                <EditorPageNavigator
+                  activeStyle={themePresentation.pagerActiveStyle}
+                  currentIndex={selectedPageIndex}
+                  idleStyle={themePresentation.secondaryButtonStyle}
+                  onSelectPage={(index) => {
+                    const nextPage = editorState.project.bookDraft.pages[index];
+                    if (nextPage) {
+                      setSelectedPageId(nextPage.id);
+                    }
+                  }}
+                  pages={editorState.project.bookDraft.pages}
+                />
+              </div>
             </div>
-          );
-        })}
+          </section>
+        ) : null}
       </div>
 
-      <aside className="space-y-5 xl:sticky xl:top-6 xl:self-start">
+      <aside className="space-y-4 xl:sticky xl:top-6 xl:max-h-[calc(100vh-3rem)] xl:self-start xl:overflow-y-auto">
         <section className="rounded-[2rem] border border-[#00000012] bg-white/92 p-5">
           <div className="eyebrow">Book system</div>
           <div className="mt-4 space-y-4">
@@ -958,14 +901,11 @@ export function BookDraftEditor({
               </span>
               <input
                 type="text"
-                value={editorState.project.bookDraft.title}
+                value={editorState.project.title}
                 onChange={(event) =>
                   updateProjectMeta((current) => ({
                     ...current,
-                    bookDraft: {
-                      ...current.bookDraft,
-                      title: event.target.value,
-                    },
+                    title: event.target.value,
                   }))
                 }
                 className="mt-2 w-full rounded-[1.1rem] border border-[#00000014] bg-[#fffaf5] px-4 py-3 text-sm text-[#1f1814] outline-none transition-colors focus:border-[#8f4f2e44]"
@@ -1010,7 +950,7 @@ export function BookDraftEditor({
             </label>
 
             <SelectField
-              label="Theme accent"
+              label="Theme"
               helper="Swap the book theme without changing the chapter structure."
               options={editorState.project.bookThemes.map((theme) => ({
                 helper: `${theme.mood} / ${theme.typeface}`,
@@ -1021,6 +961,10 @@ export function BookDraftEditor({
               onSelect={(themeId) =>
                 updateProjectMeta((current) => ({
                   ...current,
+                  bookDraft: {
+                    ...current.bookDraft,
+                    themeId,
+                  },
                   selectedThemeId: themeId,
                 }))
               }
@@ -1334,28 +1278,63 @@ export function BookDraftEditor({
   );
 }
 
-function StoryChapterCard({
-  chapter,
-  index,
-  selected,
+function EditorPageNavigator({
+  activeStyle,
+  currentIndex,
+  idleStyle,
+  onSelectPage,
+  pages,
 }: {
-  chapter: StoryChapter;
-  index: number;
-  selected: boolean;
+  activeStyle: CSSProperties;
+  currentIndex: number;
+  idleStyle: CSSProperties;
+  onSelectPage: (index: number) => void;
+  pages: BookPage[];
 }) {
+  if (!pages.length) {
+    return null;
+  }
+
   return (
-    <article
-      className={`rounded-[1.7rem] border px-4 py-4 transition-colors ${selected ? "border-[#8f4f2e33] bg-[#fff6ee]" : "border-[#00000010] bg-[#fffaf6]"}`}
-    >
-      <div className="text-[11px] uppercase tracking-[0.2em] text-[#8d7f75]">
-        Chapter {index + 1}
+    <div className="mt-5 space-y-3 border-t border-black/5 pt-4">
+      <div className="flex items-center justify-between gap-3">
+        <button
+          type="button"
+          onClick={() => onSelectPage(Math.max(0, currentIndex - 1))}
+          disabled={currentIndex === 0}
+          className="rounded-full px-4 py-2 text-sm font-semibold disabled:cursor-not-allowed disabled:opacity-40"
+          style={idleStyle}
+        >
+          Previous page
+        </button>
+        <div className="text-xs uppercase tracking-[0.18em] text-[#7a6e65]">
+          Flip through the book without leaving the workspace
+        </div>
+        <button
+          type="button"
+          onClick={() => onSelectPage(Math.min(pages.length - 1, currentIndex + 1))}
+          disabled={currentIndex === pages.length - 1}
+          className="rounded-full px-4 py-2 text-sm font-semibold disabled:cursor-not-allowed disabled:opacity-40"
+          style={activeStyle}
+        >
+          Next page
+        </button>
       </div>
-      <div className="mt-2 text-xl font-semibold text-[#1f1814]">{chapter.title}</div>
-      <p className="mt-2 text-sm leading-7 text-[#62574f]">{chapter.subtitle}</p>
-      <div className="mt-3 text-xs uppercase tracking-[0.18em] text-[#8a7c72]">
-        {chapter.pageIds.length} spreads
+
+      <div className="flex flex-wrap gap-2">
+        {pages.map((page, index) => (
+          <button
+            key={page.id}
+            type="button"
+            onClick={() => onSelectPage(index)}
+            className="rounded-full px-3 py-2 text-xs font-semibold uppercase tracking-[0.15em]"
+            style={index === currentIndex ? activeStyle : idleStyle}
+          >
+            {index + 1}. {truncateLabel(page.title)}
+          </button>
+        ))}
       </div>
-    </article>
+    </div>
   );
 }
 
@@ -2302,4 +2281,8 @@ function firstSentence(value: string) {
 
   const match = trimmed.match(/^(.+?[.!?])(?:\s|$)/);
   return match?.[1] ?? trimmed;
+}
+
+function truncateLabel(value: string) {
+  return value.length > 24 ? `${value.slice(0, 24)}...` : value;
 }

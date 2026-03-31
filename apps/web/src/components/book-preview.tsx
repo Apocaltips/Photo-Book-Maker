@@ -7,8 +7,10 @@ import type {
   PhotoAsset,
   Project,
 } from "@photo-book-maker/core";
-import type { ReactNode } from "react";
+import type { CSSProperties, ReactNode } from "react";
+import { useEffect, useState } from "react";
 import { APPROVED_SPREAD_LIBRARY, normalizeSpreadType } from "@/lib/book-editor";
+import { getBookThemePresentation } from "@/lib/book-theme-styles";
 
 export function BookPreview({
   draft,
@@ -29,22 +31,46 @@ export function BookPreview({
   subtitle?: string;
   title?: string;
 }) {
+  const [selectedPageIndex, setSelectedPageIndex] = useState(0);
+
+  useEffect(() => {
+    setSelectedPageIndex(0);
+  }, [draft.id, draft.pages.length, draftSavedAt]);
+
+  const pages = draft.pages;
+  const pageCount = pages.length;
+  const safePageIndex =
+    selectedPageIndex >= 0 && selectedPageIndex < pageCount ? selectedPageIndex : 0;
+  const selectedPage = pages[safePageIndex];
+
   const projectTitle = title ?? project.title;
   const projectSubtitle = subtitle ?? project.subtitle;
   const activeThemeId = selectedThemeId ?? project.selectedThemeId;
   const selectedTheme =
     project.bookThemes.find((theme) => theme.id === activeThemeId) ?? project.bookThemes[0];
+  const themePresentation = getBookThemePresentation(
+    selectedTheme,
+    editorState.styleMode,
+  );
   const coverPhoto =
-    project.photos.find((photo) => draft.pages[0]?.photoIds.includes(photo.id) && photo.imageUri) ??
+    project.photos.find((photo) => pages[0]?.photoIds.includes(photo.id) && photo.imageUri) ??
     project.photos.find((photo) => photo.mustInclude && photo.imageUri) ??
     project.photos.find((photo) => photo.imageUri) ??
     project.photos[0];
-  const confirmedCopy = draft.pages.filter((page) => page.copyStatus === "confirmed").length;
+  const confirmedCopy = pages.filter((page) => page.copyStatus === "confirmed").length;
+  const selectedPhotos = selectedPage ? getPagePhotos(project, selectedPage) : [];
+
+  const selectedSpreadLabel = selectedPage
+    ? getSpreadLabel(selectedPage.style)
+    : "No spreads yet";
 
   return (
-    <div className="space-y-8">
-      <section className="overflow-hidden rounded-[2.8rem] border border-[#00000012] bg-[linear-gradient(180deg,rgba(255,255,255,0.98),rgba(245,238,232,0.95))] lg:grid lg:grid-cols-[1.02fr_0.98fr]">
-        <div className="relative min-h-[28rem] overflow-hidden border-b border-[#00000010] bg-[radial-gradient(circle_at_top_left,rgba(255,255,255,0.94),rgba(228,216,205,0.94))] lg:border-b-0 lg:border-r">
+    <div className="space-y-6">
+      <section
+        className="overflow-hidden rounded-[2.8rem] lg:grid lg:grid-cols-[0.92fr_1.08fr]"
+        style={themePresentation.appStyle}
+      >
+        <div className="relative min-h-[22rem] overflow-hidden border-b border-black/5 lg:border-b-0 lg:border-r lg:border-r-black/5">
           {coverPhoto?.imageUri ? (
             <>
               <img
@@ -52,35 +78,35 @@ export function BookPreview({
                 alt={coverPhoto.title}
                 className="absolute inset-0 h-full w-full object-cover"
               />
-              <div className="absolute inset-0 bg-[linear-gradient(180deg,rgba(20,14,10,0.08),rgba(20,14,10,0.36))]" />
+              <div className="absolute inset-0 bg-[linear-gradient(180deg,rgba(20,14,10,0.12),rgba(20,14,10,0.4))]" />
             </>
           ) : null}
-          <div className="absolute inset-x-6 bottom-6 rounded-[1.8rem] border border-white/45 bg-white/76 px-5 py-5 backdrop-blur-sm">
+          <div className="absolute inset-x-6 bottom-6 rounded-[1.8rem] border border-white/40 bg-white/78 px-5 py-5 backdrop-blur-sm">
             <div className="text-xs uppercase tracking-[0.22em] text-[#8a5b42]">
               {draft.format} / {draftName}
             </div>
-            <div className="mt-3 text-sm leading-7 text-[#5f544d]">{draft.summary}</div>
+            <div className="mt-3 text-sm leading-7" style={{ color: themePresentation.textMuted }}>
+              {draft.summary}
+            </div>
           </div>
         </div>
 
-        <div className="flex flex-col justify-between gap-8 px-6 py-8 md:px-8 md:py-10">
-          <div className="space-y-5">
+        <div className="flex flex-col justify-between gap-6 px-6 py-7 md:px-8 md:py-8">
+          <div className="space-y-4">
             <div className="eyebrow">Printable preview</div>
-            <div className="space-y-4">
-              <h1 className="display text-5xl leading-none text-[#1f1814] sm:text-6xl">
-                {projectTitle}
-              </h1>
-              <p className="max-w-2xl text-base leading-8 text-[#5c5048]">
-                {projectSubtitle}
-              </p>
-            </div>
+            <h1 className="display text-5xl leading-none sm:text-6xl" style={{ color: themePresentation.textColor }}>
+              {projectTitle}
+            </h1>
+            <p className="max-w-2xl text-base leading-8" style={{ color: themePresentation.textMuted }}>
+              {projectSubtitle}
+            </p>
           </div>
 
-          <div className="grid gap-3 sm:grid-cols-2">
+          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
             <PreviewStat label="Theme" value={selectedTheme.name} accent={selectedTheme.accent} />
             <PreviewStat
               label="Copy confirmed"
-              value={`${confirmedCopy}/${draft.pages.length}`}
+              value={`${confirmedCopy}/${pageCount}`}
               accent={selectedTheme.accent}
             />
             <PreviewStat
@@ -105,68 +131,103 @@ export function BookPreview({
         </div>
       </section>
 
-      <div className="space-y-8">
-        {draft.pages.map((page, index) => (
-          <PreviewSpread
-            key={page.id}
-            accent={selectedTheme.accent}
-            editorState={editorState}
-            page={page}
-            pageNumber={index + 1}
-            photos={getPagePhotos(project, page)}
-          />
-        ))}
-      </div>
-    </div>
-  );
-}
+      {selectedPage ? (
+        <section
+          className="grid gap-6 overflow-hidden rounded-[2.5rem] p-4 lg:grid-cols-[minmax(0,1.08fr)_24rem] lg:p-5"
+          style={themePresentation.chromeStyle}
+        >
+          <div className="space-y-4">
+            <div
+              className="overflow-hidden rounded-[2rem] p-4 md:p-5"
+              style={themePresentation.canvasFrameStyle}
+            >
+              <div className="mb-4 flex flex-wrap items-center justify-between gap-3 border-b border-black/5 pb-4">
+                <div>
+                  <div className="text-xs uppercase tracking-[0.2em]" style={{ color: themePresentation.textMuted }}>
+                    Spread {safePageIndex + 1} of {pageCount}
+                  </div>
+                  <div className="mt-2 text-lg font-semibold" style={{ color: themePresentation.textColor }}>
+                    {selectedSpreadLabel}
+                  </div>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  <PreviewTag>{selectedSpreadLabel}</PreviewTag>
+                  <PreviewTag tone="accent">{selectedPage.storyBeat.replaceAll("_", " ")}</PreviewTag>
+                  <PreviewTag tone={selectedPage.copyStatus === "confirmed" ? "success" : "neutral"}>
+                    {selectedPage.copyStatus === "confirmed" ? "Copy confirmed" : "Prefilled copy"}
+                  </PreviewTag>
+                </div>
+              </div>
 
-function PreviewSpread({
-  accent,
-  editorState,
-  page,
-  pageNumber,
-  photos,
-}: {
-  accent: string;
-  editorState: BookDraftEditorState;
-  page: BookPage;
-  pageNumber: number;
-  photos: PhotoAsset[];
-}) {
-  const spreadType = normalizeSpreadType(page.style);
+              <PreviewCanvas
+                accent={selectedTheme.accent}
+                editorState={editorState}
+                page={selectedPage}
+                photos={selectedPhotos}
+                spreadType={normalizeSpreadType(selectedPage.style)}
+                themePresentation={themePresentation}
+              />
 
-  return (
-    <article className="overflow-hidden rounded-[2.4rem] border border-[#00000012] bg-[linear-gradient(180deg,rgba(255,255,255,0.98),rgba(247,240,233,0.95))] shadow-[0_28px_80px_rgba(46,32,20,0.08)]">
-      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[#00000010] px-5 py-4 md:px-6">
-        <div className="text-xs uppercase tracking-[0.22em] text-[#7d7067]">
-          Spread {pageNumber}
-        </div>
-        <div className="flex flex-wrap items-center gap-2">
-          <PreviewTag>{getSpreadLabel(page.style)}</PreviewTag>
-          <PreviewTag tone="accent">{page.storyBeat.replaceAll("_", " ")}</PreviewTag>
-          <PreviewTag tone={page.copyStatus === "confirmed" ? "success" : "neutral"}>
-            {page.copyStatus === "confirmed" ? "Copy confirmed" : "Prefilled copy"}
-          </PreviewTag>
-          <PreviewTag tone="neutral">{editorState.captionTone}</PreviewTag>
-        </div>
-      </div>
-
-      <div className="p-5 md:p-6">
-        <div className="grid gap-5 lg:grid-cols-[minmax(0,1.08fr)_22rem]">
-          <div>
-            <PreviewCanvas
-              accent={accent}
-              editorState={editorState}
-              page={page}
-              photos={photos}
-              spreadType={spreadType}
-            />
+              <PreviewPager
+                pageCount={pageCount}
+                pages={pages}
+                selectedPageIndex={safePageIndex}
+                onSelectPage={setSelectedPageIndex}
+                activeStyle={themePresentation.pagerActiveStyle}
+                idleStyle={themePresentation.secondaryButtonStyle}
+              />
+            </div>
           </div>
-          <PreviewCopyPanel page={page} />
-        </div>
-      </div>
-    </article>
+
+          <div className="space-y-4">
+            <div className="rounded-[1.8rem] p-5" style={themePresentation.panelStyle}>
+              <div className="text-xs uppercase tracking-[0.2em]" style={{ color: themePresentation.textMuted }}>
+                Editorial copy
+              </div>
+              <h2 className="display mt-3 text-3xl leading-none sm:text-4xl" style={{ color: themePresentation.textColor }}>
+                {selectedPage.title}
+              </h2>
+              <p className="mt-4 text-sm leading-8" style={{ color: themePresentation.textMuted }}>
+                {selectedPage.caption}
+              </p>
+            </div>
+
+            <div className="rounded-[1.8rem] p-5" style={themePresentation.mutedPanelStyle}>
+              <div className="text-xs uppercase tracking-[0.2em]" style={{ color: themePresentation.textMuted }}>
+                Editorial intent
+              </div>
+              <p className="mt-3 text-sm leading-8" style={{ color: themePresentation.textColor }}>
+                {selectedPage.curationNote ?? selectedPage.layoutNote}
+              </p>
+              <div className="mt-4 rounded-[1.3rem] border border-black/5 bg-white/72 px-4 py-4 text-sm leading-7" style={{ color: themePresentation.textMuted }}>
+                {selectedPage.layoutNote}
+              </div>
+            </div>
+
+            <div className="rounded-[1.8rem] p-5" style={themePresentation.panelStyle}>
+              <div className="text-xs uppercase tracking-[0.2em]" style={{ color: themePresentation.textMuted }}>
+                Photos on this spread
+              </div>
+              <div className="mt-4 grid gap-3">
+                {selectedPhotos.map((photo) => (
+                  <div
+                    key={photo.id}
+                    className="rounded-[1.2rem] border border-black/5 bg-white/72 px-4 py-3"
+                  >
+                    <div className="font-medium" style={{ color: themePresentation.textColor }}>
+                      {photo.title}
+                    </div>
+                    <div className="mt-1 text-xs uppercase tracking-[0.16em]" style={{ color: themePresentation.textMuted }}>
+                      {photo.locationLabel ?? "Location pending"} / {photo.orientation}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        </section>
+      ) : null}
+    </div>
   );
 }
 
@@ -176,21 +237,23 @@ function PreviewCanvas({
   page,
   photos,
   spreadType,
+  themePresentation,
 }: {
   accent: string;
   editorState: BookDraftEditorState;
   page: BookPage;
   photos: PhotoAsset[];
   spreadType: ReturnType<typeof normalizeSpreadType>;
+  themePresentation: ReturnType<typeof getBookThemePresentation>;
 }) {
   const heroPhoto = photos[0];
   const supportingPhotos = photos.slice(1);
   const densityClass =
     editorState.density >= 70
-      ? "min-h-[9rem]"
+      ? "min-h-[8rem]"
       : editorState.density >= 50
-        ? "min-h-[11rem]"
-        : "min-h-[13rem]";
+        ? "min-h-[10rem]"
+        : "min-h-[12rem]";
 
   const previewBody = (() => {
     switch (spreadType) {
@@ -198,17 +261,17 @@ function PreviewCanvas({
       case "panorama_spread":
         return (
           <div className="space-y-4">
-            <PreviewPhotoTile photo={heroPhoto} accent={accent} className="min-h-[30rem]" emphasis="large" />
+            <PreviewPhotoTile photo={heroPhoto} accent={accent} className="min-h-[24rem] md:min-h-[31rem]" emphasis="large" />
             {supportingPhotos.length ? (
-              <PreviewPhotoGrid accent={accent} photos={supportingPhotos} minHeight="min-h-[9rem]" />
+              <PreviewPhotoGrid accent={accent} photos={supportingPhotos} minHeight="min-h-[8rem]" />
             ) : null}
           </div>
         );
       case "hero_support_strip":
         return (
           <div className="grid gap-4 lg:grid-cols-[1.18fr_0.82fr]">
-            <PreviewPhotoTile photo={heroPhoto} accent={accent} className="min-h-[28rem]" emphasis="large" />
-            <PreviewPhotoGrid accent={accent} photos={supportingPhotos} minHeight="min-h-[9rem]" maxColumns={1} />
+            <PreviewPhotoTile photo={heroPhoto} accent={accent} className="min-h-[24rem] md:min-h-[30rem]" emphasis="large" />
+            <PreviewPhotoGrid accent={accent} photos={supportingPhotos} minHeight="min-h-[8rem]" maxColumns={1} />
           </div>
         );
       case "balanced_two_up":
@@ -219,7 +282,7 @@ function PreviewCanvas({
                 key={photo.id}
                 photo={photo}
                 accent={accent}
-                className="min-h-[24rem]"
+                className="min-h-[21rem] md:min-h-[26rem]"
                 emphasis="large"
               />
             ))}
@@ -239,25 +302,31 @@ function PreviewCanvas({
         );
       case "text_divider":
         return (
-          <div className="flex min-h-[24rem] items-center justify-center rounded-[2rem] border border-[#00000010] bg-[linear-gradient(180deg,rgba(255,255,255,0.92),rgba(244,236,229,0.96))] px-10 text-center">
+          <div className="flex min-h-[25rem] items-center justify-center rounded-[2rem] border border-black/5 px-10 text-center" style={themePresentation.mutedPanelStyle}>
             <div>
-              <div className="text-[11px] uppercase tracking-[0.22em] text-[#8a5b42]">
+              <div className="text-[11px] uppercase tracking-[0.22em]" style={{ color: themePresentation.textMuted }}>
                 Chapter divider
               </div>
-              <h2 className="display mt-4 text-4xl text-[#1f1814]">{page.title}</h2>
-              <p className="mt-4 max-w-xl text-sm leading-8 text-[#5f544d]">{page.caption}</p>
+              <h2 className="display mt-4 text-4xl" style={{ color: themePresentation.textColor }}>
+                {page.title}
+              </h2>
+              <p className="mt-4 max-w-xl text-sm leading-8" style={{ color: themePresentation.textMuted }}>
+                {page.caption}
+              </p>
             </div>
           </div>
         );
       case "photo_journal":
         return (
           <div className="grid gap-4 lg:grid-cols-[0.92fr_1.08fr]">
-            <PreviewPhotoGrid accent={accent} photos={photos} minHeight="min-h-[12rem]" maxColumns={1} />
-            <div className="rounded-[2rem] border border-[#00000010] bg-white/82 p-6">
-              <div className="text-[11px] uppercase tracking-[0.22em] text-[#8a5b42]">
+            <PreviewPhotoGrid accent={accent} photos={photos} minHeight="min-h-[11rem]" maxColumns={1} />
+            <div className="rounded-[2rem] border border-black/5 bg-white/82 p-6">
+              <div className="text-[11px] uppercase tracking-[0.22em]" style={{ color: themePresentation.textMuted }}>
                 Journal block
               </div>
-              <p className="mt-4 text-sm leading-8 text-[#5f544d]">{page.caption}</p>
+              <p className="mt-4 text-sm leading-8" style={{ color: themePresentation.textColor }}>
+                {page.caption}
+              </p>
             </div>
           </div>
         );
@@ -265,20 +334,24 @@ function PreviewCanvas({
       case "map_timeline":
         return (
           <div className="grid gap-4 lg:grid-cols-[1fr_0.95fr]">
-            <div className="rounded-[2rem] border border-[#00000010] bg-[#f8f1ea] p-5">
-              <div className="text-[11px] uppercase tracking-[0.22em] text-[#8a5b42]">
+            <div className="rounded-[2rem] border border-black/5 p-5" style={themePresentation.mutedPanelStyle}>
+              <div className="text-[11px] uppercase tracking-[0.22em]" style={{ color: themePresentation.textMuted }}>
                 {spreadType === "map_timeline" ? "Route context" : "Memorabilia notes"}
               </div>
-              <h3 className="mt-4 text-2xl font-semibold text-[#1f1814]">{page.title}</h3>
-              <p className="mt-3 text-sm leading-8 text-[#5f544d]">{page.caption}</p>
+              <h3 className="mt-4 text-2xl font-semibold" style={{ color: themePresentation.textColor }}>
+                {page.title}
+              </h3>
+              <p className="mt-3 text-sm leading-8" style={{ color: themePresentation.textMuted }}>
+                {page.caption}
+              </p>
             </div>
-            <PreviewPhotoGrid accent={accent} photos={photos} minHeight="min-h-[12rem]" />
+            <PreviewPhotoGrid accent={accent} photos={photos} minHeight="min-h-[11rem]" />
           </div>
         );
       default:
         return (
           <div className="grid gap-4 lg:grid-cols-[1.08fr_0.92fr]">
-            <PreviewPhotoTile photo={heroPhoto} accent={accent} className="min-h-[28rem]" emphasis="large" />
+            <PreviewPhotoTile photo={heroPhoto} accent={accent} className="min-h-[24rem] md:min-h-[30rem]" emphasis="large" />
             <PreviewPhotoGrid accent={accent} photos={supportingPhotos} minHeight="min-h-[10rem]" maxColumns={1} />
           </div>
         );
@@ -286,10 +359,10 @@ function PreviewCanvas({
   })();
 
   return (
-    <div className="overflow-hidden rounded-[2rem] border border-[#00000010] bg-[linear-gradient(180deg,rgba(255,255,255,0.9),rgba(242,235,228,0.96))] p-4 shadow-[0_18px_44px_rgba(42,29,19,0.08)]">
+    <div className="overflow-hidden rounded-[2rem] p-4 shadow-[0_18px_44px_rgba(42,29,19,0.08)]" style={themePresentation.canvasStyle}>
       {previewBody}
       {editorState.printPreviewMode !== "clean" ? (
-        <div className="mt-4 rounded-[1.2rem] border border-[#ead5c4] bg-[#fff8f2] px-4 py-3 text-xs uppercase tracking-[0.18em] text-[#8f4f2e]">
+        <div className="mt-4 rounded-[1.2rem] px-4 py-3 text-xs uppercase tracking-[0.18em]" style={themePresentation.secondaryButtonStyle}>
           {editorState.printPreviewMode === "bleed" ? "Bleed + gutter preview" : "Print-safe preview"}
         </div>
       ) : null}
@@ -297,26 +370,62 @@ function PreviewCanvas({
   );
 }
 
-function PreviewCopyPanel({ page }: { page: BookPage }) {
+function PreviewPager({
+  activeStyle,
+  idleStyle,
+  onSelectPage,
+  pageCount,
+  pages,
+  selectedPageIndex,
+}: {
+  activeStyle: CSSProperties;
+  idleStyle: CSSProperties;
+  onSelectPage: (index: number) => void;
+  pageCount: number;
+  pages: BookPage[];
+  selectedPageIndex: number;
+}) {
+  if (!pageCount) {
+    return null;
+  }
+
   return (
-    <div className="rounded-[2rem] border border-[#00000010] bg-white/84 p-5">
-      <div className="text-xs uppercase tracking-[0.2em] text-[#8b5a40]">
-        Editorial copy
-      </div>
-      <h2 className="display mt-3 text-3xl leading-none text-[#211a16] sm:text-4xl">
-        {page.title}
-      </h2>
-      <p className="mt-4 text-sm leading-8 text-[#5d524b]">{page.caption}</p>
-      <div className="mt-5 rounded-[1.3rem] bg-[#f7f0ea] px-4 py-4">
-        <div className="text-[11px] uppercase tracking-[0.18em] text-[#7d7067]">
-          Editorial intent
+    <div className="mt-4 space-y-3">
+      <div className="flex items-center justify-between gap-3">
+        <button
+          type="button"
+          onClick={() => onSelectPage(Math.max(0, selectedPageIndex - 1))}
+          disabled={selectedPageIndex === 0}
+          className="rounded-full px-4 py-2 text-sm font-semibold disabled:cursor-not-allowed disabled:opacity-40"
+          style={idleStyle}
+        >
+          Previous page
+        </button>
+        <div className="text-xs uppercase tracking-[0.18em] text-[#7d7067]">
+          Flip through the book one spread at a time
         </div>
-        <p className="mt-2 text-sm leading-7 text-[#5f544d]">
-          {page.curationNote ?? page.layoutNote}
-        </p>
+        <button
+          type="button"
+          onClick={() => onSelectPage(Math.min(pageCount - 1, selectedPageIndex + 1))}
+          disabled={selectedPageIndex === pageCount - 1}
+          className="rounded-full px-4 py-2 text-sm font-semibold disabled:cursor-not-allowed disabled:opacity-40"
+          style={activeStyle}
+        >
+          Next page
+        </button>
       </div>
-      <div className="mt-4 rounded-[1.3rem] border border-[#00000010] bg-[#fffaf5] px-4 py-4 text-sm leading-7 text-[#5d524b]">
-        {page.layoutNote}
+      <div className="flex flex-wrap gap-2">
+        {pages.map((page, index) => (
+          <button
+            key={page.id}
+            type="button"
+            onClick={() => onSelectPage(index)}
+            className="rounded-full px-3 py-2 text-xs font-semibold uppercase tracking-[0.15em]"
+            style={index === selectedPageIndex ? activeStyle : idleStyle}
+          >
+            {index + 1}. {truncateLabel(page.title)}
+          </button>
+        ))}
       </div>
     </div>
   );
@@ -462,4 +571,8 @@ function getSpreadLabel(style: BookPage["style"]) {
     APPROVED_SPREAD_LIBRARY.find((entry) => entry.id === normalizeSpreadType(style));
 
   return normalized?.label ?? style.replaceAll("_", " ");
+}
+
+function truncateLabel(value: string) {
+  return value.length > 24 ? `${value.slice(0, 24)}...` : value;
 }
