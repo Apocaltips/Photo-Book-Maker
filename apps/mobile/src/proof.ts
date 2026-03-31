@@ -1,12 +1,19 @@
 import type { BookPage, PhotoAsset, Project } from "./core";
+import {
+  getCanvasAspectRatio,
+  getStoryLayoutLabel,
+  mapBookFormatToLayoutFormat,
+  selectStoryLayout,
+} from "./story-layout-engine";
 
 type ProofTheme = {
   accent: string;
-  accentSoft: string;
   coverWash: string;
+  muted: string;
   paper: string;
   serif: string;
   sans: string;
+  surface: string;
 };
 
 function getProofTheme(project: Project): ProofTheme {
@@ -14,77 +21,47 @@ function getProofTheme(project: Project): ProofTheme {
     case "pine-ink":
       return {
         accent: "#335c52",
-        accentSoft: "#dce7e2",
-        coverWash: "linear-gradient(135deg, rgba(23,42,37,0.1), rgba(51,92,82,0.28))",
-        paper: "#f2f0eb",
+        coverWash: "linear-gradient(135deg, rgba(20,37,32,0.1), rgba(51,92,82,0.28))",
+        muted: "#597067",
+        paper: "#eef2ed",
         serif: '"Palatino Linotype", "Book Antiqua", Palatino, serif',
         sans: '"Avenir Next", "Helvetica Neue", Arial, sans-serif',
+        surface: "rgba(245,249,246,0.95)",
       };
     case "coastline":
       return {
         accent: "#5e759f",
-        accentSoft: "#e1e7f1",
-        coverWash: "linear-gradient(135deg, rgba(38,55,86,0.08), rgba(106,126,168,0.24))",
-        paper: "#f5f3f0",
+        coverWash: "linear-gradient(135deg, rgba(39,56,86,0.08), rgba(106,126,168,0.24))",
+        muted: "#667998",
+        paper: "#eff3f8",
         serif: 'Didot, "Bodoni 72", Georgia, serif',
         sans: '"Helvetica Neue", Arial, sans-serif',
+        surface: "rgba(250,252,255,0.95)",
       };
     default:
       return {
         accent: "#c76c3a",
-        accentSoft: "#f2dfd1",
         coverWash: "linear-gradient(135deg, rgba(108,53,26,0.08), rgba(199,108,58,0.26))",
-        paper: "#f6efe7",
+        muted: "#7c6658",
+        paper: "#f8f2ea",
         serif: 'Georgia, "Times New Roman", serif',
         sans: '"Avenir Next", "Helvetica Neue", Arial, sans-serif',
+        surface: "rgba(255,251,246,0.95)",
       };
   }
 }
 
-function formatPhotoDate(project: Project, capturedAt: string) {
-  return new Date(capturedAt).toLocaleDateString("en-US", {
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-    timeZone: project.timezone,
-  });
+function escapeHtml(value: string) {
+  return value
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#039;");
 }
 
-function renderPhotoMeta(project: Project, photo: PhotoAsset) {
-  const parts = [
-    photo.locationLabel?.trim(),
-    formatPhotoDate(project, photo.capturedAt),
-  ].filter((part): part is string => Boolean(part));
-
-  if (!parts.length) {
-    return "";
-  }
-
-  return `<div class="photo-meta">${escapeHtml(parts.join(" - "))}</div>`;
-}
-
-function renderPhoto(project: Project, photo: PhotoAsset, className = "photo-frame") {
-  const title = escapeHtml(photo.title);
-  const meta = renderPhotoMeta(project, photo);
-
-  if (!photo.imageUri) {
-    return `
-      <figure class="${className} placeholder">
-        <div class="placeholder-copy">${title}</div>
-        ${meta}
-      </figure>
-    `;
-  }
-
-  return `
-    <figure class="${className}">
-      <img src="${escapeAttribute(photo.imageUri)}" alt="${escapeAttribute(title)}" />
-      <figcaption>
-        <div class="photo-title">${title}</div>
-        ${meta}
-      </figcaption>
-    </figure>
-  `;
+function escapeAttribute(value: string) {
+  return escapeHtml(value);
 }
 
 function findPagePhotos(page: BookPage, project: Project) {
@@ -93,168 +70,68 @@ function findPagePhotos(page: BookPage, project: Project) {
     .filter((photo): photo is PhotoAsset => Boolean(photo));
 }
 
-function renderPageHeading(page: BookPage) {
-  const storyBeat =
-    page.storyBeat ??
-    (page.style === "full_bleed" || page.style === "hero"
-      ? "opener"
-      : page.style === "recap" || page.style === "closing"
-        ? "closing"
-        : "details");
+function formatProjectMeta(project: Project) {
+  return `${project.startDate} to ${project.endDate} • ${project.timezone}`;
+}
+
+function renderCanvasElement(
+  element: ReturnType<typeof selectStoryLayout>["active"]["elements"][number],
+) {
+  const positionStyle = [
+    `left:${element.position.x * 100}%;`,
+    `top:${element.position.y * 100}%;`,
+    `width:${element.position.w * 100}%;`,
+    `height:${element.position.h * 100}%;`,
+    `z-index:${element.zIndex};`,
+  ].join("");
+
+  if (element.type === "image") {
+    const imageSrc = element.photo?.imageUri;
+    const title = escapeAttribute(element.photo?.title ?? "Photo");
+
+    return `
+      <div class="story-image ${element.variant ?? "support"}" style="${positionStyle}">
+        ${
+          imageSrc
+            ? `<img src="${escapeAttribute(imageSrc)}" alt="${title}" />`
+            : `<div class="story-placeholder">${escapeHtml(element.photo?.title ?? "Missing photo")}</div>`
+        }
+      </div>
+    `;
+  }
 
   return `
-    <div class="copy-block">
-      <div class="eyebrow">${escapeHtml(storyBeat.replaceAll("_", " "))}</div>
-      <h2>${escapeHtml(page.title)}</h2>
-      <p>${escapeHtml(page.caption)}</p>
+    <div class="story-text ${element.variant}" style="${positionStyle}">
+      ${element.eyebrow ? `<div class="story-eyebrow">${escapeHtml(element.eyebrow)}</div>` : ""}
+      ${element.title ? `<h2>${escapeHtml(element.title)}</h2>` : ""}
+      ${element.body ? `<p>${escapeHtml(element.body)}</p>` : ""}
     </div>
   `;
 }
 
-function renderHeroSpread(page: BookPage, project: Project) {
-  const photos = findPagePhotos(page, project);
-  const lead = photos[0];
-
-  return `
-    <section class="spread spread-hero">
-      <div class="hero-media">
-        ${lead ? renderPhoto(project, lead, "hero-photo") : `<div class="empty-state">Add a hero image to anchor this opening spread.</div>`}
-      </div>
-      <div class="hero-copy">
-        ${renderPageHeading(page)}
-      </div>
-    </section>
-  `;
-}
-
-function renderFullBleedSpread(page: BookPage, project: Project) {
-  const photos = findPagePhotos(page, project);
-  const lead = photos[0];
-
-  return `
-    <section class="spread spread-full-bleed">
-      ${
-        lead
-          ? renderPhoto(project, lead, "full-bleed-photo")
-          : `<div class="empty-state">A cinematic frame belongs here.</div>`
-      }
-      <div class="floating-copy">
-        ${renderPageHeading(page)}
-      </div>
-    </section>
-  `;
-}
-
-function renderBalancedSpread(page: BookPage, project: Project) {
-  const photos = findPagePhotos(page, project);
-  const primary = photos[0];
-  const secondary = photos[1];
-
-  return `
-    <section class="spread spread-balanced">
-      <div class="balanced-media">
-        <div class="balanced-lead">
-          ${primary ? renderPhoto(project, primary, "balanced-photo tall") : `<div class="empty-state">Lead image missing.</div>`}
-        </div>
-        <div class="balanced-side">
-          ${renderPageHeading(page)}
-          ${
-            secondary
-              ? renderPhoto(project, secondary, "balanced-photo side")
-              : `<div class="balanced-note">${escapeHtml(page.curationNote ?? page.layoutNote)}</div>`
-          }
-        </div>
-      </div>
-    </section>
-  `;
-}
-
-function renderDiptychSpread(page: BookPage, project: Project) {
-  const photos = findPagePhotos(page, project);
-
-  return `
-    <section class="spread spread-diptych">
-      <div class="diptych-grid">
-        ${photos.map((photo) => renderPhoto(project, photo, "diptych-photo")).join("")}
-      </div>
-      <div class="diptych-copy">
-        ${renderPageHeading(page)}
-      </div>
-    </section>
-  `;
-}
-
-function renderMosaicSpread(page: BookPage, project: Project) {
-  const photos = findPagePhotos(page, project);
-  const [lead, ...supporting] = photos;
-
-  return `
-    <section class="spread spread-mosaic">
-      <div class="mosaic-copy">${renderPageHeading(page)}</div>
-      <div class="mosaic-grid">
-        ${lead ? renderPhoto(project, lead, "mosaic-photo lead") : ""}
-        ${supporting.map((photo) => renderPhoto(project, photo, "mosaic-photo")).join("")}
-      </div>
-    </section>
-  `;
-}
-
-function renderChapterSpread(page: BookPage, project: Project) {
-  const photos = findPagePhotos(page, project);
-  const supporting = photos[0];
-
-  return `
-    <section class="spread spread-chapter">
-        <div class="chapter-copy">
-          ${renderPageHeading(page)}
-          <div class="chapter-rule"></div>
-          <div class="chapter-note">${escapeHtml(page.curationNote ?? page.layoutNote)}</div>
-        </div>
-      <div class="chapter-media">
-        ${
-          supporting
-            ? renderPhoto(project, supporting, "chapter-photo")
-            : `<div class="empty-state">Memory-note interlude</div>`
-        }
-      </div>
-    </section>
-  `;
-}
-
-function renderClosingSpread(page: BookPage, project: Project) {
-  const photos = findPagePhotos(page, project);
-
-  return `
-    <section class="spread spread-closing">
-      <div class="closing-copy">${renderPageHeading(page)}</div>
-      <div class="closing-strip">
-        ${photos.map((photo) => renderPhoto(project, photo, "closing-photo")).join("")}
-      </div>
-    </section>
-  `;
-}
-
 function renderSpread(page: BookPage, project: Project) {
-  switch (page.style) {
-    case "hero":
-      return renderHeroSpread(page, project);
-    case "full_bleed":
-      return renderFullBleedSpread(page, project);
-    case "balanced":
-      return renderBalancedSpread(page, project);
-    case "diptych":
-      return renderDiptychSpread(page, project);
-    case "chapter":
-      return renderChapterSpread(page, project);
-    case "mosaic":
-    case "collage":
-      return renderMosaicSpread(page, project);
-    case "closing":
-    case "recap":
-      return renderClosingSpread(page, project);
-    default:
-      return renderBalancedSpread(page, project);
-  }
+  const photos = findPagePhotos(page, project);
+  const layout = selectStoryLayout(page, photos, project).active;
+  const aspectRatio = getCanvasAspectRatio(mapBookFormatToLayoutFormat(project.bookDraft.format));
+
+  return `
+    <section class="spread-shell">
+      <div class="spread-header">
+        <div>
+          <div class="spread-kicker">${escapeHtml(getStoryLayoutLabel(layout.layoutType))}</div>
+          <div class="spread-title">${escapeHtml(page.title)}</div>
+        </div>
+        <div class="spread-status">${escapeHtml(page.storyBeat.replaceAll("_", " "))}</div>
+      </div>
+      <div class="story-canvas" style="aspect-ratio:${aspectRatio};background:${layout.style.backgroundColor};padding:${layout.style.padding}px;">
+        ${layout.elements.map(renderCanvasElement).join("")}
+      </div>
+      <div class="spread-footer">
+        <div class="spread-caption">${escapeHtml(page.caption)}</div>
+        <div class="spread-note">${escapeHtml(page.curationNote ?? page.layoutNote)}</div>
+      </div>
+    </section>
+  `;
 }
 
 export function buildProofHtml(project: Project) {
@@ -263,16 +140,6 @@ export function buildProofHtml(project: Project) {
     project.photos.find((photo) => photo.mustInclude && photo.imageUri) ??
     project.photos.find((photo) => photo.imageUri) ??
     project.photos[0];
-  const spreads = project.bookDraft.pages
-    .map(
-      (page, index) => `
-        <div class="spread-shell">
-          ${renderSpread(page, project)}
-          <div class="page-number">${String(index + 1).padStart(2, "0")}</div>
-        </div>
-      `,
-    )
-    .join("");
 
   return `
     <html>
@@ -281,50 +148,40 @@ export function buildProofHtml(project: Project) {
         <style>
           :root {
             --accent: ${theme.accent};
-            --accent-soft: ${theme.accentSoft};
+            --muted: ${theme.muted};
             --paper: ${theme.paper};
+            --surface: ${theme.surface};
             --ink: #1f1814;
-            --muted: #6f625b;
-            --line: rgba(31, 24, 20, 0.12);
-            --surface: rgba(255, 252, 248, 0.92);
+            --line: rgba(31,24,20,0.1);
             --serif: ${theme.serif};
             --sans: ${theme.sans};
           }
-          * {
-            box-sizing: border-box;
-          }
+          * { box-sizing: border-box; }
           html, body {
             margin: 0;
             padding: 0;
             background: var(--paper);
             color: var(--ink);
-          }
-          body {
             font-family: var(--sans);
-            padding: 20px;
           }
+          body { padding: 22px; }
           .cover,
           .spread-shell {
-            position: relative;
-            min-height: 92vh;
             page-break-after: always;
-            background: var(--surface);
-            border-radius: 30px;
+            border-radius: 28px;
             overflow: hidden;
             border: 1px solid var(--line);
-            box-shadow: inset 0 1px 0 rgba(255,255,255,0.65);
-          }
-          .spread {
-            min-height: 92vh;
+            background: var(--surface);
+            min-height: 94vh;
+            box-shadow: inset 0 1px 0 rgba(255,255,255,0.72);
           }
           .cover {
             display: grid;
-            grid-template-columns: 1.2fr 0.8fr;
+            grid-template-columns: 1.15fr 0.85fr;
           }
           .cover-media {
-            position: relative;
-            min-height: 92vh;
             background: ${theme.coverWash};
+            min-height: 94vh;
           }
           .cover-media img {
             width: 100%;
@@ -336,301 +193,150 @@ export function buildProofHtml(project: Project) {
             display: flex;
             flex-direction: column;
             justify-content: space-between;
-            gap: 18px;
-            padding: 56px 44px;
+            padding: 54px 44px;
+            gap: 24px;
           }
-          .cover-copy-top {
-            display: flex;
-            flex-direction: column;
-            gap: 18px;
-          }
-          .cover-kicker {
+          .cover-kicker,
+          .spread-kicker {
             font-size: 11px;
-            letter-spacing: 0.26em;
+            letter-spacing: 0.22em;
             text-transform: uppercase;
             color: var(--accent);
             font-weight: 700;
           }
-          h1, h2 {
-            font-family: var(--serif);
-            font-weight: 600;
+          h1, h2, .spread-title {
             margin: 0;
             color: var(--ink);
+            font-family: var(--serif);
+            font-weight: 600;
           }
           h1 {
             font-size: 42px;
             line-height: 1.02;
           }
           h2 {
-            font-size: 29px;
-            line-height: 1.05;
+            font-size: 16px;
+            line-height: 1.1;
           }
-          p {
-            margin: 0;
-            font-size: 14px;
-            line-height: 1.78;
-            color: #4f443d;
-          }
-          .cover-summary {
-            max-width: 30ch;
+          .cover-summary,
+          .cover-meta,
+          .spread-caption,
+          .spread-note,
+          .story-text p {
+            font-size: 13px;
+            line-height: 1.7;
           }
           .cover-meta {
             display: flex;
             flex-direction: column;
             gap: 8px;
-            padding-top: 16px;
-            border-top: 1px solid var(--line);
-            font-size: 12px;
             color: var(--muted);
             text-transform: uppercase;
-            letter-spacing: 0.16em;
+            letter-spacing: 0.14em;
+            border-top: 1px solid var(--line);
+            padding-top: 18px;
           }
-          .eyebrow {
-            font-size: 11px;
-            letter-spacing: 0.18em;
-            text-transform: uppercase;
-            color: var(--accent);
-            font-weight: 700;
-          }
-          .copy-block {
+          .spread-shell {
+            padding: 28px;
             display: flex;
             flex-direction: column;
-            gap: 12px;
+            gap: 18px;
           }
-          .copy-block p {
-            max-width: 38ch;
+          .spread-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            gap: 16px;
           }
-          .photo-frame,
-          .hero-photo,
-          .full-bleed-photo,
-          .balanced-photo,
-          .diptych-photo,
-          .mosaic-photo,
-          .chapter-photo,
-          .closing-photo {
-            margin: 0;
-            border-radius: 22px;
+          .spread-title {
+            font-size: 28px;
+            line-height: 1.05;
+            margin-top: 6px;
+          }
+          .spread-status {
+            color: var(--muted);
+            text-transform: capitalize;
+            font-size: 12px;
+            letter-spacing: 0.12em;
+          }
+          .story-canvas {
+            position: relative;
+            width: 100%;
             overflow: hidden;
-            background: #e9dfd3;
+            border-radius: 24px;
             border: 1px solid rgba(31,24,20,0.06);
           }
-          .photo-frame img,
-          .hero-photo img,
-          .full-bleed-photo img,
-          .balanced-photo img,
-          .diptych-photo img,
-          .mosaic-photo img,
-          .chapter-photo img,
-          .closing-photo img {
+          .story-image,
+          .story-text {
+            position: absolute;
+            overflow: hidden;
+            border-radius: 18px;
+          }
+          .story-image {
+            background: #e7ddd2;
+            border: 1px solid rgba(255,255,255,0.42);
+          }
+          .story-image img {
             width: 100%;
             height: 100%;
-            display: block;
             object-fit: cover;
-            background: #e9dfd3;
+            display: block;
           }
-          figcaption {
+          .story-placeholder {
+            width: 100%;
+            height: 100%;
             display: flex;
-            flex-direction: column;
-            gap: 4px;
-            padding: 12px 14px 14px;
-            background: rgba(255,255,255,0.92);
-          }
-          .photo-title {
+            align-items: center;
+            justify-content: center;
+            padding: 14px;
+            text-align: center;
+            color: var(--muted);
+            background: #eadfd4;
             font-size: 12px;
-            line-height: 1.35;
-            color: var(--ink);
+            text-transform: uppercase;
+            letter-spacing: 0.12em;
             font-weight: 700;
           }
-          .photo-meta {
-            font-size: 11px;
-            line-height: 1.45;
-            color: var(--muted);
-          }
-          .placeholder {
-            min-height: 260px;
-            padding: 24px;
+          .story-text {
+            padding: 14px;
             display: flex;
-            align-items: center;
-            justify-content: center;
-            text-align: center;
-            color: var(--muted);
-          }
-          .spread {
-            padding: 32px;
-          }
-          .spread-hero {
-            display: grid;
-            grid-template-columns: 1.2fr 0.8fr;
-            gap: 24px;
-            align-items: stretch;
-          }
-          .hero-media {
-            min-height: 84vh;
-          }
-          .hero-photo,
-          .hero-photo img {
-            height: 100%;
-          }
-          .hero-copy {
-            display: flex;
-            align-items: flex-end;
-            padding-bottom: 10px;
-          }
-          .spread-full-bleed {
-            padding: 0;
-          }
-          .full-bleed-photo,
-          .full-bleed-photo img {
-            border-radius: 0;
-            width: 100%;
-            height: 92vh;
-          }
-          .floating-copy {
-            position: absolute;
-            left: 34px;
-            bottom: 34px;
-            max-width: 360px;
-            padding: 24px;
-            border-radius: 24px;
-            background: rgba(255,250,246,0.9);
-            backdrop-filter: blur(4px);
+            flex-direction: column;
+            gap: 8px;
+            justify-content: space-between;
             border: 1px solid rgba(31,24,20,0.08);
           }
-          .spread-balanced {
-            display: grid;
-            grid-template-columns: 1.1fr 0.9fr;
-            gap: 22px;
+          .story-text.card {
+            background: rgba(255,255,255,0.94);
           }
-          .balanced-media {
-            display: contents;
+          .story-text.overlay {
+            background: rgba(18,14,10,0.46);
+            border-color: rgba(255,255,255,0.16);
           }
-          .balanced-lead {
-            min-height: 84vh;
+          .story-text.strip {
+            background: rgba(255,255,255,0.9);
           }
-          .balanced-photo.tall,
-          .balanced-photo.tall img {
-            height: 100%;
-          }
-          .balanced-side {
-            display: flex;
-            flex-direction: column;
-            gap: 18px;
-          }
-          .balanced-photo.side img {
-            height: 300px;
-          }
-          .balanced-note {
-            padding: 18px;
-            border-radius: 20px;
-            background: var(--accent-soft);
-            color: #4f443d;
-            font-size: 13px;
-            line-height: 1.7;
-          }
-          .spread-diptych {
-            display: flex;
-            flex-direction: column;
-            gap: 22px;
-          }
-          .diptych-grid {
-            display: grid;
-            grid-template-columns: repeat(2, minmax(0, 1fr));
-            gap: 18px;
-          }
-          .diptych-photo img {
-            height: 56vh;
-          }
-          .diptych-copy {
-            padding-top: 6px;
-            border-top: 1px solid var(--line);
-          }
-          .spread-mosaic {
-            display: grid;
-            grid-template-columns: 0.78fr 1.22fr;
-            gap: 20px;
-          }
-          .mosaic-copy {
-            display: flex;
-            align-items: flex-start;
-          }
-          .mosaic-grid {
-            display: grid;
-            grid-template-columns: repeat(2, minmax(0, 1fr));
-            grid-auto-rows: minmax(180px, 1fr);
-            gap: 16px;
-          }
-          .mosaic-photo.lead {
-            grid-column: 1 / -1;
-          }
-          .mosaic-photo.lead img {
-            height: 340px;
-          }
-          .mosaic-photo img {
-            height: 240px;
-          }
-          .spread-chapter {
-            display: grid;
-            grid-template-columns: 1fr 0.8fr;
-            gap: 26px;
-            align-items: center;
-          }
-          .chapter-copy {
-            display: flex;
-            flex-direction: column;
-            gap: 18px;
-            padding-right: 16px;
-          }
-          .chapter-rule {
-            width: 72px;
-            height: 3px;
-            border-radius: 999px;
-            background: var(--accent);
-          }
-          .chapter-note {
-            font-size: 13px;
-            line-height: 1.75;
-            color: var(--muted);
-          }
-          .chapter-photo img {
-            height: 50vh;
-          }
-          .spread-closing {
-            display: flex;
-            flex-direction: column;
-            justify-content: space-between;
-            gap: 28px;
-          }
-          .closing-copy {
-            max-width: 42ch;
-          }
-          .closing-strip {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-            gap: 16px;
-            align-items: end;
-          }
-          .closing-photo img {
-            height: 260px;
-          }
-          .empty-state {
-            min-height: 260px;
-            border: 1px dashed var(--line);
-            border-radius: 24px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            padding: 24px;
-            color: var(--muted);
-            background: rgba(255,255,255,0.7);
-            text-align: center;
-          }
-          .page-number {
-            position: absolute;
-            right: 28px;
-            bottom: 20px;
-            font-size: 11px;
-            letter-spacing: 0.18em;
+          .story-eyebrow {
+            font-size: 10px;
+            letter-spacing: 0.2em;
             text-transform: uppercase;
+            font-weight: 700;
+            color: var(--muted);
+          }
+          .story-text.overlay .story-eyebrow,
+          .story-text.overlay h2,
+          .story-text.overlay p {
+            color: #fff7ef;
+          }
+          .spread-footer {
+            display: grid;
+            grid-template-columns: 1.2fr 0.8fr;
+            gap: 18px;
+            align-items: start;
+          }
+          .spread-caption {
+            color: #4f443d;
+          }
+          .spread-note {
             color: var(--muted);
           }
         </style>
@@ -645,36 +351,19 @@ export function buildProofHtml(project: Project) {
             }
           </div>
           <div class="cover-copy">
-            <div class="cover-copy-top">
-              <div class="cover-kicker">${escapeHtml(project.type === "yearbook" ? "Annual album proof" : "Trip book proof")}</div>
+            <div>
+              <div class="cover-kicker">${escapeHtml(project.type === "yearbook" ? "Year recap" : "Trip story")}</div>
               <h1>${escapeHtml(project.title)}</h1>
-              <p>${escapeHtml(project.subtitle)}</p>
-              <p class="cover-summary">${escapeHtml(project.bookDraft.summary)}</p>
+              <p class="cover-summary">${escapeHtml(project.subtitle)}</p>
             </div>
             <div class="cover-meta">
-              <div>${escapeHtml(project.bookDraft.format)}</div>
-              <div>${escapeHtml(project.bookThemes.find((themeEntry) => themeEntry.id === project.selectedThemeId)?.name ?? "Editorial theme")}</div>
-              <div>${escapeHtml(project.status.replaceAll("_", " "))}</div>
+              <span>${escapeHtml(formatProjectMeta(project))}</span>
+              <span>${escapeHtml(project.bookDraft.summary)}</span>
             </div>
           </div>
         </section>
-        ${spreads}
+        ${project.bookDraft.pages.map((page) => renderSpread(page, project)).join("")}
       </body>
     </html>
   `;
-}
-
-function escapeAttribute(value: string) {
-  return value
-    .replaceAll("&", "&amp;")
-    .replaceAll("\"", "&quot;")
-    .replaceAll("<", "&lt;")
-    .replaceAll(">", "&gt;");
-}
-
-function escapeHtml(value: string) {
-  return value
-    .replaceAll("&", "&amp;")
-    .replaceAll("<", "&lt;")
-    .replaceAll(">", "&gt;");
 }

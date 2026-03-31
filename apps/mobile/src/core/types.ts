@@ -27,7 +27,19 @@ export type PageLayoutStyle =
   | "diptych"
   | "chapter"
   | "mosaic"
-  | "closing";
+  | "closing"
+  | "hero_full_bleed"
+  | "hero_support_strip"
+  | "balanced_two_up"
+  | "four_up_grid"
+  | "dense_candid_grid"
+  | "panorama_spread"
+  | "text_divider"
+  | "photo_journal"
+  | "memorabilia_spread"
+  | "pattern_repetition"
+  | "burst_sequence"
+  | "map_timeline";
 export type BookPageStoryBeat =
   | "opener"
   | "scene_setter"

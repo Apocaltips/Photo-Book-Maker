@@ -58,6 +58,7 @@ import {
   type YearbookCycle,
 } from "./src/core";
 import { buildProofHtml } from "./src/proof";
+import { MobileEditorTab } from "./src/editor-tab";
 import { localStorage } from "./src/local-storage";
 import {
   authClient,
@@ -1117,7 +1118,7 @@ export default function App() {
           ) : null}
 
           {activeTab === "editor" ? (
-            <EditorTab
+            <MobileEditorTab
               project={selectedProject}
               onTogglePage={handleTogglePage}
               onUpdatePageCopy={handleUpdatePageCopy}
