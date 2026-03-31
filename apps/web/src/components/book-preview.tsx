@@ -451,8 +451,9 @@ function PreviewCanvasV2({
       ))}
     </div>
   ) : null;
-  const renderNarrativeStrip = () => (
+  const renderNarrativeStrip = (className = "mx-auto max-w-[44rem]") => (
     <PreviewNarrativeStrip
+      className={className}
       page={page}
       photos={photos}
       project={project}
@@ -546,9 +547,9 @@ function PreviewCanvasV2({
                         </div>
                       )}
                 </div>
+                {renderNarrativeStrip("mt-4 max-w-none bg-white/88")}
               </div>
             </div>
-            {renderNarrativeStrip()}
           </div>
         );
       case "balanced_two_up":
@@ -575,7 +576,7 @@ function PreviewCanvasV2({
                 <div className="hidden w-px bg-[#dbc9bc] lg:block" />
               </div>
             </div>
-            <div className="grid gap-4 lg:grid-cols-[1.08fr_0.92fr]">
+            <div className="grid gap-4 lg:grid-cols-[1.04fr_0.96fr] lg:items-start">
               {tertiaryPhotos.length ? (
                 <div className="rounded-[1.8rem] border border-black/5 bg-[#fffaf4] p-3">
                   <PreviewPhotoGrid
@@ -585,8 +586,12 @@ function PreviewCanvasV2({
                     maxColumns={3}
                   />
                 </div>
-              ) : null}
-              <div className={tertiaryPhotos.length ? "" : "lg:col-span-2"}>{renderNarrativeStrip()}</div>
+              ) : (
+                <div className="rounded-[1.8rem] border border-dashed border-black/10 bg-white/58 px-5 py-4 text-sm leading-7" style={{ color: themePresentation.textMuted }}>
+                  Let the pair breathe when the two main frames already carry the spread.
+                </div>
+              )}
+              {renderNarrativeStrip("max-w-none")}
             </div>
           </div>
         );
@@ -605,9 +610,15 @@ function PreviewCanvasV2({
                 </div>
                 <PreviewTag tone="accent">4-up grid</PreviewTag>
               </div>
-              <PreviewPhotoGrid accent={accent} photos={photos} minHeight={densityClass} maxColumns={2} />
+              <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+                {photos.map((photo) => (
+                  <PreviewPhotoTile key={photo.id} photo={photo} accent={accent} className={densityClass} />
+                ))}
+                <div className="xl:row-span-2">
+                  {renderNarrativeStrip("max-w-none h-full bg-white/88")}
+                </div>
+              </div>
             </div>
-            {renderNarrativeStrip()}
           </div>
         );
       case "dense_candid_grid":
@@ -636,9 +647,11 @@ function PreviewCanvasV2({
                     />
                   </div>
                 ))}
+                <div className="md:col-span-3">
+                  {renderNarrativeStrip("max-w-none h-full bg-white/88")}
+                </div>
               </div>
             </div>
-            {renderNarrativeStrip()}
           </div>
         );
       case "panorama_spread":
@@ -753,12 +766,9 @@ function PreviewCanvasV2({
                     </div>
                   ))}
                 </div>
-                <div className="rounded-[1.5rem] border border-black/5 bg-white/82 px-4 py-4 text-sm leading-7" style={{ color: themePresentation.textMuted }}>
-                  {page.caption}
-                </div>
+                {renderNarrativeStrip("max-w-none bg-white/82")}
               </div>
             </div>
-            {renderNarrativeStrip()}
           </div>
         );
       case "pattern_repetition":
@@ -777,9 +787,11 @@ function PreviewCanvasV2({
                     <PreviewPhotoTile photo={photo} accent={accent} className="min-h-[11rem] md:min-h-[13rem]" />
                   </div>
                 ))}
+                <div className="md:col-span-3">
+                  {renderNarrativeStrip("max-w-none h-full bg-white/88")}
+                </div>
               </div>
             </div>
-            {renderNarrativeStrip()}
           </div>
         );
       case "burst_sequence":
@@ -810,9 +822,11 @@ function PreviewCanvasV2({
                     </div>
                   );
                 })}
+                <div className="md:col-span-4">
+                  {renderNarrativeStrip("max-w-none h-full bg-white/88")}
+                </div>
               </div>
             </div>
-            {renderNarrativeStrip()}
           </div>
         );
       case "map_timeline":
@@ -839,6 +853,7 @@ function PreviewCanvasV2({
                   </div>
                   <div className="mt-4 h-24 rounded-[1.2rem] border border-dashed border-black/10 bg-[linear-gradient(180deg,rgba(255,255,255,0.65),rgba(247,236,225,0.78))]" />
                 </div>
+                {renderNarrativeStrip("max-w-none bg-white/82")}
               </div>
               <div className="space-y-4">
                 <PreviewPhotoTile
@@ -854,7 +869,6 @@ function PreviewCanvasV2({
                 ) : null}
               </div>
             </div>
-            {renderNarrativeStrip()}
           </div>
         );
       default:
@@ -862,9 +876,11 @@ function PreviewCanvasV2({
           <div className="space-y-4">
             <div className="grid gap-4 lg:grid-cols-[1.24fr_0.76fr]">
               <PreviewPhotoTile photo={heroPhoto} accent={accent} className="min-h-[24rem] md:min-h-[30rem]" emphasis="large" />
-              <PreviewPhotoGrid accent={accent} photos={supportingPhotos} minHeight="min-h-[10rem]" maxColumns={1} />
+              <div className="space-y-4">
+                <PreviewPhotoGrid accent={accent} photos={supportingPhotos} minHeight="min-h-[10rem]" maxColumns={1} />
+                {renderNarrativeStrip("max-w-none")}
+              </div>
             </div>
-            {renderNarrativeStrip()}
           </div>
         );
     }
@@ -944,18 +960,20 @@ function PreviewPager({
 }
 
 function PreviewNarrativeStrip({
+  className,
   page,
   photos,
   project,
   themePresentation,
 }: {
+  className?: string;
   page: BookPage;
   photos: PhotoAsset[];
   project: Project;
   themePresentation: ReturnType<typeof getBookThemePresentation>;
 }) {
   return (
-    <div className="mx-auto max-w-[44rem] rounded-[1.45rem] border border-black/5 bg-white/88 px-4 py-3">
+    <div className={`rounded-[1.45rem] border border-black/5 bg-white/88 px-4 py-3 ${className ?? ""}`}>
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="min-w-0 max-w-[28rem] flex-1">
           <div className="text-[11px] uppercase tracking-[0.2em]" style={{ color: themePresentation.textMuted }}>

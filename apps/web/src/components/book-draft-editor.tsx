@@ -1849,8 +1849,9 @@ function EditorSpreadCanvasV2({
         ? "min-h-[10rem]"
         : "min-h-[12rem]";
 
-  const renderNarrativeStrip = () => (
+  const renderNarrativeStrip = (className = "mx-auto max-w-[44rem]") => (
     <EditorNarrativeStrip
+      className={className}
       controls={controls}
       fontPreset={fontPreset}
       page={page}
@@ -2045,9 +2046,9 @@ function EditorSpreadCanvasV2({
                         "quiet",
                       )}
                 </div>
+                {renderNarrativeStrip("mt-4 max-w-none bg-white/86 shadow-none")}
               </div>
             </div>
-            {renderNarrativeStrip()}
           </div>
         );
       case "balanced_two_up":
@@ -2074,12 +2075,18 @@ function EditorSpreadCanvasV2({
                     )}
               </div>
             </div>
-            {tertiaryPhotos.length ? (
-              <div className="rounded-[1.8rem] border border-[#00000010] bg-[#fffaf4] p-3">
-                {renderGrid(tertiaryPhotos, { maxColumns: 3, minHeight: "min-h-[8rem]" })}
-              </div>
-            ) : null}
-            {renderNarrativeStrip()}
+            <div className="grid gap-4 lg:grid-cols-[1.04fr_0.96fr] lg:items-start">
+              {tertiaryPhotos.length ? (
+                <div className="rounded-[1.8rem] border border-[#00000010] bg-[#fffaf4] p-3">
+                  {renderGrid(tertiaryPhotos, { maxColumns: 3, minHeight: "min-h-[8rem]" })}
+                </div>
+              ) : (
+                <div className="rounded-[1.8rem] border border-dashed border-[#d9cabf] bg-white/58 px-5 py-4 text-sm leading-7 text-[#776b63]">
+                  Leave the pair to breathe if the two main images already carry the spread.
+                </div>
+              )}
+              {renderNarrativeStrip("max-w-none")}
+            </div>
           </div>
         );
       case "four_up_grid":
@@ -2097,13 +2104,19 @@ function EditorSpreadCanvasV2({
                 </div>
                 <EditorTag className="bg-[#f1e8df] text-[#7a6251]">4-up grid</EditorTag>
               </div>
-              {renderGrid(pagePhotos, {
-                maxColumns: 2,
-                minHeight: controls.density >= 55 ? "min-h-[11rem]" : "min-h-[13rem]",
-                treatment: "default",
-              })}
+              <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+                {pagePhotos.map((photo) =>
+                  renderPhotoTile(
+                    photo,
+                    controls.density >= 55 ? "min-h-[11rem]" : "min-h-[13rem]",
+                    "default",
+                  ),
+                )}
+                <div className="xl:row-span-2">
+                  {renderNarrativeStrip("max-w-none h-full bg-[#fffaf5]")}
+                </div>
+              </div>
             </div>
-            {renderNarrativeStrip()}
           </div>
         );
       case "dense_candid_grid":
@@ -2141,9 +2154,11 @@ function EditorSpreadCanvasV2({
                       "Add food, candids, and details to make this spread feel collected.",
                       "min-h-[12rem]",
                     )}
+                <div className="md:col-span-3">
+                  {renderNarrativeStrip("max-w-none h-full bg-white/90")}
+                </div>
               </div>
             </div>
-            {renderNarrativeStrip()}
           </div>
         );
       case "panorama_spread":
@@ -2176,8 +2191,8 @@ function EditorSpreadCanvasV2({
                   Panorama pages work best when they stay quiet.
                 </div>
               )}
+              {renderNarrativeStrip("max-w-none")}
             </div>
-            {renderNarrativeStrip()}
           </div>
         );
       case "text_divider":
@@ -2288,9 +2303,7 @@ function EditorSpreadCanvasV2({
                   Keepsake board
                 </div>
                 {controls.showMemorabilia ? <MemorabiliaStrip photos={secondaryPhotos} /> : null}
-                <div className="rounded-[1.6rem] border border-[#00000010] bg-white/82 px-4 py-4 text-sm leading-7 text-[#62564f]">
-                  {displayCopy}
-                </div>
+                {renderNarrativeStrip("max-w-none bg-white/82 shadow-none")}
               </div>
             </div>
             {metaTags}
@@ -2320,9 +2333,11 @@ function EditorSpreadCanvasV2({
                       "Use repeated angles, repeated people, or repeated motifs here.",
                       "min-h-[12rem]",
                     )}
+                <div className="md:col-span-3">
+                  {renderNarrativeStrip("max-w-none h-full bg-white/90")}
+                </div>
               </div>
             </div>
-            {renderNarrativeStrip()}
           </div>
         );
       case "burst_sequence":
@@ -2363,9 +2378,11 @@ function EditorSpreadCanvasV2({
                       "Burst spreads need a short run of repeated frames.",
                       "min-h-[14rem]",
                     )}
+                <div className="md:col-span-4">
+                  {renderNarrativeStrip("max-w-none h-full bg-white/90")}
+                </div>
               </div>
             </div>
-            {renderNarrativeStrip()}
           </div>
         );
       case "map_timeline":
@@ -2377,6 +2394,7 @@ function EditorSpreadCanvasV2({
                   Route context
                 </div>
                 <MapTimelineCard project={project} pagePhotos={pagePhotos} />
+                {renderNarrativeStrip("max-w-none bg-white/82 shadow-none")}
               </div>
               <div className="space-y-4">
                 {leadPhoto
@@ -2395,7 +2413,6 @@ function EditorSpreadCanvasV2({
                 ) : null}
               </div>
             </div>
-            {renderNarrativeStrip()}
           </div>
         );
       default:
@@ -2410,9 +2427,11 @@ function EditorSpreadCanvasV2({
                       "min-h-[24rem]",
                     )}
               </div>
-              <div>{renderGrid(secondaryPhotos, { maxColumns: 2 })}</div>
+              <div className="space-y-4">
+                <div>{renderGrid(secondaryPhotos, { maxColumns: 2 })}</div>
+                {renderNarrativeStrip("max-w-none")}
+              </div>
             </div>
-            {renderNarrativeStrip()}
           </div>
         );
     }
@@ -2441,6 +2460,7 @@ function EditorSpreadCanvasV2({
 }
 
 function EditorNarrativeStrip({
+  className,
   controls,
   fontPreset,
   page,
@@ -2448,6 +2468,7 @@ function EditorNarrativeStrip({
   pagePhotos,
   project,
 }: {
+  className?: string;
   controls: EditorControls;
   fontPreset: { body: string; headline: string; accent?: string };
   page: BookPage;
@@ -2467,7 +2488,9 @@ function EditorNarrativeStrip({
       : [];
 
   return (
-    <div className="mx-auto max-w-[44rem] rounded-[1.45rem] border border-[#00000010] bg-white/92 px-4 py-3 shadow-[0_10px_22px_rgba(49,33,22,0.045)]">
+    <div
+      className={`rounded-[1.45rem] border border-[#00000010] bg-white/92 px-4 py-3 shadow-[0_10px_22px_rgba(49,33,22,0.045)] ${className ?? ""}`}
+    >
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="min-w-0 max-w-[28rem] flex-1">
           <div className="text-[11px] uppercase tracking-[0.2em] text-[#8b5a40]">
