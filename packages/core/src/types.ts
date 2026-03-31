@@ -40,8 +40,13 @@ export type ProjectStatus =
 export type ResolutionTaskType = "location" | "people" | "order";
 export type ResolutionTaskStatus = "open" | "in_progress" | "resolved";
 export type PageLayoutStyle =
+  | "minimal_grid"
   | "hero"
+  | "couple_story"
+  | "family_recap"
+  | "timeline"
   | "full_bleed"
+  | "caption"
   | "balanced"
   | "collage"
   | "recap"

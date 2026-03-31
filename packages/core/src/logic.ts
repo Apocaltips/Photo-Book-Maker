@@ -290,14 +290,14 @@ function createPageSignature(page: Pick<BookPage, "storyBeat" | "photoIds">) {
 
 function chooseSpreadStyle(photos: PhotoAsset[], chunkIndex: number): BookPage["style"] {
   if (photos.length === 1) {
-    return photos[0].orientation === "landscape" ? "full_bleed" : "balanced";
+    return photos[0].orientation === "landscape" ? "full_bleed" : "hero";
   }
 
   if (photos.length === 2) {
-    return photos[0].orientation === photos[1].orientation ? "diptych" : "balanced";
+    return photos[0].orientation === photos[1].orientation ? "minimal_grid" : "caption";
   }
 
-  return chunkIndex % 2 === 0 ? "mosaic" : "collage";
+  return chunkIndex % 2 === 0 ? "family_recap" : "collage";
 }
 
 function chooseChunkSize(photos: PhotoAsset[], startIndex: number) {
@@ -386,7 +386,7 @@ function buildChapterPage(project: Project, photo: PhotoAsset | undefined, note:
 
   return {
     id: createPageId("scene_setter", photoIds),
-    style: "chapter",
+    style: project.type === "trip" ? "timeline" : "caption",
     storyBeat: "scene_setter",
     title,
     caption,
@@ -479,7 +479,7 @@ function buildClosingPage(project: Project, photos: PhotoAsset[], note?: Project
 
   return {
     id: createPageId("closing", photos.map((photo) => photo.id)),
-    style: photos.length === 1 ? "closing" : "recap",
+    style: photos.length === 1 ? "caption" : "family_recap",
     storyBeat: "closing",
     title,
     caption,
@@ -603,7 +603,7 @@ function buildChapterDividerPage(project: Project, chapter: EditorialChapter): B
 
   return {
     id: createPageId("scene_setter", firstPhoto ? [firstPhoto.id] : [chapter.id]),
-    style: project.type === "trip" ? "map_timeline" : "text_divider",
+    style: project.type === "trip" ? "timeline" : "caption",
     storyBeat: "scene_setter",
     title: chapter.note?.title?.trim() || chapter.label,
     caption: truncateCopy(
@@ -645,11 +645,9 @@ function buildHeroSpread(project: Project, chapter: EditorialChapter, heroPhoto:
 
   return {
     id: createPageId("highlight", [heroPhoto.id]),
-    style: isPanoramaPhoto(heroPhoto)
-      ? "panorama_spread"
-      : heroPhoto.orientation === "landscape"
-        ? "hero_full_bleed"
-        : "hero_support_strip",
+    style: isPanoramaPhoto(heroPhoto) || heroPhoto.orientation === "landscape"
+      ? "full_bleed"
+      : "hero",
     storyBeat: chapter.index === 0 ? "opener" : "highlight",
     title,
     caption,
@@ -677,19 +675,19 @@ function buildSupportSpread(
   const detailHeavy = photos.every((photo) => isDetailPhoto(photo));
   const style =
     photos.length === 1
-      ? "photo_journal"
+        ? "caption"
       : photos.length === 2
-        ? "balanced_two_up"
-        : detailHeavy
-          ? "memorabilia_spread"
-          : "four_up_grid";
+        ? "minimal_grid"
+      : detailHeavy
+          ? "family_recap"
+          : "minimal_grid";
 
   return {
     id: createPageId("details", photos.map((photo) => photo.id)),
     style,
     storyBeat: "details",
     title:
-      style === "memorabilia_spread"
+      style === "family_recap"
         ? `${chapter.label} in the smaller details`
         : `${moment.location ?? chapter.label} needed context`,
     caption: truncateCopy(
@@ -702,7 +700,7 @@ function buildSupportSpread(
     copySource: "metadata",
     photoIds: photos.map((photo) => photo.id),
     layoutNote:
-      style === "memorabilia_spread"
+      style === "family_recap"
         ? "Use a denser, smaller treatment for details and tactile memories."
         : "Support pages should widen the story without flattening the book into repeated hero spreads.",
     curationNote:
@@ -718,10 +716,10 @@ function buildReflectionSpread(project: Project, chapter: EditorialChapter, phot
 
   const style =
     photos.length >= 4
-      ? "dense_candid_grid"
+      ? "collage"
       : photos.length === 3
-        ? "pattern_repetition"
-        : "photo_journal";
+        ? "family_recap"
+        : "caption";
 
   return {
     id: createPageId("reflection", photos.map((photo) => photo.id)),
@@ -736,7 +734,7 @@ function buildReflectionSpread(project: Project, chapter: EditorialChapter, phot
     copySource: "metadata",
     photoIds: photos.map((photo) => photo.id),
     layoutNote:
-      style === "dense_candid_grid"
+      style === "collage"
         ? "Use a compact candid grid that feels intentional, not overfilled."
         : "Reflection spreads should gather repeat motifs and in-between frames without crowding the page.",
     curationNote:
@@ -758,7 +756,7 @@ function buildChapterClosingSpread(
 
   return {
     id: createPageId("closing", photos.map((photo) => photo.id)),
-    style: photos.length > 1 ? "photo_journal" : "closing",
+    style: photos.length > 1 ? "caption" : "caption",
     storyBeat: "closing",
     title: `${chapter.label} settled into a softer finish`,
     caption: truncateCopy(
@@ -1094,10 +1092,10 @@ export function regenerateBookDraft(project: Project): Project {
     preserveExistingEditorialChoices(normalizedProject, page),
   );
   const heroPages = pages.filter((page) =>
-    ["hero_full_bleed", "panorama_spread", "hero_support_strip"].includes(page.style),
+    ["full_bleed", "hero"].includes(page.style),
   ).length;
   const densePages = pages.filter((page) =>
-    ["four_up_grid", "dense_candid_grid", "memorabilia_spread", "pattern_repetition"].includes(
+    ["minimal_grid", "collage", "family_recap", "timeline"].includes(
       page.style,
     ),
   ).length;

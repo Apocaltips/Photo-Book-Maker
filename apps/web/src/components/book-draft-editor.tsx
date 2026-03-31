@@ -32,6 +32,7 @@ import {
   type PrintPreviewMode,
   type StoryChapter,
 } from "@/lib/book-editor";
+import { StorybookPageCanvas } from "@/components/storybook-page-canvas";
 import { FONT_PRESETS, type FontPresetId } from "@/lib/font-presets";
 import { getBookThemePresentation } from "@/lib/book-theme-styles";
 
@@ -1483,7 +1484,7 @@ function EditorSpreadCanvas({
   styleMode: EditorStyleMode;
   onSelectPhoto: (photoId: string) => void;
 }) {
-  const spreadType = normalizeSpreadType(page.style);
+  const spreadType = normalizeSpreadType(page.style) as string;
   const style =
     STYLE_MODE_OPTIONS.find((entry) => entry.id === styleMode) ?? STYLE_MODE_OPTIONS[0];
   const columns =
@@ -1799,7 +1800,7 @@ function EditorSpreadCanvas({
       <PrintPreviewGuides formatId={formatId} mode={controls.printPreviewMode} />
       <div className="relative z-10 space-y-4">{preview}</div>
       <div className="mt-4 rounded-[1.2rem] border border-[#00000010] bg-[#fffaf5] px-4 py-3 text-xs uppercase tracking-[0.18em] text-[#7e7067]">
-        Photo-first layout / {style.label} / {getSpreadLabel(spreadType)} / density {controls.density}
+        Photo-first layout / {style.label} / {getSpreadLabel(spreadType as PageLayoutStyle)} / density {controls.density}
       </div>
     </div>
   );
@@ -1808,7 +1809,7 @@ function EditorSpreadCanvas({
 function EditorSpreadCanvasV2({
   accent,
   controls,
-  fontPreset,
+  fontPreset: _fontPreset,
   formatId,
   page,
   pageIndex: _pageIndex,
@@ -1832,527 +1833,6 @@ function EditorSpreadCanvasV2({
   styleMode: EditorStyleMode;
   onSelectPhoto: (photoId: string) => void;
 }) {
-  const spreadType = normalizeSpreadType(page.style);
-  const columns =
-    controls.density >= 75 ? 4 : controls.density >= 55 ? 3 : controls.density >= 35 ? 2 : 1;
-  const supportHeight =
-    controls.density >= 70
-      ? "min-h-[8.5rem]"
-      : controls.density >= 45
-        ? "min-h-[10rem]"
-        : "min-h-[12rem]";
-
-  const renderPhotoTile = (
-    photo: PhotoAsset,
-    className = "min-h-[16rem]",
-    treatment: "default" | "hero" | "compact" = "default",
-  ) => (
-    <EditorPhotoTile
-      key={photo.id}
-      accent={accent}
-      className={className}
-      photo={photo}
-      selected={photo.id === selectedPhotoId}
-      treatment={treatment}
-      onSelect={() => onSelectPhoto(photo.id)}
-    />
-  );
-
-  const renderEmptyTile = (
-    message: string,
-    className = "min-h-[16rem]",
-    tone: "default" | "quiet" = "default",
-  ) => (
-    <EmptyPhotoSlot className={className} tone={tone}>
-      {message}
-    </EmptyPhotoSlot>
-  );
-
-  const renderGrid = (
-    photos: PhotoAsset[],
-    {
-      minHeight = supportHeight,
-      maxColumns = columns,
-      treatment = "compact" as const,
-    }: {
-      maxColumns?: number;
-      minHeight?: string;
-      treatment?: "default" | "hero" | "compact";
-    } = {},
-  ) => {
-    if (!photos.length) {
-      return renderEmptyTile(
-        "Move more support photos here and the spread will rebalance.",
-        minHeight,
-        "quiet",
-      );
-    }
-
-    const columnClass =
-      maxColumns <= 1
-        ? "grid-cols-1"
-        : maxColumns === 2
-          ? "md:grid-cols-2"
-          : maxColumns === 3
-            ? "md:grid-cols-2 xl:grid-cols-3"
-            : "md:grid-cols-2 xl:grid-cols-4";
-
-    return (
-      <div className={`grid gap-4 ${columnClass}`}>
-        {photos.map((photo) => renderPhotoTile(photo, minHeight, treatment))}
-      </div>
-    );
-  };
-
-  const leadPhoto = pagePhotos[0];
-  const secondaryPhotos = pagePhotos.slice(1);
-  const tertiaryPhotos = pagePhotos.slice(2);
-  const displayCopy = buildDisplayCaption(page, pagePhotos, project, controls.captionTone);
-  const renderStoryTile = (
-    className = "min-h-[10rem]",
-    eyebrow?: string,
-  ) => (
-    <div
-      className={`flex h-full flex-col justify-between rounded-[1.55rem] border border-[#00000010] bg-[linear-gradient(180deg,rgba(255,251,247,0.98),rgba(243,233,223,0.96))] px-4 py-4 ${className}`}
-    >
-      <div>
-        {eyebrow ? (
-          <div className="text-[10px] uppercase tracking-[0.22em] text-[#8b5a40]">
-            {eyebrow}
-          </div>
-        ) : null}
-        <h3
-          className="mt-2 max-w-[18ch] text-[1rem] leading-tight text-[#1f1814]"
-          style={{ fontFamily: fontPreset.headline }}
-        >
-          {truncateWords(page.title, 6)}
-        </h3>
-      </div>
-      {displayCopy ? (
-        <p
-          className="mt-3 max-w-[25ch] text-[11px] leading-[1.45] text-[#5d524b]"
-          style={{ fontFamily: fontPreset.body }}
-        >
-          {truncateSentence(displayCopy, 100)}
-        </p>
-      ) : null}
-    </div>
-  );
-
-  const preview = (() => {
-    switch (spreadType) {
-      case "hero_full_bleed":
-        return (
-          <div className="space-y-4">
-            <div className="rounded-[2.35rem] bg-[#15110d] p-2 shadow-[0_28px_60px_rgba(24,16,10,0.2)]">
-              {leadPhoto
-                ? (
-                    <EditorPhotoTile
-                      accent={accent}
-                      className="min-h-[30rem] md:min-h-[36rem]"
-                      overlay={{
-                        body: truncateSentence(displayCopy, 84),
-                        eyebrow: page.storyBeat.replaceAll("_", " "),
-                        title: truncateWords(page.title, 6),
-                      }}
-                      photo={leadPhoto}
-                      selected={leadPhoto.id === selectedPhotoId}
-                      treatment="hero"
-                      onSelect={() => onSelectPhoto(leadPhoto.id)}
-                    />
-                  )
-                : renderEmptyTile(
-                    "Pick one dominant image for this hero spread.",
-                    "min-h-[30rem]",
-                  )}
-            </div>
-            <div
-              className={`grid gap-4 ${
-                secondaryPhotos.length >= 2 ? "md:grid-cols-3" : "md:grid-cols-2"
-              }`}
-            >
-              {secondaryPhotos.length ? (
-                secondaryPhotos.slice(0, 2).map((photo) =>
-                  renderPhotoTile(photo, "min-h-[9rem] md:min-h-[11rem]", "compact"),
-                )
-              ) : (
-                <div className="rounded-[1.9rem] border border-dashed border-[#d8c9bf] bg-white/58 px-5 py-5 text-sm leading-7 text-[#776b63]">
-                  Leave the opener quiet if the lead image is already doing the work.
-                </div>
-              )}
-              {renderStoryTile("min-h-[9rem] md:min-h-[11rem]", "opening note")}
-            </div>
-          </div>
-        );
-      case "hero_support_strip":
-        return (
-          <div className="space-y-4">
-            <div className="grid gap-4 lg:grid-cols-[1.12fr_0.88fr]">
-              <div className="rounded-[2rem] bg-[linear-gradient(180deg,rgba(255,255,255,0.94),rgba(245,237,231,0.92))] p-3">
-                {leadPhoto
-                  ? (
-                      <EditorPhotoTile
-                        accent={accent}
-                        className="min-h-[27rem] md:min-h-[32rem]"
-                        overlay={{
-                          body: truncateSentence(displayCopy, 80),
-                          eyebrow: "story opener",
-                          title: truncateWords(page.title, 6),
-                        }}
-                        photo={leadPhoto}
-                        selected={leadPhoto.id === selectedPhotoId}
-                        treatment="hero"
-                        onSelect={() => onSelectPhoto(leadPhoto.id)}
-                      />
-                    )
-                  : renderEmptyTile(
-                      "Choose a hero image for the opening column.",
-                      "min-h-[27rem]",
-                    )}
-              </div>
-              <div className="grid min-h-[27rem] gap-3 rounded-[2rem] border border-[#00000010] bg-[#fbf5ef] p-4 md:grid-cols-2 md:auto-rows-[minmax(8rem,1fr)]">
-                {secondaryPhotos[0]
-                  ? renderPhotoTile(secondaryPhotos[0], "min-h-[10rem] h-full", "compact")
-                  : renderEmptyTile("Add a smaller supporting photo.", "min-h-[10rem]", "quiet")}
-                {secondaryPhotos[1]
-                  ? renderPhotoTile(secondaryPhotos[1], "min-h-[10rem] h-full", "default")
-                  : renderStoryTile("min-h-[10rem] h-full", "chapter note")}
-                {secondaryPhotos[2]
-                  ? renderPhotoTile(secondaryPhotos[2], "min-h-[10rem] h-full", "compact")
-                  : renderStoryTile("min-h-[10rem] h-full", "story beat")}
-                {renderStoryTile("min-h-[10rem] h-full", "curator note")}
-              </div>
-            </div>
-          </div>
-        );
-      case "balanced_two_up":
-        return (
-          <div className="space-y-4">
-            <div className="rounded-[2rem] border border-[#00000010] bg-[linear-gradient(180deg,rgba(248,241,233,0.98),rgba(241,233,224,0.96))] p-5">
-              <div className="grid gap-6 lg:grid-cols-2 lg:items-center">
-                <div className="rounded-[1.7rem] border border-[#00000010] bg-white/92 p-3">
-                  {leadPhoto
-                    ? renderPhotoTile(leadPhoto, "min-h-[21rem] md:min-h-[25rem]", "hero")
-                    : renderEmptyTile("Balanced spreads need a first image.", "min-h-[21rem]")}
-                </div>
-                <div className="rounded-[1.7rem] border border-[#00000010] bg-white/92 p-3">
-                  {pagePhotos[1]
-                    ? renderPhotoTile(pagePhotos[1], "min-h-[21rem] md:min-h-[25rem]", "hero")
-                    : renderEmptyTile(
-                        "Add a second image or switch to a hero spread.",
-                        "min-h-[21rem]",
-                        "quiet",
-                      )}
-                </div>
-              </div>
-            </div>
-            <div className={`grid gap-4 ${tertiaryPhotos.length >= 2 ? "md:grid-cols-3" : "md:grid-cols-2"} lg:items-start`}>
-              {tertiaryPhotos.length ? (
-                tertiaryPhotos.slice(0, 2).map((photo) =>
-                  renderPhotoTile(photo, "min-h-[9rem] md:min-h-[11rem]", "compact"),
-                )
-              ) : (
-                <div className="rounded-[1.8rem] border border-dashed border-[#d9cabf] bg-white/58 px-5 py-4 text-sm leading-7 text-[#776b63]">
-                  Leave the pair to breathe if the two main images already carry the spread.
-                </div>
-              )}
-              {renderStoryTile("min-h-[9rem] md:min-h-[11rem]", "paired memory")}
-            </div>
-          </div>
-        );
-      case "four_up_grid":
-        return (
-          <div className="space-y-4">
-            <div className="rounded-[2rem] border border-[#00000010] bg-white/78 p-4">
-              <div className="grid gap-4 md:grid-cols-3">
-                {pagePhotos.slice(0, 5).map((photo) =>
-                  renderPhotoTile(
-                    photo,
-                    controls.density >= 55 ? "min-h-[12.5rem]" : "min-h-[14rem]",
-                    "default",
-                  ),
-                )}
-                {renderStoryTile(
-                  controls.density >= 55 ? "min-h-[12.5rem]" : "min-h-[14rem]",
-                  "spread note",
-                )}
-              </div>
-            </div>
-          </div>
-        );
-      case "dense_candid_grid":
-        return (
-          <div className="space-y-4">
-            <div className="rounded-[2rem] border border-[#00000010] bg-[linear-gradient(180deg,rgba(255,249,243,0.98),rgba(247,238,229,0.96))] p-4">
-              <div className="grid gap-3 md:grid-cols-6">
-                {pagePhotos.length
-                  ? pagePhotos.map((photo, index) => (
-                      <div
-                        key={photo.id}
-                        className={[
-                          index % 5 === 0 ? "md:col-span-3" : "md:col-span-2",
-                          index % 4 === 1 ? "md:-rotate-[1.4deg]" : "",
-                          index % 4 === 2 ? "md:rotate-[1.2deg]" : "",
-                        ]
-                          .filter(Boolean)
-                          .join(" ")}
-                      >
-                        {renderPhotoTile(
-                          photo,
-                          index % 5 === 0
-                            ? "min-h-[11rem] md:min-h-[14rem]"
-                            : controls.density >= 65
-                              ? "min-h-[8rem]"
-                              : "min-h-[9rem]",
-                          "compact",
-                        )}
-                      </div>
-                    ))
-                  : renderEmptyTile(
-                      "Add food, candids, and details to make this spread feel collected.",
-                      "min-h-[12rem]",
-                    )}
-                <div className="md:col-span-2">{renderStoryTile("min-h-[9rem] h-full bg-white/90", "collected note")}</div>
-              </div>
-            </div>
-          </div>
-        );
-      case "panorama_spread":
-        return (
-          <div className="space-y-4">
-            <div className="rounded-[2.15rem] border border-[#00000010] bg-white/88 px-4 py-6">
-              <div className="mb-4 text-center text-[2rem] uppercase tracking-[0.16em] text-[#8b7c6f] md:text-[2.65rem]">
-                {buildMastheadLabel(page, pagePhotos, project)}
-              </div>
-              {leadPhoto
-                ? renderPhotoTile(leadPhoto, "min-h-[22rem] md:min-h-[28rem]", "hero")
-                : renderEmptyTile(
-                    "Reserve panoramas for wide scenic images.",
-                    "min-h-[22rem]",
-                  )}
-            </div>
-            <div className="grid gap-4 lg:grid-cols-[1.28fr_0.72fr] lg:items-end">
-              {secondaryPhotos.length ? (
-                <div className="rounded-[1.8rem] border border-[#00000010] bg-[#fbf6f0] p-3">
-                  {renderGrid(secondaryPhotos, {
-                    maxColumns: 4,
-                    minHeight: "min-h-[7.5rem]",
-                  })}
-                </div>
-              ) : (
-                <div className="rounded-[1.7rem] border border-dashed border-[#d9cabf] bg-white/58 px-5 py-4 text-sm leading-7 text-[#776b63]">
-                  Panorama pages work best when they stay quiet.
-                </div>
-              )}
-              <div className="flex justify-end">{renderStoryTile("min-h-[9rem] max-w-[12.5rem] bg-white/88", "route note")}</div>
-            </div>
-          </div>
-        );
-      case "text_divider":
-        return (
-          <div className="grid gap-4 lg:grid-cols-[0.86fr_1.14fr]">
-            <div className="rounded-[2rem] border border-[#00000010] bg-[linear-gradient(180deg,rgba(255,255,255,0.95),rgba(246,238,231,0.95))] px-6 py-8">
-              <div className="text-[11px] uppercase tracking-[0.24em] text-[#8b5a40]">
-                Divider spread
-              </div>
-              <h3
-                className="mt-4 text-5xl leading-[0.88] text-[#1f1814]"
-                style={{ fontFamily: fontPreset.headline }}
-              >
-                {page.title}
-              </h3>
-              <p
-                className="mt-5 max-w-sm text-sm leading-7 text-[#5f544d]"
-                style={{ fontFamily: fontPreset.body }}
-              >
-                {displayCopy}
-              </p>
-              {controls.showMaps ? (
-                <div className="mt-6">
-                  <MapTimelineCard project={project} pagePhotos={pagePhotos} />
-                </div>
-              ) : null}
-            </div>
-            <div className="space-y-4 rounded-[2rem] border border-dashed border-[#d8c7ba] bg-white/58 p-4">
-              <div className="text-[11px] uppercase tracking-[0.22em] text-[#7d7067]">
-                Optional anchor image
-              </div>
-              {leadPhoto
-                ? renderPhotoTile(leadPhoto, "min-h-[24rem]", "hero")
-                : renderEmptyTile(
-                    "Optional supporting image only.",
-                    "min-h-[24rem]",
-                    "quiet",
-                  )}
-            </div>
-          </div>
-        );
-      case "photo_journal":
-        return (
-          <div className="space-y-4">
-            <div className="rounded-[2rem] bg-[linear-gradient(180deg,rgba(244,237,229,0.98),rgba(237,229,219,0.96))] p-6">
-              <div className="mx-auto max-w-[24rem] rounded-[1.7rem] border border-[#00000010] bg-white/95 p-4 shadow-[0_14px_34px_rgba(45,32,22,0.08)]">
-                {leadPhoto
-                  ? renderPhotoTile(leadPhoto, "min-h-[24rem] md:min-h-[29rem]", "hero")
-                  : renderEmptyTile(
-                      "Journal spreads still need one supporting frame.",
-                      "min-h-[24rem]",
-                    )}
-              </div>
-            </div>
-            <div className="grid gap-4 lg:grid-cols-[1.18fr_0.82fr] lg:items-end">
-              {secondaryPhotos.length ? (
-                <div className="rounded-[1.7rem] border border-[#00000010] bg-white/72 p-3">
-                  {renderGrid(secondaryPhotos, {
-                    maxColumns: 2,
-                    minHeight: "min-h-[9rem]",
-                  })}
-                </div>
-              ) : (
-                <div className="rounded-[1.7rem] border border-dashed border-[#dccfc4] bg-white/65 px-4 py-4 text-sm leading-7 text-[#7a6d65]">
-                  Leave this spread quiet if the main image is enough.
-                </div>
-              )}
-              <div className="space-y-3">
-                {renderStoryTile("min-h-[9rem] max-w-[13rem] bg-[#fffdf8]", "journal note")}
-                {controls.showHandwrittenNotes ? (
-                  <div
-                    className="rounded-[1.2rem] border border-dashed border-[#dccfc4] bg-white/75 px-4 py-3 text-[11px] leading-5 text-[#7a6d65]"
-                    style={{ fontFamily: fontPreset.accent ?? fontPreset.body }}
-                  >
-                    Handwritten note block
-                  </div>
-                ) : null}
-              </div>
-            </div>
-          </div>
-        );
-      case "memorabilia_spread":
-        return (
-          <div className="space-y-4">
-            <div className="grid gap-4 lg:grid-cols-[1.18fr_0.82fr]">
-              <div className="space-y-4">
-                {leadPhoto
-                  ? renderPhotoTile(leadPhoto, "min-h-[20rem] md:min-h-[24rem]", "hero")
-                  : renderEmptyTile(
-                      "Use one image to anchor the memorabilia page.",
-                      "min-h-[20rem]",
-                    )}
-              </div>
-              <div className="space-y-3 rounded-[2rem] border border-[#00000010] bg-[linear-gradient(180deg,rgba(252,246,239,0.98),rgba(246,237,228,0.96))] p-4">
-                {controls.showMemorabilia ? <MemorabiliaStrip photos={secondaryPhotos} /> : null}
-                <div className="flex justify-end">{renderStoryTile("min-h-[8.5rem] max-w-[14rem] bg-white/82", "keepsake note")}</div>
-              </div>
-            </div>
-          </div>
-        );
-      case "pattern_repetition":
-        return (
-          <div className="space-y-4">
-            <div className="rounded-[2rem] border border-[#00000010] bg-[#f8f4ee] p-4">
-              <div className="grid gap-3 md:grid-cols-4">
-                {pagePhotos.length
-                  ? pagePhotos.map((photo) => (
-                      <div
-                        key={photo.id}
-                        className="rounded-[1.5rem] border border-[#00000010] bg-white/88 p-2"
-                      >
-                        {renderPhotoTile(photo, "min-h-[11rem] md:min-h-[13rem]", "default")}
-                      </div>
-                    ))
-                  : renderEmptyTile(
-                      "Use repeated angles, repeated people, or repeated motifs here.",
-                      "min-h-[12rem]",
-                    )}
-                {renderStoryTile("min-h-[11rem] md:min-h-[13rem] bg-white/90", "repeat note")}
-              </div>
-            </div>
-          </div>
-        );
-      case "burst_sequence":
-        return (
-          <div className="space-y-4">
-            <div className="rounded-[2rem] border border-[#00000010] bg-[linear-gradient(180deg,rgba(255,255,255,0.94),rgba(240,234,228,0.94))] p-4">
-              <div className="grid gap-3 md:grid-cols-12">
-                {pagePhotos.length
-                  ? pagePhotos.map((photo, index) => {
-                      const spanClass =
-                        index === 0
-                          ? "md:col-span-12"
-                          : index % 4 === 0
-                            ? "md:col-span-4"
-                            : "md:col-span-2";
-
-                      return (
-                        <div key={photo.id} className={spanClass}>
-                          {renderPhotoTile(
-                            photo,
-                            index === 0
-                              ? "min-h-[15rem] md:min-h-[17rem]"
-                              : "min-h-[8rem] md:min-h-[9rem]",
-                            index === 0 ? "hero" : "compact",
-                          )}
-                        </div>
-                      );
-                    })
-                  : renderEmptyTile(
-                      "Burst spreads need a short run of repeated frames.",
-                      "min-h-[14rem]",
-                    )}
-                <div className="md:col-span-2">{renderStoryTile("min-h-[8rem] md:min-h-[9rem] h-full bg-white/90", "sequence note")}</div>
-              </div>
-            </div>
-          </div>
-        );
-      case "map_timeline":
-        return (
-          <div className="space-y-4">
-            <div className="grid gap-4 lg:grid-cols-[0.7fr_1.3fr]">
-              <div className="space-y-3 rounded-[2rem] border border-[#00000010] bg-[linear-gradient(180deg,rgba(250,246,240,0.98),rgba(245,236,227,0.96))] p-4">
-                <MapTimelineCard project={project} pagePhotos={pagePhotos} />
-                {renderStoryTile("min-h-[9rem] max-w-none bg-white/82", "route note")}
-              </div>
-              <div className="space-y-4">
-                {leadPhoto
-                  ? renderPhotoTile(leadPhoto, "min-h-[23rem] md:min-h-[29rem]", "hero")
-                  : renderEmptyTile(
-                      "Context spreads can hold a single travel image.",
-                      "min-h-[23rem]",
-                    )}
-                {secondaryPhotos.length ? (
-                  <div className="rounded-[1.8rem] border border-[#00000010] bg-white/72 p-3">
-                    {renderGrid(secondaryPhotos, {
-                      maxColumns: 2,
-                      minHeight: "min-h-[8.5rem]",
-                    })}
-                  </div>
-                ) : null}
-              </div>
-            </div>
-          </div>
-        );
-      default:
-        return (
-          <div className="space-y-4">
-            <div className="grid gap-4 lg:grid-cols-[1.24fr_0.76fr]">
-              <div>
-                {leadPhoto
-                  ? renderPhotoTile(leadPhoto, "min-h-[24rem] md:min-h-[29rem]", "hero")
-                  : renderEmptyTile(
-                      "Pick a lead image to start shaping this spread.",
-                      "min-h-[24rem]",
-                    )}
-              </div>
-              <div className="space-y-4">
-                <div>{renderGrid(secondaryPhotos, { maxColumns: 2 })}</div>
-                {renderStoryTile("min-h-[10rem] max-w-none", "spread note")}
-              </div>
-            </div>
-          </div>
-        );
-    }
-  })();
-
   const canvasStyle = {
     boxShadow:
       styleMode === "clean_modern"
@@ -2362,13 +1842,43 @@ function EditorSpreadCanvasV2({
   } satisfies CSSProperties;
 
   return (
-    <div
-      className="relative mx-auto w-full overflow-hidden rounded-[1.8rem] border border-white/50 bg-white/82 p-4"
-      style={canvasStyle}
-    >
-      <PrintPreviewGuides formatId={formatId} mode={controls.printPreviewMode} />
-      <div className="relative z-10 space-y-4">{preview}</div>
-    </div>
+    <StorybookPageCanvas
+      accent={accent}
+      editorState={{
+        aiProvider: "manual",
+        captionTone: controls.captionTone,
+        density: controls.density,
+        formatId,
+        fontPresetId: "gallery",
+        lastAiRefreshAt: undefined,
+        lockedPageIds: [],
+        lockedPhotoIds: [],
+        photoCaptions: {},
+        printPreviewMode: controls.printPreviewMode,
+        showChapterDividers: true,
+        showDates: controls.showDates,
+        showHandwrittenNotes: controls.showHandwrittenNotes,
+        showLocations: controls.showLocations,
+        showMaps: controls.showMaps,
+        showMemorabilia: controls.showMemorabilia,
+        storyMode: "route_story",
+        styleMode,
+        updatedAt: undefined,
+      }}
+      formatId={formatId}
+      mode="editor"
+      onSelectPhoto={onSelectPhoto}
+      page={page}
+      photos={pagePhotos}
+      project={project}
+      selectedPhotoId={selectedPhotoId}
+      shellStyle={canvasStyle}
+      themePresentation={{
+        canvasStyle: {},
+        textColor: "#1f1814",
+        textMuted: "#665b54",
+      }}
+    />
   );
 }
 
@@ -2884,18 +2394,6 @@ function getPeopleLabel(project: Project, photos: PhotoAsset[]) {
   }
 
   return `${memberNames[0]} and company`;
-}
-
-function buildMastheadLabel(page: BookPage, photos: PhotoAsset[], project: Project) {
-  const source = photos.find((photo) => photo.locationLabel)?.locationLabel ?? page.title ?? project.title;
-  const words = source
-    .replace(/[^\w\s-]/g, " ")
-    .trim()
-    .split(/\s+/)
-    .filter(Boolean)
-    .slice(0, 2);
-
-  return words.join(" ").toUpperCase() || project.title.toUpperCase();
 }
 
 function getSpreadLabel(style: PageLayoutStyle | ApprovedSpreadType) {

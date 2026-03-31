@@ -10,6 +10,7 @@ import type {
 import type { CSSProperties, ReactNode } from "react";
 import { useEffect, useState } from "react";
 import { APPROVED_SPREAD_LIBRARY, normalizeSpreadType } from "@/lib/book-editor";
+import { StorybookPageCanvas } from "@/components/storybook-page-canvas";
 import { getBookThemePresentation } from "@/lib/book-theme-styles";
 
 export function BookPreview({
@@ -248,7 +249,7 @@ function PreviewCanvas({
   page: BookPage;
   photos: PhotoAsset[];
   project: Project;
-  spreadType: ReturnType<typeof normalizeSpreadType>;
+  spreadType: string;
   themePresentation: ReturnType<typeof getBookThemePresentation>;
 }) {
   const heroPhoto = photos[0];
@@ -424,7 +425,7 @@ function PreviewCanvasV2({
   page,
   photos,
   project,
-  spreadType,
+  spreadType: _spreadType,
   themePresentation,
 }: {
   accent: string;
@@ -435,402 +436,20 @@ function PreviewCanvasV2({
   spreadType: ReturnType<typeof normalizeSpreadType>;
   themePresentation: ReturnType<typeof getBookThemePresentation>;
 }) {
-  const heroPhoto = photos[0];
-  const supportingPhotos = photos.slice(1);
-  const tertiaryPhotos = photos.slice(2);
-  const previewCopy = buildPreviewOnPageCaption(page);
-  const renderStoryTile = (
-    className = "min-h-[10rem]",
-    eyebrow?: string,
-  ) => (
-    <div
-      className={`flex h-full flex-col justify-between rounded-[1.55rem] border border-black/5 bg-[linear-gradient(180deg,rgba(255,251,247,0.98),rgba(243,233,223,0.96))] px-4 py-4 ${className}`}
-    >
-      <div>
-        {eyebrow ? (
-          <div className="text-[10px] uppercase tracking-[0.22em]" style={{ color: themePresentation.textMuted }}>
-            {eyebrow}
-          </div>
-        ) : null}
-        <h3 className="mt-2 max-w-[18ch] text-[1rem] font-semibold leading-tight" style={{ color: themePresentation.textColor }}>
-          {truncateWords(page.title, 6)}
-        </h3>
-      </div>
-      {previewCopy ? (
-        <p className="mt-3 max-w-[25ch] text-[11px] leading-[1.45]" style={{ color: themePresentation.textMuted }}>
-          {truncateSentence(previewCopy, 100)}
-        </p>
-      ) : null}
-    </div>
-  );
-
-  const previewBody = (() => {
-    switch (spreadType) {
-      case "hero_full_bleed":
-        return (
-          <div className="space-y-4">
-            <div className="rounded-[2.3rem] bg-[#16110d] p-2 shadow-[0_24px_54px_rgba(24,16,10,0.18)]">
-              <PreviewPhotoTile
-                photo={heroPhoto}
-                accent={accent}
-                className="min-h-[26rem] md:min-h-[33rem]"
-                emphasis="large"
-                overlay={{
-                  body: truncateSentence(previewCopy, 84),
-                  eyebrow: page.storyBeat.replaceAll("_", " "),
-                  title: truncateWords(page.title, 6),
-                }}
-              />
-            </div>
-            <div className={`grid gap-4 ${supportingPhotos.length >= 2 ? "md:grid-cols-3" : "md:grid-cols-2"}`}>
-              {supportingPhotos.length ? (
-                supportingPhotos.slice(0, 2).map((photo) => (
-                  <PreviewPhotoTile
-                    key={photo.id}
-                    photo={photo}
-                    accent={accent}
-                    className="min-h-[9rem] md:min-h-[11rem]"
-                  />
-                ))
-              ) : null}
-              {renderStoryTile("min-h-[9rem] md:min-h-[11rem]", "opening note")}
-            </div>
-          </div>
-        );
-      case "hero_support_strip":
-        return (
-          <div className="space-y-4">
-            <div className="grid gap-4 lg:grid-cols-[1.12fr_0.88fr]">
-              <div className="rounded-[2rem] bg-[linear-gradient(180deg,rgba(255,255,255,0.94),rgba(245,237,231,0.92))] p-3">
-                <PreviewPhotoTile
-                  photo={heroPhoto}
-                  accent={accent}
-                  className="min-h-[25rem] md:min-h-[31rem]"
-                  emphasis="large"
-                  overlay={{
-                    body: truncateSentence(previewCopy, 80),
-                    eyebrow: "story opener",
-                    title: truncateWords(page.title, 6),
-                  }}
-                />
-              </div>
-              <div className="grid min-h-[27rem] gap-3 rounded-[2rem] border border-black/5 bg-[#fbf5ef] p-4 md:grid-cols-2 md:auto-rows-[minmax(8rem,1fr)]">
-                {supportingPhotos[0] ? (
-                  <PreviewPhotoTile photo={supportingPhotos[0]} accent={accent} className="min-h-[10rem] h-full" />
-                ) : (
-                  <div className="rounded-[1.6rem] border border-dashed border-black/10 bg-white/60 px-5 py-5 text-sm leading-7" style={{ color: themePresentation.textMuted }}>
-                    Add a smaller supporting photo.
-                  </div>
-                )}
-                {supportingPhotos[1] ? (
-                  <PreviewPhotoTile photo={supportingPhotos[1]} accent={accent} className="min-h-[10rem] h-full" />
-                ) : (
-                  renderStoryTile("min-h-[10rem] h-full", "chapter note")
-                )}
-                {supportingPhotos[2] ? (
-                  <PreviewPhotoTile photo={supportingPhotos[2]} accent={accent} className="min-h-[10rem] h-full" />
-                ) : (
-                  renderStoryTile("min-h-[10rem] h-full", "story beat")
-                )}
-                {renderStoryTile("min-h-[10rem] h-full", "curator note")}
-              </div>
-            </div>
-          </div>
-        );
-      case "balanced_two_up":
-        return (
-          <div className="space-y-4">
-            <div className="rounded-[2rem] border border-black/5 bg-[linear-gradient(180deg,rgba(248,241,233,0.98),rgba(241,233,224,0.96))] p-5">
-              <div className="grid gap-6 lg:grid-cols-2 lg:items-center">
-                {photos.slice(0, 2).map((photo) => (
-                  <div key={photo.id} className="rounded-[1.7rem] border border-black/5 bg-white/92 p-3">
-                    <PreviewPhotoTile
-                      photo={photo}
-                      accent={accent}
-                      className="min-h-[21rem] md:min-h-[25rem]"
-                      emphasis="large"
-                    />
-                  </div>
-                ))}
-              </div>
-            </div>
-            <div className={`grid gap-4 ${tertiaryPhotos.length >= 2 ? "md:grid-cols-3" : "md:grid-cols-2"} lg:items-start`}>
-              {tertiaryPhotos.length ? (
-                tertiaryPhotos.slice(0, 2).map((photo) => (
-                  <PreviewPhotoTile
-                    key={photo.id}
-                    photo={photo}
-                    accent={accent}
-                    className="min-h-[9rem] md:min-h-[11rem]"
-                  />
-                ))
-              ) : (
-                <div className="rounded-[1.8rem] border border-dashed border-black/10 bg-white/58 px-5 py-4 text-sm leading-7" style={{ color: themePresentation.textMuted }}>
-                  Let the pair breathe when the two main frames already carry the spread.
-                </div>
-              )}
-              {renderStoryTile("min-h-[9rem] md:min-h-[11rem]", "paired memory")}
-            </div>
-          </div>
-        );
-      case "four_up_grid":
-        return (
-          <div className="space-y-4">
-            <div className="rounded-[2rem] border border-black/5 bg-white/78 p-4">
-              <div className="grid gap-4 md:grid-cols-3">
-                {photos.slice(0, 5).map((photo) => (
-                  <PreviewPhotoTile
-                    key={photo.id}
-                    photo={photo}
-                    accent={accent}
-                    className={editorState.density >= 55 ? "min-h-[12rem]" : "min-h-[14rem]"}
-                  />
-                ))}
-                {renderStoryTile(
-                  editorState.density >= 55 ? "min-h-[12rem]" : "min-h-[14rem]",
-                  "spread note",
-                )}
-              </div>
-            </div>
-          </div>
-        );
-      case "dense_candid_grid":
-        return (
-          <div className="space-y-4">
-            <div className="rounded-[2rem] border border-black/5 bg-[linear-gradient(180deg,rgba(255,249,243,0.98),rgba(247,238,229,0.96))] p-4">
-              <div className="grid gap-3 md:grid-cols-6">
-                {photos.map((photo, index) => (
-                  <div
-                    key={photo.id}
-                    className={[
-                      index % 5 === 0 ? "md:col-span-3" : "md:col-span-2",
-                      index % 4 === 1 ? "md:-rotate-[1.4deg]" : "",
-                      index % 4 === 2 ? "md:rotate-[1.2deg]" : "",
-                    ]
-                      .filter(Boolean)
-                      .join(" ")}
-                  >
-                    <PreviewPhotoTile
-                      photo={photo}
-                      accent={accent}
-                      className={index % 5 === 0 ? "min-h-[11rem] md:min-h-[14rem]" : "min-h-[8rem] md:min-h-[9rem]"}
-                    />
-                  </div>
-                ))}
-                <div className="md:col-span-2">{renderStoryTile("min-h-[9rem] h-full bg-white/88", "collected note")}</div>
-              </div>
-            </div>
-          </div>
-        );
-      case "panorama_spread":
-        return (
-          <div className="space-y-4">
-            <div className="rounded-[2.15rem] border border-black/5 bg-white/88 px-4 py-6">
-              <div className="mb-4 text-center text-[2rem] uppercase tracking-[0.16em]" style={{ color: themePresentation.textMuted }}>
-                {buildPreviewMastheadLabel(page, photos, project)}
-              </div>
-              <PreviewPhotoTile
-                photo={heroPhoto}
-                accent={accent}
-                className="min-h-[22rem] md:min-h-[28rem]"
-                emphasis="large"
-              />
-            </div>
-            <div className="grid gap-4 lg:grid-cols-[1.28fr_0.72fr] lg:items-end">
-              {supportingPhotos.length ? (
-                <div className="rounded-[1.8rem] border border-black/5 bg-white/68 p-3">
-                  <PreviewPhotoGrid accent={accent} photos={supportingPhotos} minHeight="min-h-[7.5rem]" maxColumns={4} />
-                </div>
-              ) : null}
-              <div className="flex justify-end">{renderStoryTile("min-h-[9rem] max-w-[12.5rem] bg-white/88", "route note")}</div>
-            </div>
-          </div>
-        );
-      case "text_divider":
-        return (
-          <div className="grid gap-4 lg:grid-cols-[0.86fr_1.14fr]">
-            <div className="rounded-[2rem] border border-black/5 px-6 py-8" style={themePresentation.mutedPanelStyle}>
-              <div className="text-[11px] uppercase tracking-[0.24em]" style={{ color: themePresentation.textMuted }}>
-                Divider spread
-              </div>
-              <h2 className="display mt-4 text-5xl leading-[0.88]" style={{ color: themePresentation.textColor }}>
-                {page.title}
-              </h2>
-              <p className="mt-5 max-w-sm text-sm leading-7" style={{ color: themePresentation.textMuted }}>
-                {page.caption}
-              </p>
-            </div>
-            <div className="space-y-4 rounded-[2rem] border border-dashed border-black/10 bg-white/58 p-4">
-              <div className="text-[11px] uppercase tracking-[0.22em]" style={{ color: themePresentation.textMuted }}>
-                Optional anchor image
-              </div>
-              <PreviewPhotoTile
-                photo={heroPhoto}
-                accent={accent}
-                className="min-h-[24rem] md:min-h-[30rem]"
-                emphasis="large"
-              />
-            </div>
-          </div>
-        );
-      case "photo_journal":
-        return (
-          <div className="space-y-4">
-            <div className="rounded-[2rem] bg-[linear-gradient(180deg,rgba(244,237,229,0.98),rgba(237,229,219,0.96))] p-6">
-              <div className="mx-auto max-w-[24rem] rounded-[1.7rem] border border-black/5 bg-white/95 p-4 shadow-[0_14px_34px_rgba(45,32,22,0.08)]">
-                <PreviewPhotoTile
-                  photo={heroPhoto}
-                  accent={accent}
-                  className="min-h-[24rem] md:min-h-[29rem]"
-                  emphasis="large"
-                />
-              </div>
-            </div>
-            <div className="grid gap-4 lg:grid-cols-[1.18fr_0.82fr] lg:items-end">
-              {supportingPhotos.length ? (
-                <div className="rounded-[1.7rem] border border-black/5 bg-white/72 p-3">
-                  <PreviewPhotoGrid accent={accent} photos={supportingPhotos} minHeight="min-h-[9rem]" maxColumns={2} />
-                </div>
-              ) : (
-                <div className="rounded-[1.7rem] border border-dashed border-black/10 bg-white/58 px-5 py-4 text-sm leading-7" style={{ color: themePresentation.textMuted }}>
-                  Leave this spread quiet when the main image is enough.
-                </div>
-              )}
-              <div className="space-y-3">
-                {renderStoryTile("min-h-[9rem] max-w-[13rem] bg-[#fffdf8]", "journal note")}
-                {editorState.showHandwrittenNotes ? (
-                  <div className="rounded-[1.2rem] border border-dashed border-[#dccfc4] bg-white/75 px-4 py-3 text-[11px] leading-5" style={{ color: themePresentation.textMuted }}>
-                    Handwritten note block
-                  </div>
-                ) : null}
-              </div>
-            </div>
-          </div>
-        );
-      case "memorabilia_spread":
-        return (
-          <div className="space-y-4">
-            <div className="grid gap-4 lg:grid-cols-[1.18fr_0.82fr]">
-              <PreviewPhotoTile
-                photo={heroPhoto}
-                accent={accent}
-                className="min-h-[24rem] md:min-h-[28rem]"
-                emphasis="large"
-              />
-              <div className="space-y-3 rounded-[2rem] border border-black/5 bg-[linear-gradient(180deg,rgba(252,246,239,0.98),rgba(246,237,228,0.96))] p-4">
-                <div className="grid gap-3 sm:grid-cols-2">
-                  {supportingPhotos.slice(0, 4).map((photo, index) => (
-                    <div
-                      key={photo.id}
-                      className={`rounded-[1.3rem] border border-black/10 bg-white/86 p-2 ${index % 2 === 0 ? "rotate-[-1deg]" : "rotate-[1deg]"}`}
-                    >
-                      <PreviewPhotoTile photo={photo} accent={accent} className="min-h-[8rem]" />
-                    </div>
-                  ))}
-                </div>
-                <div className="flex justify-end">{renderStoryTile("min-h-[8.5rem] max-w-[14rem] bg-white/82", "keepsake note")}</div>
-              </div>
-            </div>
-          </div>
-        );
-      case "pattern_repetition":
-        return (
-          <div className="space-y-4">
-            <div className="rounded-[2rem] border border-black/5 bg-[#f8f4ee] p-4">
-              <div className="grid gap-3 md:grid-cols-4">
-                {photos.map((photo) => (
-                  <div key={photo.id} className="rounded-[1.5rem] border border-black/5 bg-white/88 p-2">
-                    <PreviewPhotoTile photo={photo} accent={accent} className="min-h-[11rem] md:min-h-[13rem]" />
-                  </div>
-                ))}
-                {renderStoryTile("min-h-[11rem] md:min-h-[13rem] bg-white/88", "repeat note")}
-              </div>
-            </div>
-          </div>
-        );
-      case "burst_sequence":
-        return (
-          <div className="space-y-4">
-            <div className="rounded-[2rem] border border-black/5 bg-[linear-gradient(180deg,rgba(255,255,255,0.94),rgba(240,234,228,0.94))] p-4">
-              <div className="grid gap-3 md:grid-cols-12">
-                {photos.map((photo, index) => {
-                  const spanClass =
-                    index === 0 ? "md:col-span-12" : index % 4 === 0 ? "md:col-span-4" : "md:col-span-2";
-
-                  return (
-                    <div key={photo.id} className={spanClass}>
-                      <PreviewPhotoTile
-                        photo={photo}
-                        accent={accent}
-                        className={index === 0 ? "min-h-[15rem] md:min-h-[17rem]" : "min-h-[8rem] md:min-h-[9rem]"}
-                        emphasis={index === 0 ? "large" : undefined}
-                      />
-                    </div>
-                  );
-                })}
-                <div className="md:col-span-2">{renderStoryTile("min-h-[8rem] md:min-h-[9rem] h-full bg-white/88", "sequence note")}</div>
-              </div>
-            </div>
-          </div>
-        );
-      case "map_timeline":
-        return (
-          <div className="space-y-4">
-            <div className="grid gap-4 lg:grid-cols-[0.7fr_1.3fr]">
-              <div className="space-y-3 rounded-[2rem] border border-black/5 bg-[linear-gradient(180deg,rgba(250,246,240,0.98),rgba(245,236,227,0.96))] p-4">
-                <div className="rounded-[1.6rem] border border-dashed border-black/10 px-4 py-4">
-                  <div className="text-xl font-semibold" style={{ color: themePresentation.textColor }}>
-                    {photos.find((photo) => photo.locationLabel)?.locationLabel ?? project.title}
-                  </div>
-                  <div className="mt-2 text-sm leading-7" style={{ color: themePresentation.textMuted }}>
-                    {photos[0]?.capturedAt
-                      ? new Date(photos[0].capturedAt).toLocaleDateString("en-US", {
-                          month: "short",
-                          day: "numeric",
-                          year: "numeric",
-                          timeZone: project.timezone,
-                        })
-                      : project.startDate}
-                  </div>
-                  <div className="mt-4 h-24 rounded-[1.2rem] border border-dashed border-black/10 bg-[linear-gradient(180deg,rgba(255,255,255,0.65),rgba(247,236,225,0.78))]" />
-                </div>
-                {renderStoryTile("min-h-[9rem] max-w-none bg-white/82", "route note")}
-              </div>
-              <div className="space-y-4">
-                <PreviewPhotoTile
-                  photo={heroPhoto}
-                  accent={accent}
-                  className="min-h-[24rem] md:min-h-[30rem]"
-                  emphasis="large"
-                />
-                {supportingPhotos.length ? (
-                  <div className="rounded-[1.8rem] border border-black/5 bg-white/72 p-3">
-                    <PreviewPhotoGrid accent={accent} photos={supportingPhotos} minHeight="min-h-[8.5rem]" maxColumns={2} />
-                  </div>
-                ) : null}
-              </div>
-            </div>
-          </div>
-        );
-      default:
-        return (
-          <div className="space-y-4">
-            <div className="grid gap-4 lg:grid-cols-[1.24fr_0.76fr]">
-              <PreviewPhotoTile photo={heroPhoto} accent={accent} className="min-h-[24rem] md:min-h-[30rem]" emphasis="large" />
-              <div className="space-y-4">
-                <PreviewPhotoGrid accent={accent} photos={supportingPhotos} minHeight="min-h-[10rem]" maxColumns={1} />
-                {renderStoryTile("min-h-[10rem] max-w-none", "spread note")}
-              </div>
-            </div>
-          </div>
-        );
-    }
-  })();
-
   return (
-    <div className="overflow-hidden rounded-[2rem] p-4 shadow-[0_18px_44px_rgba(42,29,19,0.08)]" style={themePresentation.canvasStyle}>
-      {previewBody}
-    </div>
+    <StorybookPageCanvas
+      accent={accent}
+      editorState={editorState}
+      formatId={editorState.formatId}
+      mode="preview"
+      page={page}
+      photos={photos}
+      project={project}
+      shellStyle={{
+        boxShadow: "0 18px 44px rgba(42,29,19,0.08)",
+      }}
+      themePresentation={themePresentation}
+    />
   );
 }
 
@@ -1079,18 +698,6 @@ function getSpreadLabel(style: BookPage["style"]) {
     APPROVED_SPREAD_LIBRARY.find((entry) => entry.id === normalizeSpreadType(style));
 
   return normalized?.label ?? style.replaceAll("_", " ");
-}
-
-function buildPreviewMastheadLabel(page: BookPage, photos: PhotoAsset[], project: Project) {
-  const source = photos.find((photo) => photo.locationLabel)?.locationLabel ?? page.title ?? project.title;
-  const words = source
-    .replace(/[^\w\s-]/g, " ")
-    .trim()
-    .split(/\s+/)
-    .filter(Boolean)
-    .slice(0, 2);
-
-  return words.join(" ").toUpperCase() || project.title.toUpperCase();
 }
 
 function buildPreviewOnPageCaption(page: BookPage) {

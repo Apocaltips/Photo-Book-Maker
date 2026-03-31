@@ -1,18 +1,7 @@
 import type { BookPage, PageLayoutStyle, PhotoAsset, Project, ProjectType } from "@photo-book-maker/core";
+import { normalizeStoryLayoutSystem, type StoryLayoutSystem } from "@/lib/story-layout-engine";
 
-export type ApprovedSpreadType =
-  | "hero_full_bleed"
-  | "hero_support_strip"
-  | "balanced_two_up"
-  | "four_up_grid"
-  | "dense_candid_grid"
-  | "panorama_spread"
-  | "text_divider"
-  | "photo_journal"
-  | "memorabilia_spread"
-  | "pattern_repetition"
-  | "burst_sequence"
-  | "map_timeline";
+export type ApprovedSpreadType = StoryLayoutSystem;
 
 export type EditorStyleMode =
   | "minimal_editorial"
@@ -48,76 +37,52 @@ export const APPROVED_SPREAD_LIBRARY: Array<{
   label: string;
 }> = [
   {
-    id: "hero_full_bleed",
-    label: "Classic portrait title",
-    description: "Large framed image with a quiet title treatment beneath it.",
-    helper: "Use when one photograph should feel formal, timeless, and cover-worthy.",
+    id: "minimal_grid",
+    label: "Minimal grid",
+    description: "2 to 4 images with disciplined spacing and no wasted interior space.",
+    helper: "Use for clean, balanced pages where the photography should feel organized and premium.",
   },
   {
-    id: "hero_support_strip",
-    label: "Layered collage cover",
-    description: "One dominant image with smaller overlapping support photos.",
-    helper: "Best when you want the opener to feel tactile and art-directed instead of strictly editorial.",
+    id: "hero",
+    label: "Hero",
+    description: "One dominant image with support photos or a compact story tile.",
+    helper: "Best when one image should clearly lead the spread without becoming a full-bleed page.",
   },
   {
-    id: "balanced_two_up",
-    label: "Centered keepsake",
-    description: "A balanced pair with generous paper margins and calm hierarchy.",
-    helper: "Use when two images deserve equal importance without crowding the page.",
+    id: "collage",
+    label: "Collage",
+    description: "5 to 12 images in a dense but controlled composition.",
+    helper: "Use when the page should feel energetic and memory-rich without looking random.",
   },
   {
-    id: "four_up_grid",
-    label: "Portfolio strip",
-    description: "Structured gallery presentation with clean white space.",
-    helper: "Good for curated photo runs that should feel organized and polished.",
+    id: "couple_story",
+    label: "Couple story",
+    description: "One or two emotional images paired with a stronger story block.",
+    helper: "Best for relationship moments, quieter reflections, and pages that need a little more voice.",
   },
   {
-    id: "dense_candid_grid",
-    label: "Modern collage board",
-    description: "Energetic layered page for details, candids, and supporting moments.",
-    helper: "Use when the page should feel collected and visual instead of linear.",
+    id: "family_recap",
+    label: "Family recap",
+    description: "3 to 6 grouped images with one compact supporting text area.",
+    helper: "Use for event recaps, day summaries, and pages where multiple people or moments belong together.",
   },
   {
-    id: "panorama_spread",
-    label: "Travel masthead",
-    description: "Wide hero image paired with oversized destination typography.",
-    helper: "Reserve for the strongest scenic frame or major destination moment.",
+    id: "timeline",
+    label: "Timeline",
+    description: "Sequential image-led storytelling with light chronology cues.",
+    helper: "Use when order matters, especially for travel days, route changes, or chapter setup.",
   },
   {
-    id: "text_divider",
-    label: "Editorial divider",
-    description: "Typographic pause page with minimal imagery.",
-    helper: "Use to reset rhythm between chapters, months, or major story turns.",
+    id: "full_bleed",
+    label: "Full bleed",
+    description: "One image fills nearly the entire page with restrained overlay copy.",
+    helper: "Reserve for the strongest scenic or emotional frame that can carry a whole spread.",
   },
   {
-    id: "photo_journal",
-    label: "Matted editorial page",
-    description: "Floating photo on paper with a restrained supporting note.",
-    helper: "Best for quieter emotional beats, reflections, or elegant transition pages.",
-  },
-  {
-    id: "memorabilia_spread",
-    label: "Keepsake ledger",
-    description: "Details and texture gathered on a tactile board-like layout.",
-    helper: "Great for food, tickets, signs, camp details, and other memory fragments.",
-  },
-  {
-    id: "pattern_repetition",
-    label: "Contact sheet study",
-    description: "Repeated moments arranged as a clean visual motif.",
-    helper: "Works for repeated angles, matching scenes, or recurring yearbook motifs.",
-  },
-  {
-    id: "burst_sequence",
-    label: "Storyboard strip",
-    description: "Sequential frames laid out for rhythm and movement.",
-    helper: "Use on motion-heavy moments instead of forcing one frame to do all the work.",
-  },
-  {
-    id: "map_timeline",
-    label: "Postcard route page",
-    description: "Travel context with a map panel and hero image.",
-    helper: "Best near chapter openers when the route or destination matters to the story.",
+    id: "caption",
+    label: "Caption",
+    description: "Image-led page with a deliberate text block filling the leftover structure.",
+    helper: "Use when the story needs a stronger written moment without turning into a divider page.",
   },
 ];
 
@@ -170,32 +135,8 @@ export const STYLE_MODE_OPTIONS: Array<{
   },
 ];
 
-const LEGACY_STYLE_MAP: Record<PageLayoutStyle, ApprovedSpreadType> = {
-  hero: "hero_support_strip",
-  full_bleed: "hero_full_bleed",
-  balanced: "balanced_two_up",
-  collage: "dense_candid_grid",
-  recap: "four_up_grid",
-  diptych: "balanced_two_up",
-  chapter: "photo_journal",
-  mosaic: "pattern_repetition",
-  closing: "photo_journal",
-  hero_full_bleed: "hero_full_bleed",
-  hero_support_strip: "hero_support_strip",
-  balanced_two_up: "balanced_two_up",
-  four_up_grid: "four_up_grid",
-  dense_candid_grid: "dense_candid_grid",
-  panorama_spread: "panorama_spread",
-  text_divider: "text_divider",
-  photo_journal: "photo_journal",
-  memorabilia_spread: "memorabilia_spread",
-  pattern_repetition: "pattern_repetition",
-  burst_sequence: "burst_sequence",
-  map_timeline: "map_timeline",
-};
-
 export function normalizeSpreadType(style: PageLayoutStyle): ApprovedSpreadType {
-  return LEGACY_STYLE_MAP[style] ?? "balanced_two_up";
+  return normalizeStoryLayoutSystem(style);
 }
 
 export function getStoryModeOptions(project: Project): Array<{ id: EditorStoryMode; label: string; helper: string }> {
@@ -426,35 +367,31 @@ export function getLayoutAlternatives(
   const photoCount = photos.length;
 
   if (photoCount === 0) {
-    alternatives.add(project.type === "trip" ? "map_timeline" : "text_divider");
-    alternatives.add("photo_journal");
+    alternatives.add(project.type === "trip" ? "timeline" : "caption");
+    alternatives.add("minimal_grid");
     return [...alternatives];
   }
 
-  if (photos.some((photo) => isPanoramaCandidate(photo))) {
-    alternatives.add("panorama_spread");
-  }
-
   if (photoCount === 1) {
-    alternatives.add("hero_full_bleed");
-    alternatives.add("hero_support_strip");
-    alternatives.add("photo_journal");
+    alternatives.add(photos.some((photo) => isPanoramaCandidate(photo)) ? "full_bleed" : "hero");
+    alternatives.add(page.storyBeat === "reflection" || page.storyBeat === "closing" ? "caption" : "couple_story");
+    alternatives.add("minimal_grid");
   } else if (photoCount === 2) {
-    alternatives.add("balanced_two_up");
-    alternatives.add("photo_journal");
-    alternatives.add("pattern_repetition");
+    alternatives.add("minimal_grid");
+    alternatives.add(project.type === "yearbook" ? "family_recap" : "couple_story");
+    alternatives.add("caption");
   } else if (photoCount <= 4) {
-    alternatives.add("four_up_grid");
-    alternatives.add("pattern_repetition");
-    alternatives.add("memorabilia_spread");
+    alternatives.add("minimal_grid");
+    alternatives.add("family_recap");
+    alternatives.add(project.type === "trip" && page.storyBeat === "scene_setter" ? "timeline" : "collage");
   } else {
-    alternatives.add("dense_candid_grid");
-    alternatives.add("burst_sequence");
-    alternatives.add("memorabilia_spread");
+    alternatives.add("collage");
+    alternatives.add("family_recap");
+    alternatives.add(project.type === "trip" ? "timeline" : "caption");
   }
 
   if (photos.every((photo) => isDetailMoment(photo))) {
-    alternatives.add("memorabilia_spread");
+    alternatives.add("family_recap");
   }
 
   return [...alternatives].slice(0, 3);
@@ -468,9 +405,8 @@ export function getPageWarnings(
   const warnings: string[] = [];
   const spreadType = normalizeSpreadType(page.style);
   const heroLike =
-    spreadType === "hero_full_bleed" ||
-    spreadType === "panorama_spread" ||
-    spreadType === "hero_support_strip";
+    spreadType === "full_bleed" ||
+    spreadType === "hero";
 
   for (const photo of photos) {
     const resolution = getLargestResolution(photo);
@@ -483,21 +419,21 @@ export function getPageWarnings(
 
     if (heroLike && longEdge < 1800) {
       warnings.push(`${photo.title} is low resolution for a hero-scale print spread.`);
-    } else if (spreadType === "four_up_grid" && longEdge < 1200) {
+    } else if (spreadType === "minimal_grid" && longEdge < 1200) {
       warnings.push(`${photo.title} should stay small or move to a denser support layout.`);
     }
   }
 
-  if (spreadType === "panorama_spread" && !photos.some((photo) => isPanoramaCandidate(photo))) {
-    warnings.push("This spread is set to panorama, but none of the selected photos are especially wide.");
+  if (spreadType === "full_bleed" && !photos.some((photo) => isPanoramaCandidate(photo)) && photos.length > 1) {
+    warnings.push("Full bleed works best when one image clearly dominates the page.");
   }
 
-  if (spreadType === "hero_full_bleed" && photos.length > 1) {
-    warnings.push("Hero full bleed works best with one dominant image. Extra photos should move to a support strip.");
+  if (spreadType === "hero" && photos.length > 4) {
+    warnings.push("Hero layouts flatten out when too many support photos are forced onto the page.");
   }
 
-  if (formatId === "11x8.5-landscape" && spreadType === "hero_support_strip") {
-    warnings.push("Landscape trim reduces footer space. Keep hero captions especially short here.");
+  if (formatId === "11x8.5-landscape" && spreadType === "caption") {
+    warnings.push("Landscape trim makes long side captions feel heavier. Keep the copy block short.");
   }
 
   return [...new Set(warnings)];
