@@ -500,7 +500,7 @@ function PreviewCanvasV2({
       case "hero_support_strip":
         return (
           <div className="space-y-4">
-            <div className="grid gap-4 lg:grid-cols-[1.18fr_0.82fr]">
+            <div className="grid gap-4 lg:grid-cols-[1.12fr_0.88fr]">
               <div className="rounded-[2rem] bg-[linear-gradient(180deg,rgba(255,255,255,0.94),rgba(245,237,231,0.92))] p-3">
                 <PreviewPhotoTile
                   photo={heroPhoto}
@@ -509,28 +509,31 @@ function PreviewCanvasV2({
                   emphasis="large"
                 />
               </div>
-              <div className="rounded-[2rem] border border-black/5 bg-[#fbf5ef] p-3.5">
-                <div className="space-y-3">
-                  {supportingPhotos.length
-                    ? supportingPhotos.map((photo, index) => (
-                        <div
-                          key={photo.id}
-                          className={index === 0 ? "" : "lg:ml-5 xl:ml-8"}
-                        >
-                          <PreviewPhotoTile
-                            photo={photo}
-                            accent={accent}
-                            className={index === 0 ? "min-h-[11rem]" : "min-h-[8.5rem]"}
-                          />
-                        </div>
-                      ))
-                    : (
-                        <div className="rounded-[1.6rem] border border-dashed border-black/10 bg-white/60 px-5 py-5 text-sm leading-7" style={{ color: themePresentation.textMuted }}>
-                          Add a few smaller context images here.
-                        </div>
-                      )}
+              <div className="rounded-[2rem] border border-black/5 bg-[#fbf5ef] p-4">
+                <div className="relative min-h-[27rem]">
+                  {supportingPhotos[0] ? (
+                    <div className="max-w-[13.5rem]">
+                      <PreviewPhotoTile photo={supportingPhotos[0]} accent={accent} className="min-h-[11rem]" />
+                    </div>
+                  ) : (
+                    <div className="rounded-[1.6rem] border border-dashed border-black/10 bg-white/60 px-5 py-5 text-sm leading-7" style={{ color: themePresentation.textMuted }}>
+                      Add a smaller supporting photo.
+                    </div>
+                  )}
+                  {supportingPhotos[1] ? (
+                    <div className="ml-auto mt-[-1.25rem] max-w-[15rem]">
+                      <PreviewPhotoTile photo={supportingPhotos[1]} accent={accent} className="min-h-[13rem]" />
+                    </div>
+                  ) : null}
+                  {supportingPhotos.slice(2).length ? (
+                    <div className="mt-4 rounded-[1.5rem] border border-black/5 bg-white/78 p-2.5">
+                      <PreviewPhotoGrid accent={accent} photos={supportingPhotos.slice(2)} minHeight="min-h-[6.5rem]" maxColumns={3} />
+                    </div>
+                  ) : null}
+                  <div className="absolute bottom-0 right-0">
+                    {renderNarrativeStrip("max-w-[14rem] bg-white/90")}
+                  </div>
                 </div>
-                <div className="mt-3 flex justify-end">{renderNarrativeStrip("max-w-[15rem] bg-white/88")}</div>
               </div>
             </div>
           </div>
@@ -538,19 +541,18 @@ function PreviewCanvasV2({
       case "balanced_two_up":
         return (
           <div className="space-y-4">
-            <div className="rounded-[2rem] border border-black/5 bg-white/74 p-4">
-              <div className="grid gap-4 lg:grid-cols-[1fr_auto_1fr]">
-                {photos.slice(0, 2).map((photo, index) => (
-                  <div key={photo.id} className={index === 1 ? "lg:col-start-3" : ""}>
+            <div className="rounded-[2rem] border border-black/5 bg-[linear-gradient(180deg,rgba(248,241,233,0.98),rgba(241,233,224,0.96))] p-5">
+              <div className="grid gap-6 lg:grid-cols-2 lg:items-center">
+                {photos.slice(0, 2).map((photo) => (
+                  <div key={photo.id} className="rounded-[1.7rem] border border-black/5 bg-white/92 p-3">
                     <PreviewPhotoTile
                       photo={photo}
                       accent={accent}
-                      className="min-h-[22rem] md:min-h-[27rem]"
+                      className="min-h-[21rem] md:min-h-[25rem]"
                       emphasis="large"
                     />
                   </div>
                 ))}
-                <div className="hidden w-px bg-[#dbc9bc] lg:block" />
               </div>
             </div>
             <div className="grid gap-4 lg:grid-cols-[1.18fr_0.82fr] lg:items-start">
@@ -576,7 +578,7 @@ function PreviewCanvasV2({
         return (
           <div className="space-y-4">
             <div className="rounded-[2rem] border border-black/5 bg-white/78 p-4">
-              <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+              <div className="grid gap-4 md:grid-cols-3">
                 {photos.map((photo) => (
                   <PreviewPhotoTile
                     key={photo.id}
@@ -585,8 +587,8 @@ function PreviewCanvasV2({
                     className={editorState.density >= 55 ? "min-h-[12rem]" : "min-h-[14rem]"}
                   />
                 ))}
-                <div className="xl:col-span-1">
-                  {renderNarrativeStrip("max-w-none bg-white/88")}
+                <div className="md:col-span-3 flex justify-center pt-1">
+                  {renderNarrativeStrip("max-w-[17rem] bg-white/88")}
                 </div>
               </div>
             </div>
@@ -629,6 +631,9 @@ function PreviewCanvasV2({
         return (
           <div className="space-y-4">
             <div className="rounded-[2.15rem] border border-black/5 bg-white/88 px-4 py-6">
+              <div className="mb-4 text-center text-[2rem] uppercase tracking-[0.16em]" style={{ color: themePresentation.textMuted }}>
+                {buildPreviewMastheadLabel(page, photos, project)}
+              </div>
               <PreviewPhotoTile
                 photo={heroPhoto}
                 accent={accent}
@@ -677,12 +682,16 @@ function PreviewCanvasV2({
         return (
           <div className="grid gap-4 lg:grid-cols-[1.22fr_0.78fr]">
             <div className="space-y-4">
-              <PreviewPhotoTile
-                photo={heroPhoto}
-                accent={accent}
-                className="min-h-[24rem] md:min-h-[30rem]"
-                emphasis="large"
-              />
+              <div className="rounded-[2rem] bg-[linear-gradient(180deg,rgba(244,237,229,0.98),rgba(237,229,219,0.96))] p-6">
+                <div className="mx-auto max-w-[20rem] rounded-[1.7rem] border border-black/5 bg-white/95 p-4 shadow-[0_14px_34px_rgba(45,32,22,0.08)]">
+                  <PreviewPhotoTile
+                    photo={heroPhoto}
+                    accent={accent}
+                    className="min-h-[20rem] md:min-h-[24rem]"
+                    emphasis="large"
+                  />
+                </div>
+              </div>
               {supportingPhotos.length ? (
                 <div className="rounded-[1.7rem] border border-black/5 bg-white/72 p-3">
                   <PreviewPhotoGrid accent={accent} photos={supportingPhotos} minHeight="min-h-[9rem]" maxColumns={2} />
@@ -1085,6 +1094,18 @@ function getSpreadLabel(style: BookPage["style"]) {
     APPROVED_SPREAD_LIBRARY.find((entry) => entry.id === normalizeSpreadType(style));
 
   return normalized?.label ?? style.replaceAll("_", " ");
+}
+
+function buildPreviewMastheadLabel(page: BookPage, photos: PhotoAsset[], project: Project) {
+  const source = photos.find((photo) => photo.locationLabel)?.locationLabel ?? page.title ?? project.title;
+  const words = source
+    .replace(/[^\w\s-]/g, " ")
+    .trim()
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2);
+
+  return words.join(" ").toUpperCase() || project.title.toUpperCase();
 }
 
 function buildPreviewOnPageCaption(page: BookPage) {

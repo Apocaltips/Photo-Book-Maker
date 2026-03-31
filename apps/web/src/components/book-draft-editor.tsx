@@ -2005,7 +2005,7 @@ function EditorSpreadCanvasV2({
       case "hero_support_strip":
         return (
           <div className="space-y-4">
-            <div className="grid gap-4 lg:grid-cols-[1.18fr_0.82fr]">
+            <div className="grid gap-4 lg:grid-cols-[1.12fr_0.88fr]">
               <div className="rounded-[2rem] bg-[linear-gradient(180deg,rgba(255,255,255,0.94),rgba(245,237,231,0.92))] p-3">
                 {leadPhoto
                   ? renderPhotoTile(leadPhoto, "min-h-[27rem] md:min-h-[32rem]", "hero")
@@ -2014,29 +2014,31 @@ function EditorSpreadCanvasV2({
                       "min-h-[27rem]",
                     )}
               </div>
-              <div className="rounded-[2rem] border border-[#00000010] bg-[#fbf5ef] p-3.5">
-                <div className="space-y-3">
-                  {secondaryPhotos.length
-                    ? secondaryPhotos.map((photo, index) => (
-                        <div
-                          key={photo.id}
-                          className={index === 0 ? "" : "lg:ml-5 xl:ml-8"}
-                        >
-                          {renderPhotoTile(
-                            photo,
-                            index === 0 ? "min-h-[11rem]" : "min-h-[8.75rem]",
-                            "compact",
-                          )}
-                        </div>
-                      ))
-                    : renderEmptyTile(
-                        "Support photos will stack here as a slim contextual strip.",
-                        "min-h-[10rem]",
-                        "quiet",
-                      )}
-                </div>
-                <div className="mt-3 flex justify-end">
-                  {renderNarrativeStrip("max-w-[15rem] bg-white/88 shadow-none")}
+              <div className="rounded-[2rem] border border-[#00000010] bg-[#fbf5ef] p-4">
+                <div className="relative min-h-[27rem]">
+                  {secondaryPhotos[0] ? (
+                    <div className="max-w-[13.5rem]">
+                      {renderPhotoTile(secondaryPhotos[0], "min-h-[11rem]", "compact")}
+                    </div>
+                  ) : (
+                    renderEmptyTile("Add a smaller supporting photo.", "min-h-[11rem]", "quiet")
+                  )}
+                  {secondaryPhotos[1] ? (
+                    <div className="ml-auto mt-[-1.25rem] max-w-[15rem]">
+                      {renderPhotoTile(secondaryPhotos[1], "min-h-[13rem]", "default")}
+                    </div>
+                  ) : null}
+                  {secondaryPhotos.slice(2).length ? (
+                    <div className="mt-4 rounded-[1.5rem] border border-[#00000010] bg-white/78 p-2.5">
+                      {renderGrid(secondaryPhotos.slice(2), {
+                        maxColumns: 3,
+                        minHeight: "min-h-[6.5rem]",
+                      })}
+                    </div>
+                  ) : null}
+                  <div className="absolute bottom-0 right-0">
+                    {renderNarrativeStrip("max-w-[14rem] bg-white/90 shadow-none")}
+                  </div>
                 </div>
               </div>
             </div>
@@ -2045,19 +2047,22 @@ function EditorSpreadCanvasV2({
       case "balanced_two_up":
         return (
           <div className="space-y-4">
-            <div className="rounded-[2rem] border border-[#00000010] bg-white/72 p-4">
-              <div className="grid gap-4 lg:grid-cols-[1fr_auto_1fr] lg:items-stretch">
-                {leadPhoto
-                  ? renderPhotoTile(leadPhoto, "min-h-[23rem] md:min-h-[27rem]", "hero")
-                  : renderEmptyTile("Balanced spreads need a first image.", "min-h-[23rem]")}
-                <div className="hidden w-px bg-[#dbc9bc] lg:block" />
-                {pagePhotos[1]
-                  ? renderPhotoTile(pagePhotos[1], "min-h-[23rem] md:min-h-[27rem]", "hero")
-                  : renderEmptyTile(
-                      "Add a second image or switch to a hero spread.",
-                      "min-h-[23rem]",
-                      "quiet",
-                    )}
+            <div className="rounded-[2rem] border border-[#00000010] bg-[linear-gradient(180deg,rgba(248,241,233,0.98),rgba(241,233,224,0.96))] p-5">
+              <div className="grid gap-6 lg:grid-cols-2 lg:items-center">
+                <div className="rounded-[1.7rem] border border-[#00000010] bg-white/92 p-3">
+                  {leadPhoto
+                    ? renderPhotoTile(leadPhoto, "min-h-[21rem] md:min-h-[25rem]", "hero")
+                    : renderEmptyTile("Balanced spreads need a first image.", "min-h-[21rem]")}
+                </div>
+                <div className="rounded-[1.7rem] border border-[#00000010] bg-white/92 p-3">
+                  {pagePhotos[1]
+                    ? renderPhotoTile(pagePhotos[1], "min-h-[21rem] md:min-h-[25rem]", "hero")
+                    : renderEmptyTile(
+                        "Add a second image or switch to a hero spread.",
+                        "min-h-[21rem]",
+                        "quiet",
+                      )}
+                </div>
               </div>
             </div>
             <div className="grid gap-4 lg:grid-cols-[1.18fr_0.82fr] lg:items-start">
@@ -2078,16 +2083,16 @@ function EditorSpreadCanvasV2({
         return (
           <div className="space-y-4">
             <div className="rounded-[2rem] border border-[#00000010] bg-white/78 p-4">
-              <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+              <div className="grid gap-4 md:grid-cols-3">
                 {pagePhotos.map((photo) =>
                   renderPhotoTile(
                     photo,
-                    controls.density >= 55 ? "min-h-[12rem]" : "min-h-[14rem]",
+                    controls.density >= 55 ? "min-h-[12.5rem]" : "min-h-[14rem]",
                     "default",
                   ),
                 )}
-                <div className="xl:col-span-1">
-                  {renderNarrativeStrip("max-w-none bg-[#fffaf5]")}
+                <div className="md:col-span-3 flex justify-center pt-1">
+                  {renderNarrativeStrip("max-w-[17rem] bg-[#fffaf5]")}
                 </div>
               </div>
             </div>
@@ -2139,6 +2144,9 @@ function EditorSpreadCanvasV2({
         return (
           <div className="space-y-4">
             <div className="rounded-[2.15rem] border border-[#00000010] bg-white/88 px-4 py-6">
+              <div className="mb-4 text-center text-[2rem] uppercase tracking-[0.16em] text-[#8b7c6f] md:text-[2.65rem]">
+                {buildMastheadLabel(page, pagePhotos, project)}
+              </div>
               {leadPhoto
                 ? renderPhotoTile(leadPhoto, "min-h-[22rem] md:min-h-[28rem]", "hero")
                 : renderEmptyTile(
@@ -2206,12 +2214,16 @@ function EditorSpreadCanvasV2({
         return (
           <div className="grid gap-4 lg:grid-cols-[1.22fr_0.78fr]">
             <div className="space-y-4">
-              {leadPhoto
-                ? renderPhotoTile(leadPhoto, "min-h-[22rem] md:min-h-[28rem]", "hero")
-                : renderEmptyTile(
-                    "Journal spreads still need one supporting frame.",
-                    "min-h-[22rem]",
-                  )}
+              <div className="rounded-[2rem] bg-[linear-gradient(180deg,rgba(244,237,229,0.98),rgba(237,229,219,0.96))] p-6">
+                <div className="mx-auto max-w-[20rem] rounded-[1.7rem] border border-[#00000010] bg-white/95 p-4 shadow-[0_14px_34px_rgba(45,32,22,0.08)]">
+                  {leadPhoto
+                    ? renderPhotoTile(leadPhoto, "min-h-[20rem] md:min-h-[24rem]", "hero")
+                    : renderEmptyTile(
+                        "Journal spreads still need one supporting frame.",
+                        "min-h-[20rem]",
+                      )}
+                </div>
+              </div>
               {secondaryPhotos.length ? (
                 <div className="rounded-[1.7rem] border border-[#00000010] bg-white/72 p-3">
                   {renderGrid(secondaryPhotos, {
@@ -2930,6 +2942,18 @@ function getPeopleLabel(project: Project, photos: PhotoAsset[]) {
   }
 
   return `${memberNames[0]} and company`;
+}
+
+function buildMastheadLabel(page: BookPage, photos: PhotoAsset[], project: Project) {
+  const source = photos.find((photo) => photo.locationLabel)?.locationLabel ?? page.title ?? project.title;
+  const words = source
+    .replace(/[^\w\s-]/g, " ")
+    .trim()
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2);
+
+  return words.join(" ").toUpperCase() || project.title.toUpperCase();
 }
 
 function getSpreadLabel(style: PageLayoutStyle | ApprovedSpreadType) {
