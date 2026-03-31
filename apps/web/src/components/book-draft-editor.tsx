@@ -1811,7 +1811,7 @@ function EditorSpreadCanvasV2({
   fontPreset,
   formatId,
   page,
-  pageIndex,
+  pageIndex: _pageIndex,
   pagePhotos,
   photoCaptions: _photoCaptions,
   project,
@@ -1841,18 +1841,6 @@ function EditorSpreadCanvasV2({
       : controls.density >= 45
         ? "min-h-[10rem]"
         : "min-h-[12rem]";
-
-  const renderNarrativeStrip = (className = "mx-auto max-w-[44rem]") => (
-    <EditorNarrativeStrip
-      className={className}
-      controls={controls}
-      fontPreset={fontPreset}
-      page={page}
-      pageIndex={pageIndex}
-      pagePhotos={pagePhotos}
-      project={project}
-    />
-  );
 
   const renderPhotoTile = (
     photo: PhotoAsset,
@@ -1920,25 +1908,36 @@ function EditorSpreadCanvasV2({
   const secondaryPhotos = pagePhotos.slice(1);
   const tertiaryPhotos = pagePhotos.slice(2);
   const displayCopy = buildDisplayCaption(page, pagePhotos, project, controls.captionTone);
-  const metaLines =
-    (controls.showDates || controls.showLocations) && pagePhotos.length
-      ? pagePhotos
-          .slice(0, 3)
-          .map((photo) =>
-            buildPhotoMetaLine(photo, project, controls.showDates, controls.showLocations),
-          )
-          .filter(Boolean)
-      : [];
-
-  const metaTags = metaLines.length ? (
-    <div className="mt-4 flex flex-wrap gap-2">
-      {metaLines.map((line, index) => (
-        <EditorTag key={`${line}-${index}`} className="bg-[#f7efe8] text-[#7b6f67]">
-          {line}
-        </EditorTag>
-      ))}
+  const renderStoryTile = (
+    className = "min-h-[10rem]",
+    eyebrow?: string,
+  ) => (
+    <div
+      className={`flex h-full flex-col justify-between rounded-[1.55rem] border border-[#00000010] bg-[linear-gradient(180deg,rgba(255,251,247,0.98),rgba(243,233,223,0.96))] px-4 py-4 ${className}`}
+    >
+      <div>
+        {eyebrow ? (
+          <div className="text-[10px] uppercase tracking-[0.22em] text-[#8b5a40]">
+            {eyebrow}
+          </div>
+        ) : null}
+        <h3
+          className="mt-2 max-w-[18ch] text-[1rem] leading-tight text-[#1f1814]"
+          style={{ fontFamily: fontPreset.headline }}
+        >
+          {truncateWords(page.title, 6)}
+        </h3>
+      </div>
+      {displayCopy ? (
+        <p
+          className="mt-3 max-w-[25ch] text-[11px] leading-[1.45] text-[#5d524b]"
+          style={{ fontFamily: fontPreset.body }}
+        >
+          {truncateSentence(displayCopy, 100)}
+        </p>
+      ) : null}
     </div>
-  ) : null;
+  );
 
   const preview = (() => {
     switch (spreadType) {
@@ -1947,31 +1946,41 @@ function EditorSpreadCanvasV2({
           <div className="space-y-4">
             <div className="rounded-[2.35rem] bg-[#15110d] p-2 shadow-[0_28px_60px_rgba(24,16,10,0.2)]">
               {leadPhoto
-                ? renderPhotoTile(leadPhoto, "min-h-[30rem] md:min-h-[36rem]", "hero")
+                ? (
+                    <EditorPhotoTile
+                      accent={accent}
+                      className="min-h-[30rem] md:min-h-[36rem]"
+                      overlay={{
+                        body: truncateSentence(displayCopy, 84),
+                        eyebrow: page.storyBeat.replaceAll("_", " "),
+                        title: truncateWords(page.title, 6),
+                      }}
+                      photo={leadPhoto}
+                      selected={leadPhoto.id === selectedPhotoId}
+                      treatment="hero"
+                      onSelect={() => onSelectPhoto(leadPhoto.id)}
+                    />
+                  )
                 : renderEmptyTile(
                     "Pick one dominant image for this hero spread.",
                     "min-h-[30rem]",
                   )}
             </div>
-            <div className="grid gap-4 lg:grid-cols-[1.12fr_0.88fr]">
+            <div
+              className={`grid gap-4 ${
+                secondaryPhotos.length >= 2 ? "md:grid-cols-3" : "md:grid-cols-2"
+              }`}
+            >
               {secondaryPhotos.length ? (
-                <div className="rounded-[1.9rem] border border-[#00000010] bg-[#fbf6f1] p-3">
-                  {renderGrid(secondaryPhotos, {
-                    maxColumns: 3,
-                    minHeight: "min-h-[8rem]",
-                  })}
-                </div>
+                secondaryPhotos.slice(0, 2).map((photo) =>
+                  renderPhotoTile(photo, "min-h-[9rem] md:min-h-[11rem]", "compact"),
+                )
               ) : (
                 <div className="rounded-[1.9rem] border border-dashed border-[#d8c9bf] bg-white/58 px-5 py-5 text-sm leading-7 text-[#776b63]">
                   Leave the opener quiet if the lead image is already doing the work.
                 </div>
               )}
-              <div className="flex items-end justify-end">
-                <div className="space-y-3">
-                  {renderNarrativeStrip("max-w-[13rem] bg-white/90")}
-                  {metaTags}
-                </div>
-              </div>
+              {renderStoryTile("min-h-[9rem] md:min-h-[11rem]", "opening note")}
             </div>
           </div>
         );
@@ -1981,38 +1990,37 @@ function EditorSpreadCanvasV2({
             <div className="grid gap-4 lg:grid-cols-[1.12fr_0.88fr]">
               <div className="rounded-[2rem] bg-[linear-gradient(180deg,rgba(255,255,255,0.94),rgba(245,237,231,0.92))] p-3">
                 {leadPhoto
-                  ? renderPhotoTile(leadPhoto, "min-h-[27rem] md:min-h-[32rem]", "hero")
+                  ? (
+                      <EditorPhotoTile
+                        accent={accent}
+                        className="min-h-[27rem] md:min-h-[32rem]"
+                        overlay={{
+                          body: truncateSentence(displayCopy, 80),
+                          eyebrow: "story opener",
+                          title: truncateWords(page.title, 6),
+                        }}
+                        photo={leadPhoto}
+                        selected={leadPhoto.id === selectedPhotoId}
+                        treatment="hero"
+                        onSelect={() => onSelectPhoto(leadPhoto.id)}
+                      />
+                    )
                   : renderEmptyTile(
                       "Choose a hero image for the opening column.",
                       "min-h-[27rem]",
                     )}
               </div>
-              <div className="rounded-[2rem] border border-[#00000010] bg-[#fbf5ef] p-4">
-                <div className="relative min-h-[27rem]">
-                  {secondaryPhotos[0] ? (
-                    <div className="max-w-[13.5rem]">
-                      {renderPhotoTile(secondaryPhotos[0], "min-h-[11rem]", "compact")}
-                    </div>
-                  ) : (
-                    renderEmptyTile("Add a smaller supporting photo.", "min-h-[11rem]", "quiet")
-                  )}
-                  {secondaryPhotos[1] ? (
-                    <div className="ml-auto mt-[-1.25rem] max-w-[15rem]">
-                      {renderPhotoTile(secondaryPhotos[1], "min-h-[13rem]", "default")}
-                    </div>
-                  ) : null}
-                  {secondaryPhotos.slice(2).length ? (
-                    <div className="mt-4 rounded-[1.5rem] border border-[#00000010] bg-white/78 p-2.5">
-                      {renderGrid(secondaryPhotos.slice(2), {
-                        maxColumns: 3,
-                        minHeight: "min-h-[6.5rem]",
-                      })}
-                    </div>
-                  ) : null}
-                  <div className="absolute bottom-0 right-0">
-                    {renderNarrativeStrip("max-w-[14rem] bg-white/90 shadow-none")}
-                  </div>
-                </div>
+              <div className="grid min-h-[27rem] gap-3 rounded-[2rem] border border-[#00000010] bg-[#fbf5ef] p-4 md:grid-cols-2 md:auto-rows-[minmax(8rem,1fr)]">
+                {secondaryPhotos[0]
+                  ? renderPhotoTile(secondaryPhotos[0], "min-h-[10rem] h-full", "compact")
+                  : renderEmptyTile("Add a smaller supporting photo.", "min-h-[10rem]", "quiet")}
+                {secondaryPhotos[1]
+                  ? renderPhotoTile(secondaryPhotos[1], "min-h-[10rem] h-full", "default")
+                  : renderStoryTile("min-h-[10rem] h-full", "chapter note")}
+                {secondaryPhotos[2]
+                  ? renderPhotoTile(secondaryPhotos[2], "min-h-[10rem] h-full", "compact")
+                  : renderStoryTile("min-h-[10rem] h-full", "story beat")}
+                {renderStoryTile("min-h-[10rem] h-full", "curator note")}
               </div>
             </div>
           </div>
@@ -2038,17 +2046,17 @@ function EditorSpreadCanvasV2({
                 </div>
               </div>
             </div>
-            <div className="grid gap-4 lg:grid-cols-[1.18fr_0.82fr] lg:items-start">
+            <div className={`grid gap-4 ${tertiaryPhotos.length >= 2 ? "md:grid-cols-3" : "md:grid-cols-2"} lg:items-start`}>
               {tertiaryPhotos.length ? (
-                <div className="rounded-[1.8rem] border border-[#00000010] bg-[#fffaf4] p-3">
-                  {renderGrid(tertiaryPhotos, { maxColumns: 3, minHeight: "min-h-[8rem]" })}
-                </div>
+                tertiaryPhotos.slice(0, 2).map((photo) =>
+                  renderPhotoTile(photo, "min-h-[9rem] md:min-h-[11rem]", "compact"),
+                )
               ) : (
                 <div className="rounded-[1.8rem] border border-dashed border-[#d9cabf] bg-white/58 px-5 py-4 text-sm leading-7 text-[#776b63]">
                   Leave the pair to breathe if the two main images already carry the spread.
                 </div>
               )}
-              <div className="flex justify-end">{renderNarrativeStrip("max-w-[14rem] bg-white/88")}</div>
+              {renderStoryTile("min-h-[9rem] md:min-h-[11rem]", "paired memory")}
             </div>
           </div>
         );
@@ -2064,11 +2072,10 @@ function EditorSpreadCanvasV2({
                     "default",
                   ),
                 )}
-                <div className="min-h-[12.5rem]">
-                  <div className="flex h-full items-end">
-                    {renderNarrativeStrip("max-w-none bg-[#fffaf5]")}
-                  </div>
-                </div>
+                {renderStoryTile(
+                  controls.density >= 55 ? "min-h-[12.5rem]" : "min-h-[14rem]",
+                  "spread note",
+                )}
               </div>
             </div>
           </div>
@@ -2105,9 +2112,7 @@ function EditorSpreadCanvasV2({
                       "Add food, candids, and details to make this spread feel collected.",
                       "min-h-[12rem]",
                     )}
-                <div className="md:col-span-2 md:self-end">
-                  {renderNarrativeStrip("max-w-none bg-white/90")}
-                </div>
+                <div className="md:col-span-2">{renderStoryTile("min-h-[9rem] h-full bg-white/90", "collected note")}</div>
               </div>
             </div>
           </div>
@@ -2139,7 +2144,7 @@ function EditorSpreadCanvasV2({
                   Panorama pages work best when they stay quiet.
                 </div>
               )}
-              <div className="flex justify-end">{renderNarrativeStrip("max-w-[12.5rem] bg-white/88")}</div>
+              <div className="flex justify-end">{renderStoryTile("min-h-[9rem] max-w-[12.5rem] bg-white/88", "route note")}</div>
             </div>
           </div>
         );
@@ -2209,7 +2214,7 @@ function EditorSpreadCanvasV2({
                 </div>
               )}
               <div className="space-y-3">
-                {renderNarrativeStrip("max-w-[13rem] bg-[#fffdf8] shadow-none")}
+                {renderStoryTile("min-h-[9rem] max-w-[13rem] bg-[#fffdf8]", "journal note")}
                 {controls.showHandwrittenNotes ? (
                   <div
                     className="rounded-[1.2rem] border border-dashed border-[#dccfc4] bg-white/75 px-4 py-3 text-[11px] leading-5 text-[#7a6d65]"
@@ -2236,7 +2241,7 @@ function EditorSpreadCanvasV2({
               </div>
               <div className="space-y-3 rounded-[2rem] border border-[#00000010] bg-[linear-gradient(180deg,rgba(252,246,239,0.98),rgba(246,237,228,0.96))] p-4">
                 {controls.showMemorabilia ? <MemorabiliaStrip photos={secondaryPhotos} /> : null}
-                <div className="flex justify-end">{renderNarrativeStrip("max-w-[14rem] bg-white/82 shadow-none")}</div>
+                <div className="flex justify-end">{renderStoryTile("min-h-[8.5rem] max-w-[14rem] bg-white/82", "keepsake note")}</div>
               </div>
             </div>
           </div>
@@ -2259,9 +2264,7 @@ function EditorSpreadCanvasV2({
                       "Use repeated angles, repeated people, or repeated motifs here.",
                       "min-h-[12rem]",
                     )}
-                <div className="md:col-span-1 md:self-end">
-                  {renderNarrativeStrip("max-w-none bg-white/90")}
-                </div>
+                {renderStoryTile("min-h-[11rem] md:min-h-[13rem] bg-white/90", "repeat note")}
               </div>
             </div>
           </div>
@@ -2296,9 +2299,7 @@ function EditorSpreadCanvasV2({
                       "Burst spreads need a short run of repeated frames.",
                       "min-h-[14rem]",
                     )}
-                <div className="md:col-span-2 md:self-end">
-                  {renderNarrativeStrip("max-w-none bg-white/90")}
-                </div>
+                <div className="md:col-span-2">{renderStoryTile("min-h-[8rem] md:min-h-[9rem] h-full bg-white/90", "sequence note")}</div>
               </div>
             </div>
           </div>
@@ -2309,7 +2310,7 @@ function EditorSpreadCanvasV2({
             <div className="grid gap-4 lg:grid-cols-[0.7fr_1.3fr]">
               <div className="space-y-3 rounded-[2rem] border border-[#00000010] bg-[linear-gradient(180deg,rgba(250,246,240,0.98),rgba(245,236,227,0.96))] p-4">
                 <MapTimelineCard project={project} pagePhotos={pagePhotos} />
-                {renderNarrativeStrip("max-w-none bg-white/82 shadow-none")}
+                {renderStoryTile("min-h-[9rem] max-w-none bg-white/82", "route note")}
               </div>
               <div className="space-y-4">
                 {leadPhoto
@@ -2344,7 +2345,7 @@ function EditorSpreadCanvasV2({
               </div>
               <div className="space-y-4">
                 <div>{renderGrid(secondaryPhotos, { maxColumns: 2 })}</div>
-                {renderNarrativeStrip("max-w-none")}
+                {renderStoryTile("min-h-[10rem] max-w-none", "spread note")}
               </div>
             </div>
           </div>
@@ -2417,6 +2418,7 @@ function EditorNarrativeStrip({
 function EditorPhotoTile({
   accent,
   className = "min-h-[16rem]",
+  overlay,
   photo,
   selected,
   treatment = "default",
@@ -2424,6 +2426,7 @@ function EditorPhotoTile({
 }: {
   accent: string;
   className?: string;
+  overlay?: { body?: string; eyebrow?: string; title?: string };
   photo: PhotoAsset;
   selected: boolean;
   treatment?: "default" | "hero" | "compact";
@@ -2454,6 +2457,25 @@ function EditorPhotoTile({
         {selected ? (
           <div className="absolute right-3 top-3 rounded-full border border-[#fff0e6] bg-[#fff7f1] px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.18em] text-[#8f4f2e]">
             selected
+          </div>
+        ) : null}
+        {overlay ? (
+          <div className="absolute inset-x-4 bottom-4 max-w-[18rem] rounded-[1.2rem] border border-white/18 bg-[rgba(20,14,10,0.46)] px-4 py-3 text-[#fff8f2] shadow-[0_10px_24px_rgba(20,14,10,0.14)] backdrop-blur-sm">
+            {overlay.eyebrow ? (
+              <div className="text-[10px] uppercase tracking-[0.22em] text-[#f4dfcb]">
+                {overlay.eyebrow}
+              </div>
+            ) : null}
+            {overlay.title ? (
+              <div className="mt-1 text-[1rem] leading-tight font-semibold">
+                {overlay.title}
+              </div>
+            ) : null}
+            {overlay.body ? (
+              <div className="mt-1.5 text-[11px] leading-[1.45] text-[#f5e7db]">
+                {overlay.body}
+              </div>
+            ) : null}
           </div>
         ) : null}
         {treatment === "hero" && selected ? (

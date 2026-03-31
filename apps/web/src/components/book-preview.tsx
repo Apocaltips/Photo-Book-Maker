@@ -438,21 +438,30 @@ function PreviewCanvasV2({
   const heroPhoto = photos[0];
   const supportingPhotos = photos.slice(1);
   const tertiaryPhotos = photos.slice(2);
-  const metaTags = photos.length ? (
-    <div className="mt-4 flex flex-wrap gap-2">
-      {photos.slice(0, 3).map((photo) => (
-        <PreviewTag key={photo.id}>{photo.locationLabel ?? project.title}</PreviewTag>
-      ))}
+  const previewCopy = buildPreviewOnPageCaption(page);
+  const renderStoryTile = (
+    className = "min-h-[10rem]",
+    eyebrow?: string,
+  ) => (
+    <div
+      className={`flex h-full flex-col justify-between rounded-[1.55rem] border border-black/5 bg-[linear-gradient(180deg,rgba(255,251,247,0.98),rgba(243,233,223,0.96))] px-4 py-4 ${className}`}
+    >
+      <div>
+        {eyebrow ? (
+          <div className="text-[10px] uppercase tracking-[0.22em]" style={{ color: themePresentation.textMuted }}>
+            {eyebrow}
+          </div>
+        ) : null}
+        <h3 className="mt-2 max-w-[18ch] text-[1rem] font-semibold leading-tight" style={{ color: themePresentation.textColor }}>
+          {truncateWords(page.title, 6)}
+        </h3>
+      </div>
+      {previewCopy ? (
+        <p className="mt-3 max-w-[25ch] text-[11px] leading-[1.45]" style={{ color: themePresentation.textMuted }}>
+          {truncateSentence(previewCopy, 100)}
+        </p>
+      ) : null}
     </div>
-  ) : null;
-  const renderNarrativeStrip = (className = "mx-auto max-w-[44rem]") => (
-    <PreviewNarrativeStrip
-      className={className}
-      page={page}
-      photos={photos}
-      project={project}
-      themePresentation={themePresentation}
-    />
   );
 
   const previewBody = (() => {
@@ -466,25 +475,25 @@ function PreviewCanvasV2({
                 accent={accent}
                 className="min-h-[26rem] md:min-h-[33rem]"
                 emphasis="large"
+                overlay={{
+                  body: truncateSentence(previewCopy, 84),
+                  eyebrow: page.storyBeat.replaceAll("_", " "),
+                  title: truncateWords(page.title, 6),
+                }}
               />
             </div>
-            <div className="grid gap-4 lg:grid-cols-[1.12fr_0.88fr]">
+            <div className={`grid gap-4 ${supportingPhotos.length >= 2 ? "md:grid-cols-3" : "md:grid-cols-2"}`}>
               {supportingPhotos.length ? (
-                <div className="rounded-[1.8rem] border border-black/5 bg-white/68 p-3">
-                  <PreviewPhotoGrid
+                supportingPhotos.slice(0, 2).map((photo) => (
+                  <PreviewPhotoTile
+                    key={photo.id}
+                    photo={photo}
                     accent={accent}
-                    photos={supportingPhotos}
-                    minHeight="min-h-[8rem]"
-                    maxColumns={3}
+                    className="min-h-[9rem] md:min-h-[11rem]"
                   />
-                </div>
+                ))
               ) : null}
-              <div className="flex items-end justify-end">
-                <div className="space-y-3">
-                  {renderNarrativeStrip("max-w-[13rem] bg-white/90")}
-                  {metaTags}
-                </div>
-              </div>
+              {renderStoryTile("min-h-[9rem] md:min-h-[11rem]", "opening note")}
             </div>
           </div>
         );
@@ -498,33 +507,32 @@ function PreviewCanvasV2({
                   accent={accent}
                   className="min-h-[25rem] md:min-h-[31rem]"
                   emphasis="large"
+                  overlay={{
+                    body: truncateSentence(previewCopy, 80),
+                    eyebrow: "story opener",
+                    title: truncateWords(page.title, 6),
+                  }}
                 />
               </div>
-              <div className="rounded-[2rem] border border-black/5 bg-[#fbf5ef] p-4">
-                <div className="relative min-h-[27rem]">
-                  {supportingPhotos[0] ? (
-                    <div className="max-w-[13.5rem]">
-                      <PreviewPhotoTile photo={supportingPhotos[0]} accent={accent} className="min-h-[11rem]" />
-                    </div>
-                  ) : (
-                    <div className="rounded-[1.6rem] border border-dashed border-black/10 bg-white/60 px-5 py-5 text-sm leading-7" style={{ color: themePresentation.textMuted }}>
-                      Add a smaller supporting photo.
-                    </div>
-                  )}
-                  {supportingPhotos[1] ? (
-                    <div className="ml-auto mt-[-1.25rem] max-w-[15rem]">
-                      <PreviewPhotoTile photo={supportingPhotos[1]} accent={accent} className="min-h-[13rem]" />
-                    </div>
-                  ) : null}
-                  {supportingPhotos.slice(2).length ? (
-                    <div className="mt-4 rounded-[1.5rem] border border-black/5 bg-white/78 p-2.5">
-                      <PreviewPhotoGrid accent={accent} photos={supportingPhotos.slice(2)} minHeight="min-h-[6.5rem]" maxColumns={3} />
-                    </div>
-                  ) : null}
-                  <div className="absolute bottom-0 right-0">
-                    {renderNarrativeStrip("max-w-[14rem] bg-white/90")}
+              <div className="grid min-h-[27rem] gap-3 rounded-[2rem] border border-black/5 bg-[#fbf5ef] p-4 md:grid-cols-2 md:auto-rows-[minmax(8rem,1fr)]">
+                {supportingPhotos[0] ? (
+                  <PreviewPhotoTile photo={supportingPhotos[0]} accent={accent} className="min-h-[10rem] h-full" />
+                ) : (
+                  <div className="rounded-[1.6rem] border border-dashed border-black/10 bg-white/60 px-5 py-5 text-sm leading-7" style={{ color: themePresentation.textMuted }}>
+                    Add a smaller supporting photo.
                   </div>
-                </div>
+                )}
+                {supportingPhotos[1] ? (
+                  <PreviewPhotoTile photo={supportingPhotos[1]} accent={accent} className="min-h-[10rem] h-full" />
+                ) : (
+                  renderStoryTile("min-h-[10rem] h-full", "chapter note")
+                )}
+                {supportingPhotos[2] ? (
+                  <PreviewPhotoTile photo={supportingPhotos[2]} accent={accent} className="min-h-[10rem] h-full" />
+                ) : (
+                  renderStoryTile("min-h-[10rem] h-full", "story beat")
+                )}
+                {renderStoryTile("min-h-[10rem] h-full", "curator note")}
               </div>
             </div>
           </div>
@@ -546,22 +554,22 @@ function PreviewCanvasV2({
                 ))}
               </div>
             </div>
-            <div className="grid gap-4 lg:grid-cols-[1.18fr_0.82fr] lg:items-start">
+            <div className={`grid gap-4 ${tertiaryPhotos.length >= 2 ? "md:grid-cols-3" : "md:grid-cols-2"} lg:items-start`}>
               {tertiaryPhotos.length ? (
-                <div className="rounded-[1.8rem] border border-black/5 bg-[#fffaf4] p-3">
-                  <PreviewPhotoGrid
+                tertiaryPhotos.slice(0, 2).map((photo) => (
+                  <PreviewPhotoTile
+                    key={photo.id}
+                    photo={photo}
                     accent={accent}
-                    photos={tertiaryPhotos}
-                    minHeight="min-h-[8rem]"
-                    maxColumns={3}
+                    className="min-h-[9rem] md:min-h-[11rem]"
                   />
-                </div>
+                ))
               ) : (
                 <div className="rounded-[1.8rem] border border-dashed border-black/10 bg-white/58 px-5 py-4 text-sm leading-7" style={{ color: themePresentation.textMuted }}>
                   Let the pair breathe when the two main frames already carry the spread.
                 </div>
               )}
-              <div className="flex justify-end">{renderNarrativeStrip("max-w-[14rem] bg-white/88")}</div>
+              {renderStoryTile("min-h-[9rem] md:min-h-[11rem]", "paired memory")}
             </div>
           </div>
         );
@@ -578,11 +586,10 @@ function PreviewCanvasV2({
                     className={editorState.density >= 55 ? "min-h-[12rem]" : "min-h-[14rem]"}
                   />
                 ))}
-                <div className="min-h-[12rem]">
-                  <div className="flex h-full items-end">
-                    {renderNarrativeStrip("max-w-none bg-white/88")}
-                  </div>
-                </div>
+                {renderStoryTile(
+                  editorState.density >= 55 ? "min-h-[12rem]" : "min-h-[14rem]",
+                  "spread note",
+                )}
               </div>
             </div>
           </div>
@@ -610,9 +617,7 @@ function PreviewCanvasV2({
                     />
                   </div>
                 ))}
-                <div className="md:col-span-2 md:self-end">
-                  {renderNarrativeStrip("max-w-none bg-white/88")}
-                </div>
+                <div className="md:col-span-2">{renderStoryTile("min-h-[9rem] h-full bg-white/88", "collected note")}</div>
               </div>
             </div>
           </div>
@@ -637,7 +642,7 @@ function PreviewCanvasV2({
                   <PreviewPhotoGrid accent={accent} photos={supportingPhotos} minHeight="min-h-[7.5rem]" maxColumns={4} />
                 </div>
               ) : null}
-              <div className="flex justify-end">{renderNarrativeStrip("max-w-[12.5rem] bg-white/88")}</div>
+              <div className="flex justify-end">{renderStoryTile("min-h-[9rem] max-w-[12.5rem] bg-white/88", "route note")}</div>
             </div>
           </div>
         );
@@ -692,7 +697,7 @@ function PreviewCanvasV2({
                 </div>
               )}
               <div className="space-y-3">
-                {renderNarrativeStrip("max-w-[13rem] bg-[#fffdf8]")}
+                {renderStoryTile("min-h-[9rem] max-w-[13rem] bg-[#fffdf8]", "journal note")}
                 {editorState.showHandwrittenNotes ? (
                   <div className="rounded-[1.2rem] border border-dashed border-[#dccfc4] bg-white/75 px-4 py-3 text-[11px] leading-5" style={{ color: themePresentation.textMuted }}>
                     Handwritten note block
@@ -723,7 +728,7 @@ function PreviewCanvasV2({
                     </div>
                   ))}
                 </div>
-                <div className="flex justify-end">{renderNarrativeStrip("max-w-[14rem] bg-white/82")}</div>
+                <div className="flex justify-end">{renderStoryTile("min-h-[8.5rem] max-w-[14rem] bg-white/82", "keepsake note")}</div>
               </div>
             </div>
           </div>
@@ -738,9 +743,7 @@ function PreviewCanvasV2({
                     <PreviewPhotoTile photo={photo} accent={accent} className="min-h-[11rem] md:min-h-[13rem]" />
                   </div>
                 ))}
-                <div className="md:col-span-1 md:self-end">
-                  {renderNarrativeStrip("max-w-none bg-white/88")}
-                </div>
+                {renderStoryTile("min-h-[11rem] md:min-h-[13rem] bg-white/88", "repeat note")}
               </div>
             </div>
           </div>
@@ -765,9 +768,7 @@ function PreviewCanvasV2({
                     </div>
                   );
                 })}
-                <div className="md:col-span-2 md:self-end">
-                  {renderNarrativeStrip("max-w-none bg-white/88")}
-                </div>
+                <div className="md:col-span-2">{renderStoryTile("min-h-[8rem] md:min-h-[9rem] h-full bg-white/88", "sequence note")}</div>
               </div>
             </div>
           </div>
@@ -793,7 +794,7 @@ function PreviewCanvasV2({
                   </div>
                   <div className="mt-4 h-24 rounded-[1.2rem] border border-dashed border-black/10 bg-[linear-gradient(180deg,rgba(255,255,255,0.65),rgba(247,236,225,0.78))]" />
                 </div>
-                {renderNarrativeStrip("max-w-none bg-white/82")}
+                {renderStoryTile("min-h-[9rem] max-w-none bg-white/82", "route note")}
               </div>
               <div className="space-y-4">
                 <PreviewPhotoTile
@@ -818,7 +819,7 @@ function PreviewCanvasV2({
               <PreviewPhotoTile photo={heroPhoto} accent={accent} className="min-h-[24rem] md:min-h-[30rem]" emphasis="large" />
               <div className="space-y-4">
                 <PreviewPhotoGrid accent={accent} photos={supportingPhotos} minHeight="min-h-[10rem]" maxColumns={1} />
-                {renderNarrativeStrip("max-w-none")}
+                {renderStoryTile("min-h-[10rem] max-w-none", "spread note")}
               </div>
             </div>
           </div>
@@ -969,11 +970,13 @@ function PreviewPhotoTile({
   accent,
   className,
   emphasis,
+  overlay,
   photo,
 }: {
   accent: string;
   className: string;
   emphasis?: "large";
+  overlay?: { body?: string; eyebrow?: string; title?: string };
   photo?: PhotoAsset;
 }) {
   return (
@@ -992,6 +995,25 @@ function PreviewPhotoTile({
         ) : (
           <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(255,255,255,0.92),rgba(232,221,212,0.98))]" />
         )}
+        {overlay ? (
+          <div className="absolute inset-x-4 bottom-4 max-w-[18rem] rounded-[1.2rem] border border-white/18 bg-[rgba(20,14,10,0.46)] px-4 py-3 text-[#fff8f2] shadow-[0_10px_24px_rgba(20,14,10,0.14)] backdrop-blur-sm">
+            {overlay.eyebrow ? (
+              <div className="text-[10px] uppercase tracking-[0.22em] text-[#f4dfcb]">
+                {overlay.eyebrow}
+              </div>
+            ) : null}
+            {overlay.title ? (
+              <div className="mt-1 text-[1rem] leading-tight font-semibold">
+                {overlay.title}
+              </div>
+            ) : null}
+            {overlay.body ? (
+              <div className="mt-1.5 text-[11px] leading-[1.45] text-[#f5e7db]">
+                {overlay.body}
+              </div>
+            ) : null}
+          </div>
+        ) : null}
         {emphasis === "large" ? (
           <div className="absolute inset-0 bg-[linear-gradient(180deg,rgba(16,11,8,0.02),rgba(16,11,8,0.14))]" />
         ) : null}
