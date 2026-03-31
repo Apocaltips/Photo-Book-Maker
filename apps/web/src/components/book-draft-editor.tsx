@@ -1464,7 +1464,7 @@ function EditorSpreadCanvas({
   page,
   pageIndex,
   pagePhotos,
-  photoCaptions,
+  photoCaptions: _photoCaptions,
   project,
   selectedPhotoId,
   styleMode,
@@ -1514,14 +1514,9 @@ function EditorSpreadCanvas({
     <EditorPhotoTile
       key={photo.id}
       accent={accent}
-      caption={photoCaptions[photo.id]}
       className={className}
-      fontPreset={fontPreset}
       photo={photo}
-      project={project}
       selected={photo.id === selectedPhotoId}
-      showDates={controls.showDates}
-      showLocations={controls.showLocations}
       treatment={treatment}
       onSelect={() => onSelectPhoto(photo.id)}
     />
@@ -1818,7 +1813,7 @@ function EditorSpreadCanvasV2({
   page,
   pageIndex,
   pagePhotos,
-  photoCaptions,
+  photoCaptions: _photoCaptions,
   project,
   selectedPhotoId,
   styleMode,
@@ -1838,8 +1833,6 @@ function EditorSpreadCanvasV2({
   onSelectPhoto: (photoId: string) => void;
 }) {
   const spreadType = normalizeSpreadType(page.style);
-  const style =
-    STYLE_MODE_OPTIONS.find((entry) => entry.id === styleMode) ?? STYLE_MODE_OPTIONS[0];
   const columns =
     controls.density >= 75 ? 4 : controls.density >= 55 ? 3 : controls.density >= 35 ? 2 : 1;
   const supportHeight =
@@ -1869,14 +1862,9 @@ function EditorSpreadCanvasV2({
     <EditorPhotoTile
       key={photo.id}
       accent={accent}
-      caption={photoCaptions[photo.id]}
       className={className}
-      fontPreset={fontPreset}
       photo={photo}
-      project={project}
       selected={photo.id === selectedPhotoId}
-      showDates={controls.showDates}
-      showLocations={controls.showLocations}
       treatment={treatment}
       onSelect={() => onSelectPhoto(photo.id)}
     />
@@ -1965,30 +1953,9 @@ function EditorSpreadCanvasV2({
                     "min-h-[30rem]",
                   )}
             </div>
-            <div className="grid gap-4 lg:grid-cols-[0.88fr_1.12fr]">
-              <div className="rounded-[1.9rem] border border-[#00000010] bg-white/78 px-5 py-5">
-                <div className="text-[11px] uppercase tracking-[0.24em] text-[#8b5a40]">
-                  Opening statement
-                </div>
-                <h3
-                  className="mt-3 text-3xl leading-[0.95] text-[#1f1814]"
-                  style={{ fontFamily: fontPreset.headline }}
-                >
-                  {page.title}
-                </h3>
-                <p
-                  className="mt-4 text-sm leading-7 text-[#61554d]"
-                  style={{ fontFamily: fontPreset.body }}
-                >
-                  {displayCopy}
-                </p>
-                {metaTags}
-              </div>
+            <div className="grid gap-4 lg:grid-cols-[1.12fr_0.88fr]">
               {secondaryPhotos.length ? (
                 <div className="rounded-[1.9rem] border border-[#00000010] bg-[#fbf6f1] p-3">
-                  <div className="mb-3 text-[11px] uppercase tracking-[0.2em] text-[#7d7067]">
-                    Quiet follow-through
-                  </div>
                   {renderGrid(secondaryPhotos, {
                     maxColumns: 3,
                     minHeight: "min-h-[8rem]",
@@ -1999,6 +1966,12 @@ function EditorSpreadCanvasV2({
                   Leave the opener quiet if the lead image is already doing the work.
                 </div>
               )}
+              <div className="flex items-end justify-end">
+                <div className="space-y-3">
+                  {renderNarrativeStrip("max-w-[13rem] bg-white/90")}
+                  {metaTags}
+                </div>
+              </div>
             </div>
           </div>
         );
@@ -2084,15 +2057,17 @@ function EditorSpreadCanvasV2({
           <div className="space-y-4">
             <div className="rounded-[2rem] border border-[#00000010] bg-white/78 p-4">
               <div className="grid gap-4 md:grid-cols-3">
-                {pagePhotos.map((photo) =>
+                {pagePhotos.slice(0, 5).map((photo) =>
                   renderPhotoTile(
                     photo,
                     controls.density >= 55 ? "min-h-[12.5rem]" : "min-h-[14rem]",
                     "default",
                   ),
                 )}
-                <div className="md:col-span-3 flex justify-center pt-1">
-                  {renderNarrativeStrip("max-w-[17rem] bg-[#fffaf5]")}
+                <div className="min-h-[12.5rem]">
+                  <div className="flex h-full items-end">
+                    {renderNarrativeStrip("max-w-none bg-[#fffaf5]")}
+                  </div>
                 </div>
               </div>
             </div>
@@ -2102,9 +2077,6 @@ function EditorSpreadCanvasV2({
         return (
           <div className="space-y-4">
             <div className="rounded-[2rem] border border-[#00000010] bg-[linear-gradient(180deg,rgba(255,249,243,0.98),rgba(247,238,229,0.96))] p-4">
-              <div className="mb-4 text-[11px] uppercase tracking-[0.22em] text-[#8b5a40]">
-                Collected candids
-              </div>
               <div className="grid gap-3 md:grid-cols-6">
                 {pagePhotos.length
                   ? pagePhotos.map((photo, index) => (
@@ -2167,7 +2139,7 @@ function EditorSpreadCanvasV2({
                   Panorama pages work best when they stay quiet.
                 </div>
               )}
-              <div className="flex justify-end">{renderNarrativeStrip("max-w-[14rem] bg-white/88")}</div>
+              <div className="flex justify-end">{renderNarrativeStrip("max-w-[12.5rem] bg-white/88")}</div>
             </div>
           </div>
         );
@@ -2212,18 +2184,18 @@ function EditorSpreadCanvasV2({
         );
       case "photo_journal":
         return (
-          <div className="grid gap-4 lg:grid-cols-[1.22fr_0.78fr]">
-            <div className="space-y-4">
-              <div className="rounded-[2rem] bg-[linear-gradient(180deg,rgba(244,237,229,0.98),rgba(237,229,219,0.96))] p-6">
-                <div className="mx-auto max-w-[20rem] rounded-[1.7rem] border border-[#00000010] bg-white/95 p-4 shadow-[0_14px_34px_rgba(45,32,22,0.08)]">
-                  {leadPhoto
-                    ? renderPhotoTile(leadPhoto, "min-h-[20rem] md:min-h-[24rem]", "hero")
-                    : renderEmptyTile(
-                        "Journal spreads still need one supporting frame.",
-                        "min-h-[20rem]",
-                      )}
-                </div>
+          <div className="space-y-4">
+            <div className="rounded-[2rem] bg-[linear-gradient(180deg,rgba(244,237,229,0.98),rgba(237,229,219,0.96))] p-6">
+              <div className="mx-auto max-w-[24rem] rounded-[1.7rem] border border-[#00000010] bg-white/95 p-4 shadow-[0_14px_34px_rgba(45,32,22,0.08)]">
+                {leadPhoto
+                  ? renderPhotoTile(leadPhoto, "min-h-[24rem] md:min-h-[29rem]", "hero")
+                  : renderEmptyTile(
+                      "Journal spreads still need one supporting frame.",
+                      "min-h-[24rem]",
+                    )}
               </div>
+            </div>
+            <div className="grid gap-4 lg:grid-cols-[1.18fr_0.82fr] lg:items-end">
               {secondaryPhotos.length ? (
                 <div className="rounded-[1.7rem] border border-[#00000010] bg-white/72 p-3">
                   {renderGrid(secondaryPhotos, {
@@ -2231,18 +2203,22 @@ function EditorSpreadCanvasV2({
                     minHeight: "min-h-[9rem]",
                   })}
                 </div>
-              ) : null}
-            </div>
-            <div className="space-y-3 rounded-[2rem] border border-[#00000010] bg-[linear-gradient(180deg,rgba(255,251,246,0.98),rgba(246,236,226,0.96))] p-4">
-              {renderNarrativeStrip("max-w-none bg-[#fffdf8] shadow-none")}
-              {controls.showHandwrittenNotes ? (
-                <div
-                  className="rounded-[1.4rem] border border-dashed border-[#dccfc4] bg-white/75 px-4 py-4 text-[12px] leading-6 text-[#7a6d65]"
-                  style={{ fontFamily: fontPreset.accent ?? fontPreset.body }}
-                >
-                  Handwritten note block: keep this to one small personal line.
+              ) : (
+                <div className="rounded-[1.7rem] border border-dashed border-[#dccfc4] bg-white/65 px-4 py-4 text-sm leading-7 text-[#7a6d65]">
+                  Leave this spread quiet if the main image is enough.
                 </div>
-              ) : null}
+              )}
+              <div className="space-y-3">
+                {renderNarrativeStrip("max-w-[13rem] bg-[#fffdf8] shadow-none")}
+                {controls.showHandwrittenNotes ? (
+                  <div
+                    className="rounded-[1.2rem] border border-dashed border-[#dccfc4] bg-white/75 px-4 py-3 text-[11px] leading-5 text-[#7a6d65]"
+                    style={{ fontFamily: fontPreset.accent ?? fontPreset.body }}
+                  >
+                    Handwritten note block
+                  </div>
+                ) : null}
+              </div>
             </div>
           </div>
         );
@@ -2391,9 +2367,6 @@ function EditorSpreadCanvasV2({
     >
       <PrintPreviewGuides formatId={formatId} mode={controls.printPreviewMode} />
       <div className="relative z-10 space-y-4">{preview}</div>
-      <div className="mt-4 rounded-[1.2rem] border border-[#00000010] bg-[#fffaf5] px-4 py-3 text-xs uppercase tracking-[0.18em] text-[#7e7067]">
-        Photo-first layout / {style.label} / {getSpreadLabel(spreadType)} / density {controls.density}
-      </div>
     </div>
   );
 }
@@ -2403,7 +2376,7 @@ function EditorNarrativeStrip({
   controls,
   fontPreset,
   page,
-  pageIndex,
+  pageIndex: _pageIndex,
   pagePhotos,
   project,
 }: {
@@ -2419,28 +2392,23 @@ function EditorNarrativeStrip({
 
   return (
     <div
-      className={`rounded-[1.35rem] border border-[#0000000d] bg-white/90 px-3.5 py-3 shadow-[0_8px_18px_rgba(49,33,22,0.035)] ${className ?? ""}`}
+      className={`rounded-[1.2rem] border border-[#0000000d] bg-white/88 px-3 py-2.5 shadow-[0_6px_14px_rgba(49,33,22,0.03)] ${className ?? ""}`}
     >
-      <div className="space-y-2.5">
-        <div className="text-[10px] uppercase tracking-[0.2em] text-[#8b5a40]">
-          Spread {pageIndex + 1} / {page.storyBeat.replaceAll("_", " ")}
-        </div>
-        <div className="space-y-1.5">
-          <h3
-            className="max-w-[18ch] text-[0.98rem] leading-tight text-[#1f1814]"
-            style={{ fontFamily: fontPreset.headline }}
+      <div className="space-y-1.5">
+        <h3
+          className="max-w-[16ch] text-[0.92rem] leading-tight text-[#1f1814]"
+          style={{ fontFamily: fontPreset.headline }}
+        >
+          {truncateWords(page.title, 5)}
+        </h3>
+        {copy ? (
+          <p
+            className="max-w-[22ch] text-[10.5px] leading-[1.4] text-[#5d524b]"
+            style={{ fontFamily: fontPreset.body }}
           >
-            {truncateWords(page.title, 6)}
-          </h3>
-          {copy ? (
-            <p
-              className="max-w-[24ch] text-[11px] leading-[1.45] text-[#5d524b]"
-              style={{ fontFamily: fontPreset.body }}
-            >
-              {copy}
-            </p>
-          ) : null}
-        </div>
+            {copy}
+          </p>
+        ) : null}
       </div>
     </div>
   );
@@ -2448,41 +2416,19 @@ function EditorNarrativeStrip({
 
 function EditorPhotoTile({
   accent,
-  caption,
   className = "min-h-[16rem]",
-  fontPreset,
   photo,
-  project,
   selected,
-  showDates,
-  showLocations,
   treatment = "default",
   onSelect,
 }: {
   accent: string;
-  caption?: string;
   className?: string;
-  fontPreset: { body: string; headline: string; accent?: string };
   photo: PhotoAsset;
-  project: Project;
   selected: boolean;
-  showDates: boolean;
-  showLocations: boolean;
   treatment?: "default" | "hero" | "compact";
   onSelect: () => void;
 }) {
-  const titleClass =
-    treatment === "compact"
-      ? "text-sm"
-      : treatment === "hero"
-        ? "text-xl"
-        : "text-[0.95rem]";
-  const showInlineFooter = treatment === "default";
-  const captionText =
-    caption?.trim() ||
-    buildPhotoMetaLine(photo, project, showDates, showLocations) ||
-    "Add a photo caption";
-
   return (
     <button
       type="button"
@@ -2505,43 +2451,17 @@ function EditorPhotoTile({
         ) : (
           <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(255,255,255,0.95),rgba(234,225,216,0.98))]" />
         )}
-        <div className="absolute left-3 top-3 rounded-full border border-white/45 bg-[rgba(18,12,9,0.42)] px-2.5 py-1 text-[10px] uppercase tracking-[0.18em] text-[#f9f3ed] backdrop-blur-sm">
-          {photo.orientation}
-        </div>
         {selected ? (
           <div className="absolute right-3 top-3 rounded-full border border-[#fff0e6] bg-[#fff7f1] px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.18em] text-[#8f4f2e]">
             selected
           </div>
         ) : null}
-        {!showInlineFooter ? (
-          <div className="absolute inset-x-0 bottom-0 bg-[linear-gradient(180deg,rgba(18,12,9,0),rgba(18,12,9,0.72))] px-4 pb-4 pt-10 text-[#fff8f2]">
-            <div
-              className={`${titleClass} font-semibold`}
-              style={{ fontFamily: fontPreset.headline }}
-            >
-              {photo.title}
-            </div>
-            {treatment === "hero" ? (
-              <div
-                className="mt-1.5 max-w-[28rem] text-[11px] leading-5 text-[#f4e6d8]"
-                style={{ fontFamily: fontPreset.body }}
-              >
-                {captionText}
-              </div>
-            ) : null}
+        {treatment === "hero" && selected ? (
+          <div className="absolute bottom-3 left-3 rounded-full bg-[rgba(17,12,9,0.55)] px-3 py-1 text-[10px] uppercase tracking-[0.18em] text-[#f9f3ed] backdrop-blur-sm">
+            hero image
           </div>
         ) : null}
       </div>
-      {showInlineFooter ? (
-        <div className="border-t border-[#0000000d] bg-[linear-gradient(180deg,rgba(255,251,247,0.98),rgba(246,238,231,0.98))] px-4 py-3">
-          <div
-            className={`${titleClass} font-semibold text-[#1f1814]`}
-            style={{ fontFamily: fontPreset.headline }}
-          >
-            {photo.title}
-          </div>
-        </div>
-      ) : null}
     </button>
   );
 }

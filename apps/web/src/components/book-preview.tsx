@@ -468,24 +468,9 @@ function PreviewCanvasV2({
                 emphasis="large"
               />
             </div>
-            <div className="grid gap-4 lg:grid-cols-[0.88fr_1.12fr]">
-              <div className="rounded-[1.8rem] border border-black/5 bg-white/82 px-5 py-5">
-                <div className="text-[11px] uppercase tracking-[0.22em]" style={{ color: themePresentation.textMuted }}>
-                  Opening spread
-                </div>
-                <h3 className="mt-3 text-3xl font-semibold leading-[0.95]" style={{ color: themePresentation.textColor }}>
-                  {page.title}
-                </h3>
-                <p className="mt-4 text-sm leading-7" style={{ color: themePresentation.textMuted }}>
-                  {page.caption}
-                </p>
-                {metaTags}
-              </div>
+            <div className="grid gap-4 lg:grid-cols-[1.12fr_0.88fr]">
               {supportingPhotos.length ? (
                 <div className="rounded-[1.8rem] border border-black/5 bg-white/68 p-3">
-                  <div className="mb-3 text-[11px] uppercase tracking-[0.2em]" style={{ color: themePresentation.textMuted }}>
-                    Follow-through
-                  </div>
                   <PreviewPhotoGrid
                     accent={accent}
                     photos={supportingPhotos}
@@ -494,6 +479,12 @@ function PreviewCanvasV2({
                   />
                 </div>
               ) : null}
+              <div className="flex items-end justify-end">
+                <div className="space-y-3">
+                  {renderNarrativeStrip("max-w-[13rem] bg-white/90")}
+                  {metaTags}
+                </div>
+              </div>
             </div>
           </div>
         );
@@ -579,7 +570,7 @@ function PreviewCanvasV2({
           <div className="space-y-4">
             <div className="rounded-[2rem] border border-black/5 bg-white/78 p-4">
               <div className="grid gap-4 md:grid-cols-3">
-                {photos.map((photo) => (
+                {photos.slice(0, 5).map((photo) => (
                   <PreviewPhotoTile
                     key={photo.id}
                     photo={photo}
@@ -587,8 +578,10 @@ function PreviewCanvasV2({
                     className={editorState.density >= 55 ? "min-h-[12rem]" : "min-h-[14rem]"}
                   />
                 ))}
-                <div className="md:col-span-3 flex justify-center pt-1">
-                  {renderNarrativeStrip("max-w-[17rem] bg-white/88")}
+                <div className="min-h-[12rem]">
+                  <div className="flex h-full items-end">
+                    {renderNarrativeStrip("max-w-none bg-white/88")}
+                  </div>
                 </div>
               </div>
             </div>
@@ -598,9 +591,6 @@ function PreviewCanvasV2({
         return (
           <div className="space-y-4">
             <div className="rounded-[2rem] border border-black/5 bg-[linear-gradient(180deg,rgba(255,249,243,0.98),rgba(247,238,229,0.96))] p-4">
-              <div className="mb-4 text-[11px] uppercase tracking-[0.22em]" style={{ color: themePresentation.textMuted }}>
-                Collected candids
-              </div>
               <div className="grid gap-3 md:grid-cols-6">
                 {photos.map((photo, index) => (
                   <div
@@ -647,7 +637,7 @@ function PreviewCanvasV2({
                   <PreviewPhotoGrid accent={accent} photos={supportingPhotos} minHeight="min-h-[7.5rem]" maxColumns={4} />
                 </div>
               ) : null}
-              <div className="flex justify-end">{renderNarrativeStrip("max-w-[14rem] bg-white/88")}</div>
+              <div className="flex justify-end">{renderNarrativeStrip("max-w-[12.5rem] bg-white/88")}</div>
             </div>
           </div>
         );
@@ -680,31 +670,35 @@ function PreviewCanvasV2({
         );
       case "photo_journal":
         return (
-          <div className="grid gap-4 lg:grid-cols-[1.22fr_0.78fr]">
-            <div className="space-y-4">
-              <div className="rounded-[2rem] bg-[linear-gradient(180deg,rgba(244,237,229,0.98),rgba(237,229,219,0.96))] p-6">
-                <div className="mx-auto max-w-[20rem] rounded-[1.7rem] border border-black/5 bg-white/95 p-4 shadow-[0_14px_34px_rgba(45,32,22,0.08)]">
-                  <PreviewPhotoTile
-                    photo={heroPhoto}
-                    accent={accent}
-                    className="min-h-[20rem] md:min-h-[24rem]"
-                    emphasis="large"
-                  />
-                </div>
+          <div className="space-y-4">
+            <div className="rounded-[2rem] bg-[linear-gradient(180deg,rgba(244,237,229,0.98),rgba(237,229,219,0.96))] p-6">
+              <div className="mx-auto max-w-[24rem] rounded-[1.7rem] border border-black/5 bg-white/95 p-4 shadow-[0_14px_34px_rgba(45,32,22,0.08)]">
+                <PreviewPhotoTile
+                  photo={heroPhoto}
+                  accent={accent}
+                  className="min-h-[24rem] md:min-h-[29rem]"
+                  emphasis="large"
+                />
               </div>
+            </div>
+            <div className="grid gap-4 lg:grid-cols-[1.18fr_0.82fr] lg:items-end">
               {supportingPhotos.length ? (
                 <div className="rounded-[1.7rem] border border-black/5 bg-white/72 p-3">
                   <PreviewPhotoGrid accent={accent} photos={supportingPhotos} minHeight="min-h-[9rem]" maxColumns={2} />
                 </div>
-              ) : null}
-            </div>
-            <div className="space-y-3 rounded-[2rem] border border-black/5 bg-[linear-gradient(180deg,rgba(255,251,246,0.98),rgba(246,236,226,0.96))] p-4">
-              {renderNarrativeStrip("max-w-none bg-[#fffdf8] shadow-none")}
-              {editorState.showHandwrittenNotes ? (
-                <div className="rounded-[1.4rem] border border-dashed border-[#dccfc4] bg-white/75 px-4 py-4 text-[12px] leading-6" style={{ color: themePresentation.textMuted }}>
-                  Handwritten note block: keep this to one small personal line.
+              ) : (
+                <div className="rounded-[1.7rem] border border-dashed border-black/10 bg-white/58 px-5 py-4 text-sm leading-7" style={{ color: themePresentation.textMuted }}>
+                  Leave this spread quiet when the main image is enough.
                 </div>
-              ) : null}
+              )}
+              <div className="space-y-3">
+                {renderNarrativeStrip("max-w-[13rem] bg-[#fffdf8]")}
+                {editorState.showHandwrittenNotes ? (
+                  <div className="rounded-[1.2rem] border border-dashed border-[#dccfc4] bg-white/75 px-4 py-3 text-[11px] leading-5" style={{ color: themePresentation.textMuted }}>
+                    Handwritten note block
+                  </div>
+                ) : null}
+              </div>
             </div>
           </div>
         );
@@ -835,11 +829,6 @@ function PreviewCanvasV2({
   return (
     <div className="overflow-hidden rounded-[2rem] p-4 shadow-[0_18px_44px_rgba(42,29,19,0.08)]" style={themePresentation.canvasStyle}>
       {previewBody}
-      {editorState.printPreviewMode !== "clean" ? (
-        <div className="mt-4 rounded-[1.2rem] px-4 py-3 text-xs uppercase tracking-[0.18em]" style={themePresentation.secondaryButtonStyle}>
-          {editorState.printPreviewMode === "bleed" ? "Bleed + gutter preview" : "Print-safe preview"}
-        </div>
-      ) : null}
     </div>
   );
 }
@@ -921,21 +910,16 @@ function PreviewNarrativeStrip({
   const copy = buildPreviewOnPageCaption(page);
 
   return (
-    <div className={`rounded-[1.35rem] border border-black/5 bg-white/88 px-3.5 py-3 ${className ?? ""}`}>
-      <div className="space-y-2.5">
-        <div className="text-[10px] uppercase tracking-[0.2em]" style={{ color: themePresentation.textMuted }}>
-          {page.storyBeat.replaceAll("_", " ")}
-        </div>
-        <div className="space-y-1.5">
-          <h3 className="max-w-[18ch] text-[0.98rem] font-semibold leading-tight" style={{ color: themePresentation.textColor }}>
-            {truncateWords(page.title, 6)}
-          </h3>
-          {copy ? (
-            <p className="max-w-[24ch] text-[11px] leading-[1.45]" style={{ color: themePresentation.textMuted }}>
-              {copy}
-            </p>
-          ) : null}
-        </div>
+    <div className={`rounded-[1.2rem] border border-black/5 bg-white/88 px-3 py-2.5 ${className ?? ""}`}>
+      <div className="space-y-1.5">
+        <h3 className="max-w-[16ch] text-[0.92rem] font-semibold leading-tight" style={{ color: themePresentation.textColor }}>
+          {truncateWords(page.title, 5)}
+        </h3>
+        {copy ? (
+          <p className="max-w-[22ch] text-[10.5px] leading-[1.4]" style={{ color: themePresentation.textMuted }}>
+            {copy}
+          </p>
+        ) : null}
       </div>
     </div>
   );
@@ -992,8 +976,6 @@ function PreviewPhotoTile({
   emphasis?: "large";
   photo?: PhotoAsset;
 }) {
-  const showFooter = emphasis !== "large";
-
   return (
     <div
       className={`flex flex-col overflow-hidden rounded-[1.8rem] border border-[#00000010] bg-[linear-gradient(180deg,rgba(255,255,255,0.86),rgba(234,225,216,0.96))] ${className}`}
@@ -1010,29 +992,10 @@ function PreviewPhotoTile({
         ) : (
           <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(255,255,255,0.92),rgba(232,221,212,0.98))]" />
         )}
-        <div className="absolute inset-0 flex flex-col justify-between p-4">
-        <div className="text-[11px] uppercase tracking-[0.18em] text-[#786b62]">
-          {photo?.orientation ?? "layout"}
-        </div>
-        {!showFooter ? (
-          <div className="rounded-[1.2rem] bg-[linear-gradient(180deg,rgba(17,12,9,0),rgba(17,12,9,0.72))] px-4 pb-1 pt-8 text-white">
-            <div className="text-lg font-semibold">
-              {photo?.title ?? "Reserved image field"}
-            </div>
-            <div className="mt-1 text-[11px] uppercase tracking-[0.18em] text-[#eee0d4]">
-              {photo?.locationLabel ?? "Editorial crop zone"}
-            </div>
-          </div>
+        {emphasis === "large" ? (
+          <div className="absolute inset-0 bg-[linear-gradient(180deg,rgba(16,11,8,0.02),rgba(16,11,8,0.14))]" />
         ) : null}
       </div>
-      </div>
-      {showFooter ? (
-        <div className="border-t border-white/25 bg-[linear-gradient(180deg,rgba(255,250,246,0.94),rgba(243,233,224,0.96))] px-4 py-3">
-          <div className="text-sm font-semibold text-[#211a16]">
-            {photo?.title ?? "Reserved image field"}
-          </div>
-        </div>
-      ) : null}
     </div>
   );
 }
