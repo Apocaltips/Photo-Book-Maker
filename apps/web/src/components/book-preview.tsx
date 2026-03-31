@@ -438,12 +438,6 @@ function PreviewCanvasV2({
   const heroPhoto = photos[0];
   const supportingPhotos = photos.slice(1);
   const tertiaryPhotos = photos.slice(2);
-  const densityClass =
-    editorState.density >= 70
-      ? "min-h-[8rem]"
-      : editorState.density >= 50
-        ? "min-h-[10rem]"
-        : "min-h-[12rem]";
   const metaTags = photos.length ? (
     <div className="mt-4 flex flex-wrap gap-2">
       {photos.slice(0, 3).map((photo) => (
@@ -506,7 +500,7 @@ function PreviewCanvasV2({
       case "hero_support_strip":
         return (
           <div className="space-y-4">
-            <div className="grid gap-4 lg:grid-cols-[1.1fr_0.9fr]">
+            <div className="grid gap-4 lg:grid-cols-[1.18fr_0.82fr]">
               <div className="rounded-[2rem] bg-[linear-gradient(180deg,rgba(255,255,255,0.94),rgba(245,237,231,0.92))] p-3">
                 <PreviewPhotoTile
                   photo={heroPhoto}
@@ -515,18 +509,7 @@ function PreviewCanvasV2({
                   emphasis="large"
                 />
               </div>
-              <div className="rounded-[2rem] border border-black/5 bg-[#fbf5ef] p-4">
-                <div className="mb-4 flex items-start justify-between gap-3">
-                  <div>
-                    <div className="text-[11px] uppercase tracking-[0.22em]" style={{ color: themePresentation.textMuted }}>
-                      Contact strip
-                    </div>
-                    <div className="mt-1 text-sm leading-6" style={{ color: themePresentation.textMuted }}>
-                      Support moments stay smaller and more rhythmic.
-                    </div>
-                  </div>
-                  <PreviewTag tone="accent">Lead + details</PreviewTag>
-                </div>
+              <div className="rounded-[2rem] border border-black/5 bg-[#fbf5ef] p-3.5">
                 <div className="space-y-3">
                   {supportingPhotos.length
                     ? supportingPhotos.map((photo, index) => (
@@ -547,7 +530,7 @@ function PreviewCanvasV2({
                         </div>
                       )}
                 </div>
-                {renderNarrativeStrip("mt-4 max-w-none bg-white/88")}
+                <div className="mt-3 flex justify-end">{renderNarrativeStrip("max-w-[15rem] bg-white/88")}</div>
               </div>
             </div>
           </div>
@@ -556,12 +539,6 @@ function PreviewCanvasV2({
         return (
           <div className="space-y-4">
             <div className="rounded-[2rem] border border-black/5 bg-white/74 p-4">
-              <div className="mb-4 flex items-center justify-between gap-3">
-                <div className="text-[11px] uppercase tracking-[0.22em]" style={{ color: themePresentation.textMuted }}>
-                  Gallery diptych
-                </div>
-                <PreviewTag tone="accent">Equal weight</PreviewTag>
-              </div>
               <div className="grid gap-4 lg:grid-cols-[1fr_auto_1fr]">
                 {photos.slice(0, 2).map((photo, index) => (
                   <div key={photo.id} className={index === 1 ? "lg:col-start-3" : ""}>
@@ -576,7 +553,7 @@ function PreviewCanvasV2({
                 <div className="hidden w-px bg-[#dbc9bc] lg:block" />
               </div>
             </div>
-            <div className="grid gap-4 lg:grid-cols-[1.04fr_0.96fr] lg:items-start">
+            <div className="grid gap-4 lg:grid-cols-[1.18fr_0.82fr] lg:items-start">
               {tertiaryPhotos.length ? (
                 <div className="rounded-[1.8rem] border border-black/5 bg-[#fffaf4] p-3">
                   <PreviewPhotoGrid
@@ -591,7 +568,7 @@ function PreviewCanvasV2({
                   Let the pair breathe when the two main frames already carry the spread.
                 </div>
               )}
-              {renderNarrativeStrip("max-w-none")}
+              <div className="flex justify-end">{renderNarrativeStrip("max-w-[14rem] bg-white/88")}</div>
             </div>
           </div>
         );
@@ -599,23 +576,17 @@ function PreviewCanvasV2({
         return (
           <div className="space-y-4">
             <div className="rounded-[2rem] border border-black/5 bg-white/78 p-4">
-              <div className="mb-4 flex items-center justify-between gap-3">
-                <div>
-                  <div className="text-[11px] uppercase tracking-[0.22em]" style={{ color: themePresentation.textMuted }}>
-                    Gallery wall
-                  </div>
-                  <div className="mt-1 text-sm leading-6" style={{ color: themePresentation.textMuted }}>
-                    Structured, calm, and evenly weighted.
-                  </div>
-                </div>
-                <PreviewTag tone="accent">4-up grid</PreviewTag>
-              </div>
-              <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+              <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
                 {photos.map((photo) => (
-                  <PreviewPhotoTile key={photo.id} photo={photo} accent={accent} className={densityClass} />
+                  <PreviewPhotoTile
+                    key={photo.id}
+                    photo={photo}
+                    accent={accent}
+                    className={editorState.density >= 55 ? "min-h-[12rem]" : "min-h-[14rem]"}
+                  />
                 ))}
-                <div className="xl:row-span-2">
-                  {renderNarrativeStrip("max-w-none h-full bg-white/88")}
+                <div className="xl:col-span-1">
+                  {renderNarrativeStrip("max-w-none bg-white/88")}
                 </div>
               </div>
             </div>
@@ -647,8 +618,8 @@ function PreviewCanvasV2({
                     />
                   </div>
                 ))}
-                <div className="md:col-span-3">
-                  {renderNarrativeStrip("max-w-none h-full bg-white/88")}
+                <div className="md:col-span-2 md:self-end">
+                  {renderNarrativeStrip("max-w-none bg-white/88")}
                 </div>
               </div>
             </div>
@@ -658,27 +629,21 @@ function PreviewCanvasV2({
         return (
           <div className="space-y-4">
             <div className="rounded-[2.15rem] border border-black/5 bg-white/88 px-4 py-6">
-              <div className="mb-4 text-center text-[11px] uppercase tracking-[0.24em]" style={{ color: themePresentation.textMuted }}>
-                Cinematic spread
-              </div>
               <PreviewPhotoTile
                 photo={heroPhoto}
                 accent={accent}
-                className="min-h-[18rem] md:min-h-[22rem]"
+                className="min-h-[22rem] md:min-h-[28rem]"
                 emphasis="large"
               />
             </div>
-            <div className="grid gap-4 lg:grid-cols-[1.16fr_0.84fr]">
+            <div className="grid gap-4 lg:grid-cols-[1.28fr_0.72fr] lg:items-end">
               {supportingPhotos.length ? (
                 <div className="rounded-[1.8rem] border border-black/5 bg-white/68 p-3">
-                  <div className="mb-3 text-[11px] uppercase tracking-[0.2em]" style={{ color: themePresentation.textMuted }}>
-                    Supporting stills
-                  </div>
                   <PreviewPhotoGrid accent={accent} photos={supportingPhotos} minHeight="min-h-[7.5rem]" maxColumns={4} />
                 </div>
               ) : null}
+              <div className="flex justify-end">{renderNarrativeStrip("max-w-[14rem] bg-white/88")}</div>
             </div>
-            {renderNarrativeStrip()}
           </div>
         );
       case "text_divider":
@@ -710,7 +675,7 @@ function PreviewCanvasV2({
         );
       case "photo_journal":
         return (
-          <div className="grid gap-4 lg:grid-cols-[1.05fr_0.95fr]">
+          <div className="grid gap-4 lg:grid-cols-[1.22fr_0.78fr]">
             <div className="space-y-4">
               <PreviewPhotoTile
                 photo={heroPhoto}
@@ -724,38 +689,27 @@ function PreviewCanvasV2({
                 </div>
               ) : null}
             </div>
-            <div className="space-y-4 rounded-[2rem] border border-black/5 bg-[linear-gradient(180deg,rgba(255,251,246,0.98),rgba(246,236,226,0.96))] p-5">
-              <div className="text-[11px] uppercase tracking-[0.22em]" style={{ color: themePresentation.textMuted }}>
-                Journal page
-              </div>
-              <div className="space-y-4 rounded-[1.6rem] border border-black/5 bg-[#fffdf8] px-5 py-5">
-                <div className="border-b border-dashed border-[#dccfc4] pb-3 text-base leading-7" style={{ color: themePresentation.textColor }}>
-                  {page.caption}
+            <div className="space-y-3 rounded-[2rem] border border-black/5 bg-[linear-gradient(180deg,rgba(255,251,246,0.98),rgba(246,236,226,0.96))] p-4">
+              {renderNarrativeStrip("max-w-none bg-[#fffdf8] shadow-none")}
+              {editorState.showHandwrittenNotes ? (
+                <div className="rounded-[1.4rem] border border-dashed border-[#dccfc4] bg-white/75 px-4 py-4 text-[12px] leading-6" style={{ color: themePresentation.textMuted }}>
+                  Handwritten note block: keep this to one small personal line.
                 </div>
-                {[0, 1, 2].map((index) => (
-                  <div key={index} className="border-b border-dashed border-[#dccfc4] pb-3 last:border-none last:pb-0 text-sm leading-7" style={{ color: themePresentation.textMuted }}>
-                    Leave room for a small memory, note, or route detail here.
-                  </div>
-                ))}
-              </div>
-              {metaTags}
+              ) : null}
             </div>
           </div>
         );
       case "memorabilia_spread":
         return (
           <div className="space-y-4">
-            <div className="grid gap-4 lg:grid-cols-[1.02fr_0.98fr]">
+            <div className="grid gap-4 lg:grid-cols-[1.18fr_0.82fr]">
               <PreviewPhotoTile
                 photo={heroPhoto}
                 accent={accent}
                 className="min-h-[24rem] md:min-h-[28rem]"
                 emphasis="large"
               />
-              <div className="space-y-4 rounded-[2rem] border border-black/5 bg-[linear-gradient(180deg,rgba(252,246,239,0.98),rgba(246,237,228,0.96))] p-5">
-                <div className="text-[11px] uppercase tracking-[0.22em]" style={{ color: themePresentation.textMuted }}>
-                  Keepsake board
-                </div>
+              <div className="space-y-3 rounded-[2rem] border border-black/5 bg-[linear-gradient(180deg,rgba(252,246,239,0.98),rgba(246,237,228,0.96))] p-4">
                 <div className="grid gap-3 sm:grid-cols-2">
                   {supportingPhotos.slice(0, 4).map((photo, index) => (
                     <div
@@ -766,7 +720,7 @@ function PreviewCanvasV2({
                     </div>
                   ))}
                 </div>
-                {renderNarrativeStrip("max-w-none bg-white/82")}
+                <div className="flex justify-end">{renderNarrativeStrip("max-w-[14rem] bg-white/82")}</div>
               </div>
             </div>
           </div>
@@ -775,20 +729,14 @@ function PreviewCanvasV2({
         return (
           <div className="space-y-4">
             <div className="rounded-[2rem] border border-black/5 bg-[#f8f4ee] p-4">
-              <div className="mb-4 flex items-center justify-between gap-3">
-                <div className="text-[11px] uppercase tracking-[0.22em]" style={{ color: themePresentation.textMuted }}>
-                  Repetition study
-                </div>
-                <PreviewTag tone="accent">Pattern / motif</PreviewTag>
-              </div>
-              <div className="grid gap-3 md:grid-cols-3">
+              <div className="grid gap-3 md:grid-cols-4">
                 {photos.map((photo) => (
                   <div key={photo.id} className="rounded-[1.5rem] border border-black/5 bg-white/88 p-2">
                     <PreviewPhotoTile photo={photo} accent={accent} className="min-h-[11rem] md:min-h-[13rem]" />
                   </div>
                 ))}
-                <div className="md:col-span-3">
-                  {renderNarrativeStrip("max-w-none h-full bg-white/88")}
+                <div className="md:col-span-1 md:self-end">
+                  {renderNarrativeStrip("max-w-none bg-white/88")}
                 </div>
               </div>
             </div>
@@ -798,14 +746,6 @@ function PreviewCanvasV2({
         return (
           <div className="space-y-4">
             <div className="rounded-[2rem] border border-black/5 bg-[linear-gradient(180deg,rgba(255,255,255,0.94),rgba(240,234,228,0.94))] p-4">
-              <div className="mb-4 flex items-center justify-between gap-3">
-                <div className="text-[11px] uppercase tracking-[0.24em]" style={{ color: themePresentation.textMuted }}>
-                  Motion strip
-                </div>
-                <div className="text-xs uppercase tracking-[0.2em]" style={{ color: themePresentation.textMuted }}>
-                  sequence / rhythm / movement
-                </div>
-              </div>
               <div className="grid gap-3 md:grid-cols-12">
                 {photos.map((photo, index) => {
                   const spanClass =
@@ -822,8 +762,8 @@ function PreviewCanvasV2({
                     </div>
                   );
                 })}
-                <div className="md:col-span-4">
-                  {renderNarrativeStrip("max-w-none h-full bg-white/88")}
+                <div className="md:col-span-2 md:self-end">
+                  {renderNarrativeStrip("max-w-none bg-white/88")}
                 </div>
               </div>
             </div>
@@ -832,11 +772,8 @@ function PreviewCanvasV2({
       case "map_timeline":
         return (
           <div className="space-y-4">
-            <div className="grid gap-4 lg:grid-cols-[0.82fr_1.18fr]">
-              <div className="space-y-4 rounded-[2rem] border border-black/5 bg-[linear-gradient(180deg,rgba(250,246,240,0.98),rgba(245,236,227,0.96))] p-5">
-                <div className="text-[11px] uppercase tracking-[0.22em]" style={{ color: themePresentation.textMuted }}>
-                  Route context
-                </div>
+            <div className="grid gap-4 lg:grid-cols-[0.7fr_1.3fr]">
+              <div className="space-y-3 rounded-[2rem] border border-black/5 bg-[linear-gradient(180deg,rgba(250,246,240,0.98),rgba(245,236,227,0.96))] p-4">
                 <div className="rounded-[1.6rem] border border-dashed border-black/10 px-4 py-4">
                   <div className="text-xl font-semibold" style={{ color: themePresentation.textColor }}>
                     {photos.find((photo) => photo.locationLabel)?.locationLabel ?? project.title}

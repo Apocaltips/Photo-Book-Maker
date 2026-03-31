@@ -2005,7 +2005,7 @@ function EditorSpreadCanvasV2({
       case "hero_support_strip":
         return (
           <div className="space-y-4">
-            <div className="grid gap-4 lg:grid-cols-[1.1fr_0.9fr]">
+            <div className="grid gap-4 lg:grid-cols-[1.18fr_0.82fr]">
               <div className="rounded-[2rem] bg-[linear-gradient(180deg,rgba(255,255,255,0.94),rgba(245,237,231,0.92))] p-3">
                 {leadPhoto
                   ? renderPhotoTile(leadPhoto, "min-h-[27rem] md:min-h-[32rem]", "hero")
@@ -2014,18 +2014,7 @@ function EditorSpreadCanvasV2({
                       "min-h-[27rem]",
                     )}
               </div>
-              <div className="rounded-[2rem] border border-[#00000010] bg-[#fbf5ef] p-4">
-                <div className="mb-4 flex items-start justify-between gap-3">
-                  <div>
-                    <div className="text-[11px] uppercase tracking-[0.22em] text-[#8b5a40]">
-                      Contact strip
-                    </div>
-                    <div className="mt-1 text-sm leading-6 text-[#655952]">
-                      Support images should read like a sequence, not equal heroes.
-                    </div>
-                  </div>
-                  <EditorTag className="bg-[#f2e3d8] text-[#8b5a40]">Lead + details</EditorTag>
-                </div>
+              <div className="rounded-[2rem] border border-[#00000010] bg-[#fbf5ef] p-3.5">
                 <div className="space-y-3">
                   {secondaryPhotos.length
                     ? secondaryPhotos.map((photo, index) => (
@@ -2046,7 +2035,9 @@ function EditorSpreadCanvasV2({
                         "quiet",
                       )}
                 </div>
-                {renderNarrativeStrip("mt-4 max-w-none bg-white/86 shadow-none")}
+                <div className="mt-3 flex justify-end">
+                  {renderNarrativeStrip("max-w-[15rem] bg-white/88 shadow-none")}
+                </div>
               </div>
             </div>
           </div>
@@ -2055,12 +2046,6 @@ function EditorSpreadCanvasV2({
         return (
           <div className="space-y-4">
             <div className="rounded-[2rem] border border-[#00000010] bg-white/72 p-4">
-              <div className="mb-4 flex items-center justify-between gap-3">
-                <div className="text-[11px] uppercase tracking-[0.22em] text-[#8b5a40]">
-                  Gallery diptych
-                </div>
-                <EditorTag className="bg-[#f1e8df] text-[#7a6251]">Equal weight</EditorTag>
-              </div>
               <div className="grid gap-4 lg:grid-cols-[1fr_auto_1fr] lg:items-stretch">
                 {leadPhoto
                   ? renderPhotoTile(leadPhoto, "min-h-[23rem] md:min-h-[27rem]", "hero")
@@ -2075,7 +2060,7 @@ function EditorSpreadCanvasV2({
                     )}
               </div>
             </div>
-            <div className="grid gap-4 lg:grid-cols-[1.04fr_0.96fr] lg:items-start">
+            <div className="grid gap-4 lg:grid-cols-[1.18fr_0.82fr] lg:items-start">
               {tertiaryPhotos.length ? (
                 <div className="rounded-[1.8rem] border border-[#00000010] bg-[#fffaf4] p-3">
                   {renderGrid(tertiaryPhotos, { maxColumns: 3, minHeight: "min-h-[8rem]" })}
@@ -2085,7 +2070,7 @@ function EditorSpreadCanvasV2({
                   Leave the pair to breathe if the two main images already carry the spread.
                 </div>
               )}
-              {renderNarrativeStrip("max-w-none")}
+              <div className="flex justify-end">{renderNarrativeStrip("max-w-[14rem] bg-white/88")}</div>
             </div>
           </div>
         );
@@ -2093,27 +2078,16 @@ function EditorSpreadCanvasV2({
         return (
           <div className="space-y-4">
             <div className="rounded-[2rem] border border-[#00000010] bg-white/78 p-4">
-              <div className="mb-4 flex items-center justify-between gap-3">
-                <div>
-                  <div className="text-[11px] uppercase tracking-[0.22em] text-[#8b5a40]">
-                    Gallery wall
-                  </div>
-                  <div className="mt-1 text-sm leading-6 text-[#645851]">
-                    Calm, even spacing with identical editorial weight.
-                  </div>
-                </div>
-                <EditorTag className="bg-[#f1e8df] text-[#7a6251]">4-up grid</EditorTag>
-              </div>
-              <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+              <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
                 {pagePhotos.map((photo) =>
                   renderPhotoTile(
                     photo,
-                    controls.density >= 55 ? "min-h-[11rem]" : "min-h-[13rem]",
+                    controls.density >= 55 ? "min-h-[12rem]" : "min-h-[14rem]",
                     "default",
                   ),
                 )}
-                <div className="xl:row-span-2">
-                  {renderNarrativeStrip("max-w-none h-full bg-[#fffaf5]")}
+                <div className="xl:col-span-1">
+                  {renderNarrativeStrip("max-w-none bg-[#fffaf5]")}
                 </div>
               </div>
             </div>
@@ -2154,8 +2128,8 @@ function EditorSpreadCanvasV2({
                       "Add food, candids, and details to make this spread feel collected.",
                       "min-h-[12rem]",
                     )}
-                <div className="md:col-span-3">
-                  {renderNarrativeStrip("max-w-none h-full bg-white/90")}
+                <div className="md:col-span-2 md:self-end">
+                  {renderNarrativeStrip("max-w-none bg-white/90")}
                 </div>
               </div>
             </div>
@@ -2165,22 +2139,16 @@ function EditorSpreadCanvasV2({
         return (
           <div className="space-y-4">
             <div className="rounded-[2.15rem] border border-[#00000010] bg-white/88 px-4 py-6">
-              <div className="mb-4 text-center text-[11px] uppercase tracking-[0.24em] text-[#8b5a40]">
-                Cinematic spread
-              </div>
               {leadPhoto
-                ? renderPhotoTile(leadPhoto, "min-h-[18rem] md:min-h-[22rem]", "hero")
+                ? renderPhotoTile(leadPhoto, "min-h-[22rem] md:min-h-[28rem]", "hero")
                 : renderEmptyTile(
                     "Reserve panoramas for wide scenic images.",
-                    "min-h-[18rem]",
+                    "min-h-[22rem]",
                   )}
             </div>
-            <div className="grid gap-4 lg:grid-cols-[1.16fr_0.84fr]">
+            <div className="grid gap-4 lg:grid-cols-[1.28fr_0.72fr] lg:items-end">
               {secondaryPhotos.length ? (
                 <div className="rounded-[1.8rem] border border-[#00000010] bg-[#fbf6f0] p-3">
-                  <div className="mb-3 text-[11px] uppercase tracking-[0.2em] text-[#7d7067]">
-                    Supporting stills
-                  </div>
                   {renderGrid(secondaryPhotos, {
                     maxColumns: 4,
                     minHeight: "min-h-[7.5rem]",
@@ -2191,7 +2159,7 @@ function EditorSpreadCanvasV2({
                   Panorama pages work best when they stay quiet.
                 </div>
               )}
-              {renderNarrativeStrip("max-w-none")}
+              <div className="flex justify-end">{renderNarrativeStrip("max-w-[14rem] bg-white/88")}</div>
             </div>
           </div>
         );
@@ -2236,7 +2204,7 @@ function EditorSpreadCanvasV2({
         );
       case "photo_journal":
         return (
-          <div className="grid gap-4 lg:grid-cols-[1.05fr_0.95fr]">
+          <div className="grid gap-4 lg:grid-cols-[1.22fr_0.78fr]">
             <div className="space-y-4">
               {leadPhoto
                 ? renderPhotoTile(leadPhoto, "min-h-[22rem] md:min-h-[28rem]", "hero")
@@ -2253,43 +2221,23 @@ function EditorSpreadCanvasV2({
                 </div>
               ) : null}
             </div>
-            <div className="space-y-4 rounded-[2rem] border border-[#00000010] bg-[linear-gradient(180deg,rgba(255,251,246,0.98),rgba(246,236,226,0.96))] p-5">
-              <div className="text-[11px] uppercase tracking-[0.22em] text-[#8b5a40]">
-                Journal page
-              </div>
-              <div className="space-y-4 rounded-[1.6rem] border border-[#00000010] bg-[#fffdf8] px-5 py-5">
-                <div className="border-b border-dashed border-[#dccfc4] pb-3">
-                  <div
-                    className="text-base leading-7 text-[#5e5048]"
-                    style={{ fontFamily: fontPreset.body }}
-                  >
-                    {displayCopy}
-                  </div>
+            <div className="space-y-3 rounded-[2rem] border border-[#00000010] bg-[linear-gradient(180deg,rgba(255,251,246,0.98),rgba(246,236,226,0.96))] p-4">
+              {renderNarrativeStrip("max-w-none bg-[#fffdf8] shadow-none")}
+              {controls.showHandwrittenNotes ? (
+                <div
+                  className="rounded-[1.4rem] border border-dashed border-[#dccfc4] bg-white/75 px-4 py-4 text-[12px] leading-6 text-[#7a6d65]"
+                  style={{ fontFamily: fontPreset.accent ?? fontPreset.body }}
+                >
+                  Handwritten note block: keep this to one small personal line.
                 </div>
-                {[0, 1, 2].map((index) => (
-                  <div
-                    key={index}
-                    className="border-b border-dashed border-[#dccfc4] pb-3 last:border-none last:pb-0"
-                  >
-                    <div
-                      className="text-sm leading-7 text-[#7a6d65]"
-                      style={{ fontFamily: fontPreset.accent ?? fontPreset.body }}
-                    >
-                      {controls.showHandwrittenNotes && index === 0
-                        ? "Handwritten note block: add the emotional detail that makes the page feel personal."
-                        : "Leave space for a short reflection, route note, or a detail the photos cannot carry alone."}
-                    </div>
-                  </div>
-                ))}
-              </div>
-              {metaTags}
+              ) : null}
             </div>
           </div>
         );
       case "memorabilia_spread":
         return (
           <div className="space-y-4">
-            <div className="grid gap-4 lg:grid-cols-[1.02fr_0.98fr]">
+            <div className="grid gap-4 lg:grid-cols-[1.18fr_0.82fr]">
               <div className="space-y-4">
                 {leadPhoto
                   ? renderPhotoTile(leadPhoto, "min-h-[20rem] md:min-h-[24rem]", "hero")
@@ -2298,28 +2246,18 @@ function EditorSpreadCanvasV2({
                       "min-h-[20rem]",
                     )}
               </div>
-              <div className="space-y-4 rounded-[2rem] border border-[#00000010] bg-[linear-gradient(180deg,rgba(252,246,239,0.98),rgba(246,237,228,0.96))] p-5">
-                <div className="text-[11px] uppercase tracking-[0.22em] text-[#8b5a40]">
-                  Keepsake board
-                </div>
+              <div className="space-y-3 rounded-[2rem] border border-[#00000010] bg-[linear-gradient(180deg,rgba(252,246,239,0.98),rgba(246,237,228,0.96))] p-4">
                 {controls.showMemorabilia ? <MemorabiliaStrip photos={secondaryPhotos} /> : null}
-                {renderNarrativeStrip("max-w-none bg-white/82 shadow-none")}
+                <div className="flex justify-end">{renderNarrativeStrip("max-w-[14rem] bg-white/82 shadow-none")}</div>
               </div>
             </div>
-            {metaTags}
           </div>
         );
       case "pattern_repetition":
         return (
           <div className="space-y-4">
             <div className="rounded-[2rem] border border-[#00000010] bg-[#f8f4ee] p-4">
-              <div className="mb-4 flex items-center justify-between gap-3">
-                <div className="text-[11px] uppercase tracking-[0.22em] text-[#8b5a40]">
-                  Repetition study
-                </div>
-                <EditorTag className="bg-[#efe5d8] text-[#7b6452]">Pattern / motif</EditorTag>
-              </div>
-              <div className="grid gap-3 md:grid-cols-3">
+              <div className="grid gap-3 md:grid-cols-4">
                 {pagePhotos.length
                   ? pagePhotos.map((photo) => (
                       <div
@@ -2333,8 +2271,8 @@ function EditorSpreadCanvasV2({
                       "Use repeated angles, repeated people, or repeated motifs here.",
                       "min-h-[12rem]",
                     )}
-                <div className="md:col-span-3">
-                  {renderNarrativeStrip("max-w-none h-full bg-white/90")}
+                <div className="md:col-span-1 md:self-end">
+                  {renderNarrativeStrip("max-w-none bg-white/90")}
                 </div>
               </div>
             </div>
@@ -2344,14 +2282,6 @@ function EditorSpreadCanvasV2({
         return (
           <div className="space-y-4">
             <div className="rounded-[2rem] border border-[#00000010] bg-[linear-gradient(180deg,rgba(255,255,255,0.94),rgba(240,234,228,0.94))] p-4">
-              <div className="mb-4 flex items-center justify-between gap-3">
-                <div className="text-[11px] uppercase tracking-[0.24em] text-[#8b5a40]">
-                  Motion strip
-                </div>
-                <div className="text-xs uppercase tracking-[0.2em] text-[#7a6d65]">
-                  sequence / rhythm / movement
-                </div>
-              </div>
               <div className="grid gap-3 md:grid-cols-12">
                 {pagePhotos.length
                   ? pagePhotos.map((photo, index) => {
@@ -2378,8 +2308,8 @@ function EditorSpreadCanvasV2({
                       "Burst spreads need a short run of repeated frames.",
                       "min-h-[14rem]",
                     )}
-                <div className="md:col-span-4">
-                  {renderNarrativeStrip("max-w-none h-full bg-white/90")}
+                <div className="md:col-span-2 md:self-end">
+                  {renderNarrativeStrip("max-w-none bg-white/90")}
                 </div>
               </div>
             </div>
@@ -2388,11 +2318,8 @@ function EditorSpreadCanvasV2({
       case "map_timeline":
         return (
           <div className="space-y-4">
-            <div className="grid gap-4 lg:grid-cols-[0.82fr_1.18fr]">
-              <div className="space-y-4 rounded-[2rem] border border-[#00000010] bg-[linear-gradient(180deg,rgba(250,246,240,0.98),rgba(245,236,227,0.96))] p-5">
-                <div className="text-[11px] uppercase tracking-[0.22em] text-[#8b5a40]">
-                  Route context
-                </div>
+            <div className="grid gap-4 lg:grid-cols-[0.7fr_1.3fr]">
+              <div className="space-y-3 rounded-[2rem] border border-[#00000010] bg-[linear-gradient(180deg,rgba(250,246,240,0.98),rgba(245,236,227,0.96))] p-4">
                 <MapTimelineCard project={project} pagePhotos={pagePhotos} />
                 {renderNarrativeStrip("max-w-none bg-white/82 shadow-none")}
               </div>
