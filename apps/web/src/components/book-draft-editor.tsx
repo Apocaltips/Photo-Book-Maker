@@ -2476,57 +2476,31 @@ function EditorNarrativeStrip({
   pagePhotos: PhotoAsset[];
   project: Project;
 }) {
-  const copy = buildDisplayCaption(page, pagePhotos, project, controls.captionTone);
-  const metaLines =
-    (controls.showDates || controls.showLocations) && pagePhotos.length
-      ? pagePhotos
-          .slice(0, 3)
-          .map((photo) =>
-            buildPhotoMetaLine(photo, project, controls.showDates, controls.showLocations),
-          )
-          .filter(Boolean)
-      : [];
+  const copy = buildOnPageCaption(page, pagePhotos, project, controls.captionTone);
 
   return (
     <div
-      className={`rounded-[1.45rem] border border-[#00000010] bg-white/92 px-4 py-3 shadow-[0_10px_22px_rgba(49,33,22,0.045)] ${className ?? ""}`}
+      className={`rounded-[1.35rem] border border-[#0000000d] bg-white/90 px-3.5 py-3 shadow-[0_8px_18px_rgba(49,33,22,0.035)] ${className ?? ""}`}
     >
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div className="min-w-0 max-w-[28rem] flex-1">
-          <div className="text-[11px] uppercase tracking-[0.2em] text-[#8b5a40]">
-            Spread {pageIndex + 1} / {page.storyBeat.replaceAll("_", " ")}
-          </div>
-          <div className="mt-2 flex flex-wrap items-center gap-2">
-            <h3
-              className="text-[1.15rem] leading-tight text-[#1f1814]"
-              style={{ fontFamily: fontPreset.headline }}
-            >
-              {page.title}
-            </h3>
-            <EditorTag
-              className={
-                page.copyStatus === "confirmed"
-                  ? "bg-[#dfeee7] text-[#2d624b]"
-                  : "bg-[#f2ebe4] text-[#6f625b]"
-              }
-            >
-              {page.copyStatus === "confirmed" ? "copy confirmed" : "prefilled copy"}
-            </EditorTag>
-          </div>
-          <p
-            className="mt-1.5 max-w-[40ch] text-[13px] leading-6 text-[#5d524b]"
-            style={{ fontFamily: fontPreset.body }}
-          >
-            {copy}
-          </p>
+      <div className="space-y-2.5">
+        <div className="text-[10px] uppercase tracking-[0.2em] text-[#8b5a40]">
+          Spread {pageIndex + 1} / {page.storyBeat.replaceAll("_", " ")}
         </div>
-        <div className="flex max-w-[14rem] flex-wrap justify-end gap-2">
-          <EditorTag className="bg-[#faf1e7] text-[#76584a]">{page.curationNote}</EditorTag>
-          {metaLines.map((line, index) => (
-            <EditorTag key={`${line}-${index}`} className="bg-[#f7efe8] text-[#7b6f67]">
-              {line}
-            </EditorTag>
-          ))}
+        <div className="space-y-1.5">
+          <h3
+            className="max-w-[18ch] text-[0.98rem] leading-tight text-[#1f1814]"
+            style={{ fontFamily: fontPreset.headline }}
+          >
+            {truncateWords(page.title, 6)}
+          </h3>
+          {copy ? (
+            <p
+              className="max-w-[24ch] text-[11px] leading-[1.45] text-[#5d524b]"
+              style={{ fontFamily: fontPreset.body }}
+            >
+              {copy}
+            </p>
+          ) : null}
         </div>
       </div>
     </div>
@@ -2967,6 +2941,16 @@ function buildDisplayCaption(
   }
 }
 
+function buildOnPageCaption(
+  page: BookPage,
+  photos: PhotoAsset[],
+  project: Project,
+  tone: EditorCaptionTone,
+) {
+  const source = buildDisplayCaption(page, photos, project, tone);
+  return truncateSentence(firstSentence(source), 64);
+}
+
 function buildPhotoMetaLine(
   photo: PhotoAsset,
   project: Project,
@@ -3043,6 +3027,25 @@ function firstSentence(value: string) {
 
   const match = trimmed.match(/^(.+?[.!?])(?:\s|$)/);
   return match?.[1] ?? trimmed;
+}
+
+function truncateSentence(value: string, maxLength: number) {
+  const normalized = value.trim().replace(/\s+/g, " ");
+  if (normalized.length <= maxLength) {
+    return normalized;
+  }
+
+  const clipped = normalized.slice(0, Math.max(0, maxLength - 1));
+  return `${clipped.replace(/[,\s]+$/, "")}...`;
+}
+
+function truncateWords(value: string, maxWords: number) {
+  const words = value.trim().split(/\s+/).filter(Boolean);
+  if (words.length <= maxWords) {
+    return value.trim();
+  }
+
+  return `${words.slice(0, maxWords).join(" ")}...`;
 }
 
 function truncateLabel(value: string) {

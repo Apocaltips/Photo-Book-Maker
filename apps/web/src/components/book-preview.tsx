@@ -962,8 +962,8 @@ function PreviewPager({
 function PreviewNarrativeStrip({
   className,
   page,
-  photos,
-  project,
+  photos: _photos,
+  project: _project,
   themePresentation,
 }: {
   className?: string;
@@ -972,30 +972,23 @@ function PreviewNarrativeStrip({
   project: Project;
   themePresentation: ReturnType<typeof getBookThemePresentation>;
 }) {
+  const copy = buildPreviewOnPageCaption(page);
+
   return (
-    <div className={`rounded-[1.45rem] border border-black/5 bg-white/88 px-4 py-3 ${className ?? ""}`}>
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div className="min-w-0 max-w-[28rem] flex-1">
-          <div className="text-[11px] uppercase tracking-[0.2em]" style={{ color: themePresentation.textMuted }}>
-            {page.storyBeat.replaceAll("_", " ")}
-          </div>
-          <div className="mt-2 flex flex-wrap items-center gap-2">
-            <h3 className="text-[1.15rem] font-semibold leading-tight" style={{ color: themePresentation.textColor }}>
-              {page.title}
-            </h3>
-            <PreviewTag tone={page.copyStatus === "confirmed" ? "success" : "neutral"}>
-              {page.copyStatus === "confirmed" ? "Copy confirmed" : "Prefilled copy"}
-            </PreviewTag>
-          </div>
-          <p className="mt-1.5 max-w-[40ch] text-[13px] leading-6" style={{ color: themePresentation.textMuted }}>
-            {page.caption}
-          </p>
+    <div className={`rounded-[1.35rem] border border-black/5 bg-white/88 px-3.5 py-3 ${className ?? ""}`}>
+      <div className="space-y-2.5">
+        <div className="text-[10px] uppercase tracking-[0.2em]" style={{ color: themePresentation.textMuted }}>
+          {page.storyBeat.replaceAll("_", " ")}
         </div>
-        <div className="flex max-w-[14rem] flex-wrap justify-end gap-2">
-          <PreviewTag>{page.curationNote}</PreviewTag>
-          {photos.slice(0, 3).map((photo) => (
-            <PreviewTag key={photo.id}>{photo.locationLabel ?? project.title}</PreviewTag>
-          ))}
+        <div className="space-y-1.5">
+          <h3 className="max-w-[18ch] text-[0.98rem] font-semibold leading-tight" style={{ color: themePresentation.textColor }}>
+            {truncateWords(page.title, 6)}
+          </h3>
+          {copy ? (
+            <p className="max-w-[24ch] text-[11px] leading-[1.45]" style={{ color: themePresentation.textMuted }}>
+              {copy}
+            </p>
+          ) : null}
         </div>
       </div>
     </div>
@@ -1155,6 +1148,39 @@ function getSpreadLabel(style: BookPage["style"]) {
     APPROVED_SPREAD_LIBRARY.find((entry) => entry.id === normalizeSpreadType(style));
 
   return normalized?.label ?? style.replaceAll("_", " ");
+}
+
+function buildPreviewOnPageCaption(page: BookPage) {
+  return truncateSentence(firstSentence(page.caption || page.curationNote), 64);
+}
+
+function firstSentence(value: string) {
+  const trimmed = value.trim().replace(/\s+/g, " ");
+  if (!trimmed) {
+    return "";
+  }
+
+  const match = trimmed.match(/^(.+?[.!?])(?:\s|$)/);
+  return match?.[1] ?? trimmed;
+}
+
+function truncateSentence(value: string, maxLength: number) {
+  const normalized = value.trim().replace(/\s+/g, " ");
+  if (normalized.length <= maxLength) {
+    return normalized;
+  }
+
+  const clipped = normalized.slice(0, Math.max(0, maxLength - 1));
+  return `${clipped.replace(/[,\s]+$/, "")}...`;
+}
+
+function truncateWords(value: string, maxWords: number) {
+  const words = value.trim().split(/\s+/).filter(Boolean);
+  if (words.length <= maxWords) {
+    return value.trim();
+  }
+
+  return `${words.slice(0, maxWords).join(" ")}...`;
 }
 
 function truncateLabel(value: string) {
