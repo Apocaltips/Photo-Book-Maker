@@ -133,7 +133,7 @@ export function BookPreview({
 
       {selectedPage ? (
         <section
-          className="grid gap-6 overflow-hidden rounded-[2.5rem] p-4 lg:grid-cols-[minmax(0,1.08fr)_24rem] lg:p-5"
+          className="grid gap-6 overflow-hidden rounded-[2.5rem] p-4 lg:grid-cols-[minmax(0,1.26fr)_19rem] lg:p-5"
           style={themePresentation.chromeStyle}
         >
           <div className="space-y-4">
@@ -164,6 +164,7 @@ export function BookPreview({
                 editorState={editorState}
                 page={selectedPage}
                 photos={selectedPhotos}
+                project={project}
                 spreadType={normalizeSpreadType(selectedPage.style)}
                 themePresentation={themePresentation}
               />
@@ -184,10 +185,10 @@ export function BookPreview({
               <div className="text-xs uppercase tracking-[0.2em]" style={{ color: themePresentation.textMuted }}>
                 Editorial copy
               </div>
-              <h2 className="display mt-3 text-3xl leading-none sm:text-4xl" style={{ color: themePresentation.textColor }}>
+              <h2 className="display mt-3 text-2xl leading-none sm:text-3xl" style={{ color: themePresentation.textColor }}>
                 {selectedPage.title}
               </h2>
-              <p className="mt-4 text-sm leading-8" style={{ color: themePresentation.textMuted }}>
+              <p className="mt-3 text-sm leading-7" style={{ color: themePresentation.textMuted }}>
                 {selectedPage.caption}
               </p>
             </div>
@@ -196,10 +197,10 @@ export function BookPreview({
               <div className="text-xs uppercase tracking-[0.2em]" style={{ color: themePresentation.textMuted }}>
                 Editorial intent
               </div>
-              <p className="mt-3 text-sm leading-8" style={{ color: themePresentation.textColor }}>
+              <p className="mt-3 text-sm leading-7" style={{ color: themePresentation.textColor }}>
                 {selectedPage.curationNote ?? selectedPage.layoutNote}
               </p>
-              <div className="mt-4 rounded-[1.3rem] border border-black/5 bg-white/72 px-4 py-4 text-sm leading-7" style={{ color: themePresentation.textMuted }}>
+              <div className="mt-4 rounded-[1.3rem] border border-black/5 bg-white/72 px-4 py-4 text-sm leading-6" style={{ color: themePresentation.textMuted }}>
                 {selectedPage.layoutNote}
               </div>
             </div>
@@ -236,6 +237,7 @@ function PreviewCanvas({
   editorState,
   page,
   photos,
+  project,
   spreadType,
   themePresentation,
 }: {
@@ -243,6 +245,7 @@ function PreviewCanvas({
   editorState: BookDraftEditorState;
   page: BookPage;
   photos: PhotoAsset[];
+  project: Project;
   spreadType: ReturnType<typeof normalizeSpreadType>;
   themePresentation: ReturnType<typeof getBookThemePresentation>;
 }) {
@@ -254,6 +257,14 @@ function PreviewCanvas({
       : editorState.density >= 50
         ? "min-h-[10rem]"
         : "min-h-[12rem]";
+  const narrativeStrip = (
+    <PreviewNarrativeStrip
+      page={page}
+      photos={photos}
+      project={project}
+      themePresentation={themePresentation}
+    />
+  );
 
   const previewBody = (() => {
     switch (spreadType) {
@@ -265,27 +276,37 @@ function PreviewCanvas({
             {supportingPhotos.length ? (
               <PreviewPhotoGrid accent={accent} photos={supportingPhotos} minHeight="min-h-[8rem]" />
             ) : null}
+            {narrativeStrip}
           </div>
         );
       case "hero_support_strip":
         return (
-          <div className="grid gap-4 lg:grid-cols-[1.18fr_0.82fr]">
-            <PreviewPhotoTile photo={heroPhoto} accent={accent} className="min-h-[24rem] md:min-h-[30rem]" emphasis="large" />
-            <PreviewPhotoGrid accent={accent} photos={supportingPhotos} minHeight="min-h-[8rem]" maxColumns={1} />
+          <div className="space-y-4">
+            <div className="grid gap-4 lg:grid-cols-[1.24fr_0.76fr]">
+              <PreviewPhotoTile photo={heroPhoto} accent={accent} className="min-h-[24rem] md:min-h-[30rem]" emphasis="large" />
+              <PreviewPhotoGrid accent={accent} photos={supportingPhotos} minHeight="min-h-[8rem]" maxColumns={1} />
+            </div>
+            {narrativeStrip}
           </div>
         );
       case "balanced_two_up":
         return (
-          <div className="grid gap-4 md:grid-cols-2">
-            {photos.slice(0, 2).map((photo) => (
-              <PreviewPhotoTile
-                key={photo.id}
-                photo={photo}
-                accent={accent}
-                className="min-h-[21rem] md:min-h-[26rem]"
-                emphasis="large"
-              />
-            ))}
+          <div className="space-y-4">
+            <div className="grid gap-4 md:grid-cols-2">
+              {photos.slice(0, 2).map((photo) => (
+                <PreviewPhotoTile
+                  key={photo.id}
+                  photo={photo}
+                  accent={accent}
+                  className="min-h-[21rem] md:min-h-[26rem]"
+                  emphasis="large"
+                />
+              ))}
+            </div>
+            {supportingPhotos.slice(1).length ? (
+              <PreviewPhotoGrid accent={accent} photos={supportingPhotos.slice(1)} minHeight="min-h-[9rem]" maxColumns={3} />
+            ) : null}
+            {narrativeStrip}
           </div>
         );
       case "four_up_grid":
@@ -293,66 +314,91 @@ function PreviewCanvas({
       case "pattern_repetition":
       case "burst_sequence":
         return (
-          <PreviewPhotoGrid
-            accent={accent}
-            maxColumns={spreadType === "dense_candid_grid" ? 3 : 2}
-            minHeight={densityClass}
-            photos={photos}
-          />
+          <div className="space-y-4">
+            <PreviewPhotoGrid
+              accent={accent}
+              maxColumns={spreadType === "dense_candid_grid" ? 3 : 2}
+              minHeight={densityClass}
+              photos={photos}
+            />
+            {narrativeStrip}
+          </div>
         );
       case "text_divider":
         return (
-          <div className="flex min-h-[25rem] items-center justify-center rounded-[2rem] border border-black/5 px-10 text-center" style={themePresentation.mutedPanelStyle}>
-            <div>
-              <div className="text-[11px] uppercase tracking-[0.22em]" style={{ color: themePresentation.textMuted }}>
-                Chapter divider
+          <div className="grid gap-4 lg:grid-cols-[0.72fr_1.28fr]">
+            <div className="flex min-h-[18rem] items-center justify-center rounded-[2rem] border border-black/5 px-8 text-center" style={themePresentation.mutedPanelStyle}>
+              <div>
+                <div className="text-[11px] uppercase tracking-[0.22em]" style={{ color: themePresentation.textMuted }}>
+                  Chapter divider
+                </div>
+                <h2 className="display mt-4 text-4xl" style={{ color: themePresentation.textColor }}>
+                  {page.title}
+                </h2>
+                <p className="mt-4 max-w-xl text-sm leading-7" style={{ color: themePresentation.textMuted }}>
+                  {page.caption}
+                </p>
               </div>
-              <h2 className="display mt-4 text-4xl" style={{ color: themePresentation.textColor }}>
-                {page.title}
-              </h2>
-              <p className="mt-4 max-w-xl text-sm leading-8" style={{ color: themePresentation.textMuted }}>
-                {page.caption}
-              </p>
             </div>
+            <PreviewPhotoTile photo={heroPhoto} accent={accent} className="min-h-[24rem] md:min-h-[30rem]" emphasis="large" />
           </div>
         );
       case "photo_journal":
         return (
-          <div className="grid gap-4 lg:grid-cols-[0.92fr_1.08fr]">
-            <PreviewPhotoGrid accent={accent} photos={photos} minHeight="min-h-[11rem]" maxColumns={1} />
-            <div className="rounded-[2rem] border border-black/5 bg-white/82 p-6">
-              <div className="text-[11px] uppercase tracking-[0.22em]" style={{ color: themePresentation.textMuted }}>
-                Journal block
+          <div className="grid gap-4 lg:grid-cols-[1.18fr_0.82fr]">
+            <div className="space-y-4">
+              <PreviewPhotoTile photo={heroPhoto} accent={accent} className="min-h-[24rem] md:min-h-[30rem]" emphasis="large" />
+              {supportingPhotos.length ? (
+                <PreviewPhotoGrid accent={accent} photos={supportingPhotos} minHeight="min-h-[9rem]" maxColumns={2} />
+              ) : null}
+            </div>
+            <div className="space-y-4">
+              {narrativeStrip}
+              <div className="rounded-[2rem] border border-black/5 bg-white/82 p-6">
+                <div className="text-[11px] uppercase tracking-[0.22em]" style={{ color: themePresentation.textMuted }}>
+                  Journal block
+                </div>
+                <p className="mt-4 text-sm leading-7" style={{ color: themePresentation.textColor }}>
+                  {page.caption}
+                </p>
               </div>
-              <p className="mt-4 text-sm leading-8" style={{ color: themePresentation.textColor }}>
-                {page.caption}
-              </p>
             </div>
           </div>
         );
       case "memorabilia_spread":
       case "map_timeline":
         return (
-          <div className="grid gap-4 lg:grid-cols-[1fr_0.95fr]">
-            <div className="rounded-[2rem] border border-black/5 p-5" style={themePresentation.mutedPanelStyle}>
-              <div className="text-[11px] uppercase tracking-[0.22em]" style={{ color: themePresentation.textMuted }}>
-                {spreadType === "map_timeline" ? "Route context" : "Memorabilia notes"}
+          <div className="space-y-4">
+            <div className="grid gap-4 lg:grid-cols-[1.18fr_0.82fr]">
+              <PreviewPhotoTile photo={heroPhoto} accent={accent} className="min-h-[24rem] md:min-h-[30rem]" emphasis="large" />
+              <div className="space-y-4">
+                <div className="rounded-[2rem] border border-black/5 p-5" style={themePresentation.mutedPanelStyle}>
+                  <div className="text-[11px] uppercase tracking-[0.22em]" style={{ color: themePresentation.textMuted }}>
+                    {spreadType === "map_timeline" ? "Route context" : "Memorabilia notes"}
+                  </div>
+                  <h3 className="mt-4 text-2xl font-semibold" style={{ color: themePresentation.textColor }}>
+                    {page.title}
+                  </h3>
+                  <p className="mt-3 text-sm leading-7" style={{ color: themePresentation.textMuted }}>
+                    {page.caption}
+                  </p>
+                </div>
+                {narrativeStrip}
               </div>
-              <h3 className="mt-4 text-2xl font-semibold" style={{ color: themePresentation.textColor }}>
-                {page.title}
-              </h3>
-              <p className="mt-3 text-sm leading-8" style={{ color: themePresentation.textMuted }}>
-                {page.caption}
-              </p>
             </div>
-            <PreviewPhotoGrid accent={accent} photos={photos} minHeight="min-h-[11rem]" />
+            {supportingPhotos.length ? (
+              <PreviewPhotoGrid accent={accent} photos={supportingPhotos} minHeight="min-h-[9rem]" maxColumns={3} />
+            ) : null}
           </div>
         );
       default:
         return (
-          <div className="grid gap-4 lg:grid-cols-[1.08fr_0.92fr]">
-            <PreviewPhotoTile photo={heroPhoto} accent={accent} className="min-h-[24rem] md:min-h-[30rem]" emphasis="large" />
-            <PreviewPhotoGrid accent={accent} photos={supportingPhotos} minHeight="min-h-[10rem]" maxColumns={1} />
+          <div className="space-y-4">
+            <div className="grid gap-4 lg:grid-cols-[1.24fr_0.76fr]">
+              <PreviewPhotoTile photo={heroPhoto} accent={accent} className="min-h-[24rem] md:min-h-[30rem]" emphasis="large" />
+              <PreviewPhotoGrid accent={accent} photos={supportingPhotos} minHeight="min-h-[10rem]" maxColumns={1} />
+            </div>
+            {narrativeStrip}
           </div>
         );
     }
@@ -431,6 +477,46 @@ function PreviewPager({
   );
 }
 
+function PreviewNarrativeStrip({
+  page,
+  photos,
+  project,
+  themePresentation,
+}: {
+  page: BookPage;
+  photos: PhotoAsset[];
+  project: Project;
+  themePresentation: ReturnType<typeof getBookThemePresentation>;
+}) {
+  return (
+    <div className="rounded-[1.6rem] border border-black/5 bg-white/84 px-5 py-4">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div className="min-w-0 flex-1">
+          <div className="text-[11px] uppercase tracking-[0.2em]" style={{ color: themePresentation.textMuted }}>
+            {page.storyBeat.replaceAll("_", " ")}
+          </div>
+          <h3 className="mt-2 text-2xl font-semibold leading-tight" style={{ color: themePresentation.textColor }}>
+            {page.title}
+          </h3>
+          <p className="mt-2 text-sm leading-7" style={{ color: themePresentation.textMuted }}>
+            {page.caption}
+          </p>
+        </div>
+        <PreviewTag tone={page.copyStatus === "confirmed" ? "success" : "neutral"}>
+          {page.copyStatus === "confirmed" ? "Copy confirmed" : "Prefilled copy"}
+        </PreviewTag>
+      </div>
+      {photos.length ? (
+        <div className="mt-4 flex flex-wrap gap-2">
+          {photos.slice(0, 3).map((photo) => (
+            <PreviewTag key={photo.id}>{photo.locationLabel ?? project.title}</PreviewTag>
+          ))}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
 function PreviewPhotoGrid({
   accent,
   maxColumns = 2,
@@ -482,6 +568,8 @@ function PreviewPhotoTile({
   emphasis?: "large";
   photo?: PhotoAsset;
 }) {
+  const showFooter = emphasis !== "large";
+
   return (
     <div
       className={`relative overflow-hidden rounded-[1.8rem] border border-[#00000010] bg-[linear-gradient(180deg,rgba(255,255,255,0.86),rgba(234,225,216,0.96))] ${className}`}
@@ -492,7 +580,7 @@ function PreviewPhotoTile({
       {photo?.imageUri ? (
         <>
           <img src={photo.imageUri} alt={photo.title} className="absolute inset-0 h-full w-full object-cover" />
-          <div className="absolute inset-0 bg-[linear-gradient(180deg,rgba(16,11,8,0.05),rgba(16,11,8,0.28))]" />
+          <div className="absolute inset-0 bg-[linear-gradient(180deg,rgba(16,11,8,0.03),rgba(16,11,8,0.16))]" />
         </>
       ) : (
         <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(255,255,255,0.92),rgba(232,221,212,0.98))]" />
@@ -501,15 +589,24 @@ function PreviewPhotoTile({
         <div className="text-[11px] uppercase tracking-[0.18em] text-[#786b62]">
           {photo?.orientation ?? "layout"}
         </div>
-        <div className="rounded-[1.2rem] border border-white/40 bg-white/74 px-4 py-3 backdrop-blur-sm">
+        {!showFooter ? (
+          <div className="rounded-[1.2rem] bg-[linear-gradient(180deg,rgba(17,12,9,0),rgba(17,12,9,0.72))] px-4 pb-1 pt-8 text-white">
+            <div className="text-lg font-semibold">
+              {photo?.title ?? "Reserved image field"}
+            </div>
+            <div className="mt-1 text-[11px] uppercase tracking-[0.18em] text-[#eee0d4]">
+              {photo?.locationLabel ?? "Editorial crop zone"}
+            </div>
+          </div>
+        ) : null}
+      </div>
+      {showFooter ? (
+        <div className="absolute inset-x-0 bottom-0 border-t border-white/25 bg-[linear-gradient(180deg,rgba(255,250,246,0.94),rgba(243,233,224,0.96))] px-4 py-3">
           <div className="text-sm font-semibold text-[#211a16]">
             {photo?.title ?? "Reserved image field"}
           </div>
-          <div className="mt-1 text-[11px] uppercase tracking-[0.18em] text-[#7a6e65]">
-            {photo?.locationLabel ?? "Editorial crop zone"}
-          </div>
         </div>
-      </div>
+      ) : null}
     </div>
   );
 }

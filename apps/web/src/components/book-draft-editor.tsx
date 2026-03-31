@@ -493,7 +493,7 @@ export function BookDraftEditor({
   }
 
   return (
-    <div className="grid gap-6 xl:grid-cols-[minmax(0,1.16fr)_24rem]">
+    <div className="grid gap-6 xl:grid-cols-[minmax(0,1.34fr)_21rem]">
       <div className="space-y-5">
         <section
           className="rounded-[2.35rem] px-6 py-6 md:px-8"
@@ -562,7 +562,7 @@ export function BookDraftEditor({
 
         {selectedPage ? (
           <section
-            className="grid gap-5 overflow-hidden rounded-[2.35rem] p-4 lg:grid-cols-[15rem_minmax(0,1fr)] lg:p-5 xl:min-h-[calc(100vh-12rem)]"
+            className="grid gap-5 overflow-hidden rounded-[2.35rem] p-4 lg:grid-cols-[12.5rem_minmax(0,1fr)] lg:p-5 xl:min-h-[calc(100vh-12rem)]"
             style={themePresentation.chromeStyle}
           >
             <div className="space-y-4">
@@ -600,7 +600,7 @@ export function BookDraftEditor({
                   ))}
                 </div>
                 <div className="mt-4 rounded-[1.2rem] border border-black/5 bg-white/66 px-4 py-4 text-sm leading-7" style={{ color: themePresentation.textMuted }}>
-                  {selectedTheme.name} is active, and every theme shift now updates the page chrome, controls, and book canvas instead of just a small accent chip.
+                  {selectedTheme.name} is active. The editor is now photo-led, so this rail stays light and the spread canvas carries the visual weight.
                 </div>
               </div>
 
@@ -1493,6 +1493,17 @@ function EditorSpreadCanvas({
         ? "min-h-[10rem]"
         : "min-h-[12rem]";
 
+  const narrativeStrip = (
+    <EditorNarrativeStrip
+      controls={controls}
+      fontPreset={fontPreset}
+      page={page}
+      pageIndex={pageIndex}
+      pagePhotos={pagePhotos}
+      project={project}
+    />
+  );
+
   const renderPhotoTile = (
     photo: PhotoAsset,
     className = "min-h-[16rem]",
@@ -1560,17 +1571,6 @@ function EditorSpreadCanvas({
     );
   };
 
-  const copyPanel = (
-    <EditorCopyPanel
-      controls={controls}
-      fontPreset={fontPreset}
-      page={page}
-      pageIndex={pageIndex}
-      pagePhotos={pagePhotos}
-      project={project}
-    />
-  );
-
   const leadPhoto = pagePhotos[0];
   const secondaryPhotos = pagePhotos.slice(1);
   const tertiaryPhotos = pagePhotos.slice(2);
@@ -1584,26 +1584,26 @@ function EditorSpreadCanvas({
               ? renderPhotoTile(leadPhoto, "min-h-[28rem] md:min-h-[34rem]", "hero")
               : renderEmptyTile("Pick one dominant image for this hero spread.", "min-h-[28rem]")}
             {secondaryPhotos.length ? renderGrid(secondaryPhotos, { maxColumns: 3 }) : null}
-            {copyPanel}
+            {narrativeStrip}
           </div>
         );
       case "hero_support_strip":
         return (
           <div className="space-y-4">
-            <div className="grid gap-4 lg:grid-cols-[1.18fr_0.82fr]">
+            <div className="grid gap-4 lg:grid-cols-[1.26fr_0.74fr]">
               <div>
                 {leadPhoto
                   ? renderPhotoTile(leadPhoto, "min-h-[26rem] md:min-h-[31rem]", "hero")
                   : renderEmptyTile("Choose a hero image for the opening column.", "min-h-[26rem]")}
               </div>
-              <div className="space-y-4">
-                {copyPanel}
+              <div>
                 {renderGrid(secondaryPhotos, {
                   maxColumns: secondaryPhotos.length >= 3 ? 3 : 2,
                   minHeight: "min-h-[9rem]",
                 })}
               </div>
             </div>
+            {narrativeStrip}
           </div>
         );
       case "balanced_two_up":
@@ -1618,29 +1618,29 @@ function EditorSpreadCanvas({
                 : renderEmptyTile("Add a second image or switch to a hero spread.", "min-h-[22rem]", "quiet")}
             </div>
             {tertiaryPhotos.length ? renderGrid(tertiaryPhotos, { maxColumns: 3 }) : null}
-            {copyPanel}
+            {narrativeStrip}
           </div>
         );
       case "four_up_grid":
         return (
           <div className="space-y-4">
-            {copyPanel}
             {renderGrid(pagePhotos, {
               maxColumns: 2,
               minHeight: controls.density >= 55 ? "min-h-[11rem]" : "min-h-[13rem]",
               treatment: "default",
             })}
+            {narrativeStrip}
           </div>
         );
       case "dense_candid_grid":
         return (
           <div className="space-y-4">
-            {copyPanel}
             {renderGrid(pagePhotos, {
               maxColumns: Math.max(columns, 3),
               minHeight: controls.density >= 65 ? "min-h-[8rem]" : "min-h-[9rem]",
               treatment: "compact",
             })}
+            {narrativeStrip}
           </div>
         );
       case "panorama_spread":
@@ -1650,25 +1650,25 @@ function EditorSpreadCanvas({
               ? renderPhotoTile(leadPhoto, "min-h-[20rem] md:min-h-[24rem]", "hero")
               : renderEmptyTile("Reserve panoramas for wide scenic images.", "min-h-[20rem]")}
             {secondaryPhotos.length ? renderGrid(secondaryPhotos, { maxColumns: 4 }) : null}
-            {copyPanel}
+            {narrativeStrip}
           </div>
         );
       case "text_divider":
         return (
-          <div className="grid gap-4 lg:grid-cols-[0.9fr_1.1fr]">
+          <div className="grid gap-4 lg:grid-cols-[0.72fr_1.28fr]">
             <div className="space-y-4">
-              <div className="rounded-[1.8rem] border border-[#00000012] bg-white/88 px-5 py-8">
+              <div className="rounded-[1.8rem] border border-[#00000012] bg-white/88 px-5 py-7">
                 <div className="text-[11px] uppercase tracking-[0.22em] text-[#8b5a40]">
                   Divider spread
                 </div>
                 <h3
-                  className="mt-3 text-5xl leading-none text-[#1f1814]"
+                  className="mt-3 text-4xl leading-none text-[#1f1814]"
                   style={{ fontFamily: fontPreset.headline }}
                 >
                   {page.title}
                 </h3>
                 <p
-                  className="mt-5 text-sm leading-8 text-[#5f544d]"
+                  className="mt-4 text-sm leading-7 text-[#5f544d]"
                   style={{ fontFamily: fontPreset.body }}
                 >
                   {buildDisplayCaption(page, pagePhotos, project, controls.captionTone)}
@@ -1687,59 +1687,57 @@ function EditorSpreadCanvas({
         );
       case "photo_journal":
         return (
-          <div className="grid gap-4 lg:grid-cols-[0.92fr_1.08fr]">
+          <div className="grid gap-4 lg:grid-cols-[1.18fr_0.82fr]">
             <div className="space-y-4">
-              {copyPanel}
+              {leadPhoto
+                  ? renderPhotoTile(leadPhoto, "min-h-[22rem] md:min-h-[28rem]", "hero")
+                  : renderEmptyTile("Journal spreads still need one supporting frame.", "min-h-[22rem]")}
+              {secondaryPhotos.length ? renderGrid(secondaryPhotos, { maxColumns: 2, minHeight: "min-h-[9rem]" }) : null}
+            </div>
+            <div className="space-y-4">
+              {narrativeStrip}
               {controls.showHandwrittenNotes ? (
                 <div
                   className="rounded-[1.5rem] border border-[#00000012] bg-[#fff7ec] px-4 py-4 text-sm leading-7 text-[#6a5647]"
                   style={{ fontFamily: fontPreset.accent ?? fontPreset.body }}
                 >
-                  Handwritten note block: add a quick emotional detail or what made
-                  the moment matter.
+                  Handwritten note block: add a quick emotional detail or what made the moment matter.
                 </div>
               ) : null}
-            </div>
-            <div className="space-y-4">
-              {leadPhoto
-                ? renderPhotoTile(leadPhoto, "min-h-[22rem] md:min-h-[28rem]", "hero")
-                : renderEmptyTile("Journal spreads still need one supporting frame.", "min-h-[22rem]")}
-              {pagePhotos[1]
-                ? renderPhotoTile(pagePhotos[1], "min-h-[11rem]", "default")
-                : null}
             </div>
           </div>
         );
       case "memorabilia_spread":
         return (
           <div className="space-y-4">
-            {copyPanel}
-            <div className="grid gap-4 lg:grid-cols-[1.05fr_0.95fr]">
+            <div className="grid gap-4 lg:grid-cols-[1.18fr_0.82fr]">
               <div className="space-y-4">
                 {leadPhoto
                   ? renderPhotoTile(leadPhoto, "min-h-[20rem]", "hero")
                   : renderEmptyTile("Use one image to anchor the memorabilia page.", "min-h-[20rem]")}
+              </div>
+              <div className="space-y-4">
+                {narrativeStrip}
                 {controls.showMemorabilia ? <MemorabiliaStrip photos={secondaryPhotos} /> : null}
               </div>
-              <div>{renderGrid(secondaryPhotos, { maxColumns: 2, minHeight: "min-h-[9rem]" })}</div>
             </div>
+            {secondaryPhotos.length ? renderGrid(secondaryPhotos, { maxColumns: 3, minHeight: "min-h-[9rem]" }) : null}
           </div>
         );
       case "pattern_repetition":
         return (
           <div className="space-y-4">
-            {copyPanel}
             {renderGrid(pagePhotos, {
               maxColumns: 3,
               minHeight: "min-h-[12rem]",
               treatment: "default",
             })}
+            {narrativeStrip}
           </div>
         );
       case "burst_sequence":
         return (
           <div className="space-y-4">
-            {copyPanel}
             <div className="grid gap-4 md:grid-cols-3">
               {pagePhotos.length
                 ? pagePhotos.map((photo, index) =>
@@ -1751,35 +1749,38 @@ function EditorSpreadCanvas({
                   )
                 : renderEmptyTile("Burst spreads need a short run of repeated frames.", "min-h-[14rem]")}
             </div>
+            {narrativeStrip}
           </div>
         );
       case "map_timeline":
         return (
-          <div className="grid gap-4 lg:grid-cols-[0.88fr_1.12fr]">
-            <div className="space-y-4">
-              <MapTimelineCard project={project} pagePhotos={pagePhotos} />
-              {copyPanel}
-            </div>
-            <div className="space-y-4">
+          <div className="space-y-4">
+            <div className="grid gap-4 lg:grid-cols-[1.18fr_0.82fr]">
+              <div className="space-y-4">
               {leadPhoto
                 ? renderPhotoTile(leadPhoto, "min-h-[22rem] md:min-h-[28rem]", "hero")
                 : renderEmptyTile("Context spreads can hold a single travel image.", "min-h-[22rem]")}
-              {secondaryPhotos.length ? renderGrid(secondaryPhotos, { maxColumns: 2 }) : null}
+                {secondaryPhotos.length ? renderGrid(secondaryPhotos, { maxColumns: 2 }) : null}
+              </div>
+              <div className="space-y-4">
+                <MapTimelineCard project={project} pagePhotos={pagePhotos} />
+                {narrativeStrip}
+              </div>
             </div>
           </div>
         );
       default:
         return (
-          <div className="grid gap-4 lg:grid-cols-[1.08fr_0.92fr]">
-            <div>
+          <div className="space-y-4">
+            <div className="grid gap-4 lg:grid-cols-[1.24fr_0.76fr]">
+              <div>
               {leadPhoto
                 ? renderPhotoTile(leadPhoto, "min-h-[24rem] md:min-h-[29rem]", "hero")
                 : renderEmptyTile("Pick a lead image to start shaping this spread.", "min-h-[24rem]")}
+              </div>
+              <div>{renderGrid(secondaryPhotos, { maxColumns: 2 })}</div>
             </div>
-            <div className="space-y-4">
-              {copyPanel}
-              {renderGrid(secondaryPhotos, { maxColumns: 2 })}
-            </div>
+            {narrativeStrip}
           </div>
         );
     }
@@ -1801,13 +1802,13 @@ function EditorSpreadCanvas({
       <PrintPreviewGuides formatId={formatId} mode={controls.printPreviewMode} />
       <div className="relative z-10 space-y-4">{preview}</div>
       <div className="mt-4 rounded-[1.2rem] border border-[#00000010] bg-[#fffaf5] px-4 py-3 text-xs uppercase tracking-[0.18em] text-[#7e7067]">
-        {style.label} / {getSpreadLabel(spreadType)} / density {controls.density}
+        Photo-first layout / {style.label} / {getSpreadLabel(spreadType)} / density {controls.density}
       </div>
     </div>
   );
 }
 
-function EditorCopyPanel({
+function EditorNarrativeStrip({
   controls,
   fontPreset,
   page,
@@ -1825,10 +1826,24 @@ function EditorCopyPanel({
   const copy = buildDisplayCaption(page, pagePhotos, project, controls.captionTone);
 
   return (
-    <div className="rounded-[1.7rem] border border-[#00000010] bg-white/90 px-5 py-5 shadow-[0_14px_30px_rgba(49,33,22,0.05)]">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="text-[11px] uppercase tracking-[0.2em] text-[#8b5a40]">
-          Spread {pageIndex + 1} / {page.storyBeat.replaceAll("_", " ")}
+    <div className="rounded-[1.7rem] border border-[#00000010] bg-white/90 px-5 py-4 shadow-[0_12px_26px_rgba(49,33,22,0.05)]">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div className="min-w-0 flex-1">
+          <div className="text-[11px] uppercase tracking-[0.2em] text-[#8b5a40]">
+            Spread {pageIndex + 1} / {page.storyBeat.replaceAll("_", " ")}
+          </div>
+          <h3
+            className="mt-2 text-2xl leading-tight text-[#1f1814]"
+            style={{ fontFamily: fontPreset.headline }}
+          >
+            {page.title}
+          </h3>
+          <p
+            className="mt-2 text-sm leading-7 text-[#5d524b]"
+            style={{ fontFamily: fontPreset.body }}
+          >
+            {copy}
+          </p>
         </div>
         <EditorTag
           className={
@@ -1840,30 +1855,16 @@ function EditorCopyPanel({
           {page.copyStatus === "confirmed" ? "copy confirmed" : "prefilled copy"}
         </EditorTag>
       </div>
-      <h3
-        className="mt-3 text-3xl leading-none text-[#1f1814]"
-        style={{ fontFamily: fontPreset.headline }}
-      >
-        {page.title}
-      </h3>
-      <p
-        className="mt-4 text-sm leading-8 text-[#5d524b]"
-        style={{ fontFamily: fontPreset.body }}
-      >
-        {copy}
-      </p>
-      <div className="mt-4 rounded-[1.2rem] border border-[#0000000d] bg-[#faf4ee] px-4 py-4 text-sm leading-7 text-[#62574f]">
-        {page.curationNote}
+      <div className="mt-4 flex flex-wrap items-center gap-2">
+        <EditorTag className="bg-[#faf1e7] text-[#76584a]">{page.curationNote}</EditorTag>
+        {(controls.showDates || controls.showLocations) && pagePhotos.length
+          ? pagePhotos.slice(0, 3).map((photo) => (
+              <EditorTag key={photo.id} className="bg-[#f7efe8] text-[#7b6f67]">
+                {buildPhotoMetaLine(photo, project, controls.showDates, controls.showLocations)}
+              </EditorTag>
+            ))
+          : null}
       </div>
-      {(controls.showDates || controls.showLocations) && pagePhotos.length ? (
-        <div className="mt-4 flex flex-wrap gap-2">
-          {pagePhotos.slice(0, 4).map((photo) => (
-            <EditorTag key={photo.id} className="bg-[#f7efe8] text-[#7b6f67]">
-              {buildPhotoMetaLine(photo, project, controls.showDates, controls.showLocations)}
-            </EditorTag>
-          ))}
-        </div>
-      ) : null}
     </div>
   );
 }
@@ -1895,17 +1896,11 @@ function EditorPhotoTile({
 }) {
   const titleClass =
     treatment === "compact"
-      ? "text-[0.95rem]"
+      ? "text-sm"
       : treatment === "hero"
-        ? "text-lg"
-        : "text-base";
-  const footerPadding =
-    treatment === "compact"
-      ? "px-3 py-2.5"
-      : treatment === "hero"
-        ? "px-4 py-4"
-        : "px-4 py-3";
-  const showSecondaryCopy = treatment !== "compact";
+        ? "text-xl"
+        : "text-[0.95rem]";
+  const showInlineFooter = treatment === "default";
   const captionText =
     caption?.trim() ||
     buildPhotoMetaLine(photo, project, showDates, showLocations) ||
@@ -1915,7 +1910,7 @@ function EditorPhotoTile({
     <button
       type="button"
       onClick={onSelect}
-      className={`group grid w-full overflow-hidden rounded-[1.8rem] border bg-[#fffdf9] text-left transition-transform hover:-translate-y-0.5 [grid-template-rows:minmax(0,1fr)_auto] ${className} ${selected ? "border-[#8f4f2e66] shadow-[0_0_0_3px_rgba(143,79,46,0.16)]" : "border-white/45"}`}
+      className={`group ${showInlineFooter ? "grid [grid-template-rows:minmax(0,1fr)_auto]" : "block"} w-full overflow-hidden rounded-[1.8rem] border bg-[#fffdf9] text-left transition-transform hover:-translate-y-0.5 ${className} ${selected ? "border-[#8f4f2e66] shadow-[0_0_0_3px_rgba(143,79,46,0.16)]" : "border-white/45"}`}
       style={{
         boxShadow: `inset 0 0 0 1px ${accent}22`,
       }}
@@ -1941,28 +1936,35 @@ function EditorPhotoTile({
             selected
           </div>
         ) : null}
+        {!showInlineFooter ? (
+          <div className="absolute inset-x-0 bottom-0 bg-[linear-gradient(180deg,rgba(18,12,9,0),rgba(18,12,9,0.72))] px-4 pb-4 pt-10 text-[#fff8f2]">
+            <div
+              className={`${titleClass} font-semibold`}
+              style={{ fontFamily: fontPreset.headline }}
+            >
+              {photo.title}
+            </div>
+            {treatment === "hero" ? (
+              <div
+                className="mt-1.5 max-w-[28rem] text-[11px] leading-5 text-[#f4e6d8]"
+                style={{ fontFamily: fontPreset.body }}
+              >
+                {captionText}
+              </div>
+            ) : null}
+          </div>
+        ) : null}
       </div>
-
-      <div
-        className={`border-t border-[#0000000d] bg-[linear-gradient(180deg,rgba(255,251,247,0.98),rgba(246,238,231,0.98))] ${footerPadding}`}
-      >
-        <div className="min-w-0">
+      {showInlineFooter ? (
+        <div className="border-t border-[#0000000d] bg-[linear-gradient(180deg,rgba(255,251,247,0.98),rgba(246,238,231,0.98))] px-4 py-3">
           <div
             className={`${titleClass} font-semibold text-[#1f1814]`}
             style={{ fontFamily: fontPreset.headline }}
           >
             {photo.title}
           </div>
-          {showSecondaryCopy ? (
-            <div
-              className="mt-1.5 text-[11px] leading-5 text-[#6f635b]"
-              style={{ fontFamily: fontPreset.body }}
-            >
-              {captionText}
-            </div>
-          ) : null}
         </div>
-      </div>
+      ) : null}
     </button>
   );
 }
