@@ -493,22 +493,22 @@ export function BookDraftEditor({
   }
 
   return (
-    <div className="grid gap-6 xl:grid-cols-[minmax(0,1.34fr)_21rem]">
-      <div className="space-y-5">
+    <div className="grid gap-4 xl:grid-cols-[minmax(0,1.42fr)_18.5rem]">
+      <div className="space-y-4">
         <section
-          className="rounded-[2.35rem] px-6 py-6 md:px-8"
+          className="rounded-[2rem] px-5 py-5 md:px-6"
           style={themePresentation.appStyle}
         >
-          <div className="flex flex-col gap-5 md:flex-row md:items-end md:justify-between">
+          <div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
             <div className="max-w-3xl">
               <div className="eyebrow">Book art direction</div>
               <h2
-                className="display mt-2 text-4xl sm:text-5xl"
+                className="display mt-2 text-3xl sm:text-4xl"
                 style={{ color: themePresentation.textColor }}
               >
                 Flip through one spread at a time.
               </h2>
-              <p className="mt-3 text-sm leading-7" style={{ color: themePresentation.textMuted }}>
+              <p className="mt-2 text-sm leading-6" style={{ color: themePresentation.textMuted }}>
                 This editor keeps the whole workspace anchored around the active spread:
                 theme, book settings, copy, photo movement, and publish controls stay
                 in one place while you page through the book.
@@ -518,20 +518,20 @@ export function BookDraftEditor({
             <div className="flex flex-wrap gap-3">
               <Link
                 href={`/projects/${project.id}`}
-                className="rounded-full px-4 py-2 text-sm font-medium transition-colors hover:bg-white"
+                className="rounded-full px-3.5 py-2 text-xs font-semibold uppercase tracking-[0.14em] transition-colors hover:bg-white"
                 style={themePresentation.secondaryButtonStyle}
               >
                 Back to proof board
               </Link>
               <Link
                 href={previewHref?.() ?? `/projects/${project.id}/preview`}
-                className="rounded-full px-4 py-2 text-sm font-medium transition-colors"
+                className="rounded-full px-3.5 py-2 text-xs font-semibold uppercase tracking-[0.14em] transition-colors"
                 style={themePresentation.primaryButtonStyle}
               >
                 Open clean preview
               </Link>
               <span
-                className="rounded-full px-4 py-2 text-sm font-medium"
+                className="rounded-full px-3.5 py-2 text-xs font-semibold uppercase tracking-[0.14em]"
                 style={themePresentation.secondaryButtonStyle}
               >
                 {workspaceMode === "authenticated"
@@ -543,7 +543,7 @@ export function BookDraftEditor({
             </div>
           </div>
 
-          <div className="mt-6 grid gap-3 md:grid-cols-4">
+          <div className="mt-4 grid gap-2 md:grid-cols-4">
             <EditorStat label="Format" value={selectedFormat.label} />
             <EditorStat label="Style mode" value={selectedStyle.label} />
             <EditorStat
@@ -562,15 +562,15 @@ export function BookDraftEditor({
 
         {selectedPage ? (
           <section
-            className="grid gap-5 overflow-hidden rounded-[2.35rem] p-4 lg:grid-cols-[12.5rem_minmax(0,1fr)] lg:p-5 xl:min-h-[calc(100vh-12rem)]"
+            className="grid gap-4 overflow-hidden rounded-[2rem] p-3 lg:grid-cols-[10.75rem_minmax(0,1fr)] lg:p-4 xl:min-h-[calc(100vh-12rem)]"
             style={themePresentation.chromeStyle}
           >
-            <div className="space-y-4">
-              <div className="rounded-[1.7rem] p-4" style={themePresentation.mutedPanelStyle}>
+            <div className="space-y-3">
+              <div className="rounded-[1.45rem] p-3.5" style={themePresentation.mutedPanelStyle}>
                 <div className="text-xs uppercase tracking-[0.18em]" style={{ color: themePresentation.textMuted }}>
                   Story map
                 </div>
-                <div className="mt-4 space-y-3">
+                <div className="mt-3 space-y-2.5">
                   {chapters.map((chapter, index) => (
                     <button
                       key={chapter.id}
@@ -582,24 +582,24 @@ export function BookDraftEditor({
                           setInspectorTab("spread");
                         }
                       }}
-                      className="w-full rounded-[1.2rem] border px-4 py-3 text-left transition-colors"
+                      className="w-full rounded-[1rem] border px-3 py-2.5 text-left transition-colors"
                       style={
                         chapter.pageIds.includes(selectedPage.id)
                           ? themePresentation.pagerActiveStyle
                           : themePresentation.secondaryButtonStyle
                       }
                     >
-                      <div className="text-[11px] uppercase tracking-[0.18em] opacity-70">
+                      <div className="text-[10px] uppercase tracking-[0.16em] opacity-70">
                         Chapter {index + 1}
                       </div>
-                      <div className="mt-1 font-semibold">{chapter.title}</div>
-                      <div className="mt-1 text-xs leading-5 opacity-75">
+                      <div className="mt-1 text-sm font-semibold leading-5">{chapter.title}</div>
+                      <div className="mt-1 text-[11px] leading-4 opacity-75">
                         {chapter.pageIds.length} spreads
                       </div>
                     </button>
                   ))}
                 </div>
-                <div className="mt-4 rounded-[1.2rem] border border-black/5 bg-white/66 px-4 py-4 text-sm leading-7" style={{ color: themePresentation.textMuted }}>
+                <div className="mt-3 rounded-[1rem] border border-black/5 bg-white/66 px-3 py-3 text-xs leading-6" style={{ color: themePresentation.textMuted }}>
                   {selectedTheme.name} is active. The editor is now photo-led, so this rail stays light and the spread canvas carries the visual weight.
                 </div>
               </div>
@@ -633,16 +633,16 @@ export function BookDraftEditor({
               ) : null}
 
               <div
-                className="rounded-[2rem] p-4 md:p-5"
+                className="rounded-[1.7rem] p-3 md:p-4"
                 style={themePresentation.canvasFrameStyle}
               >
-                <div className="mb-4 flex flex-wrap items-center justify-between gap-3 border-b border-black/5 pb-4">
+                <div className="mb-3 flex flex-wrap items-center justify-between gap-2 border-b border-black/5 pb-3">
                   <div>
                     <div className="text-xs uppercase tracking-[0.18em]" style={{ color: themePresentation.textMuted }}>
                       {selectedChapter ? `${selectedChapter.title} / ` : ""}Spread {selectedPageIndex + 1} of {pageCount}
                     </div>
                     <div
-                      className="mt-2 text-2xl font-semibold"
+                      className="mt-1.5 text-xl font-semibold"
                       style={{ color: themePresentation.textColor, fontFamily: selectedFont.headline }}
                     >
                       {selectedPage.title}
@@ -669,7 +669,7 @@ export function BookDraftEditor({
                 </div>
 
                 <div
-                  className={`mx-auto w-full overflow-hidden rounded-[2rem] p-4 md:p-5 ${selectedStyle.shellClass}`}
+                  className={`mx-auto w-full overflow-hidden rounded-[1.7rem] p-3 md:p-4 ${selectedStyle.shellClass}`}
                   style={{
                     ...themePresentation.canvasStyle,
                     maxWidth: selectedFormat.maxWidth,
@@ -723,9 +723,9 @@ export function BookDraftEditor({
         ) : null}
       </div>
 
-      <aside className="space-y-4 xl:sticky xl:top-6 xl:max-h-[calc(100vh-3rem)] xl:self-start">
+      <aside className="space-y-3 xl:sticky xl:top-4 xl:max-h-[calc(100vh-2rem)] xl:self-start">
         <section
-          className="rounded-[2rem] border border-[#00000012] bg-white/92 p-3"
+          className="rounded-[1.6rem] border border-[#00000012] bg-white/92 p-2.5"
           style={themePresentation.chromeStyle}
         >
           <div className="grid grid-cols-2 gap-2">
@@ -763,11 +763,11 @@ export function BookDraftEditor({
           </div>
         </section>
 
-        <div className="space-y-4 xl:max-h-[calc(100vh-11rem)] xl:overflow-y-auto xl:pr-1">
+        <div className="space-y-3 xl:max-h-[calc(100vh-9rem)] xl:overflow-y-auto xl:pr-1">
         {inspectorTab === "book" ? (
-        <section className="rounded-[2rem] border border-[#00000012] bg-white/92 p-5">
+        <section className="rounded-[1.6rem] border border-[#00000012] bg-white/92 p-4">
           <div className="eyebrow">Book system</div>
-          <div className="mt-4 space-y-4">
+          <div className="mt-3 space-y-3">
             <SelectField
               label="Book size"
               helper="Choose the print trim before publishing a draft."
@@ -871,9 +871,9 @@ export function BookDraftEditor({
         ) : null}
 
         {inspectorTab === "story" ? (
-        <section className="rounded-[2rem] border border-[#00000012] bg-white/92 p-5">
+        <section className="rounded-[1.6rem] border border-[#00000012] bg-white/92 p-4">
           <div className="eyebrow">Story controls</div>
-          <div className="mt-4 space-y-3">
+          <div className="mt-3 space-y-2.5">
             <ToggleField
               label="Chapter dividers"
               helper="Show text-led chapter breaks between acts."
@@ -945,9 +945,9 @@ export function BookDraftEditor({
         ) : null}
 
         {inspectorTab === "book" ? (
-        <section className="rounded-[2rem] border border-[#00000012] bg-white/92 p-5">
+        <section className="rounded-[1.6rem] border border-[#00000012] bg-white/92 p-4">
           <div className="eyebrow">Cover and title wizard</div>
-          <div className="mt-4 space-y-4">
+          <div className="mt-3 space-y-3">
             <label className="block">
               <span className="text-xs uppercase tracking-[0.18em] text-[#7a6e65]">
                 Book title
@@ -1027,9 +1027,9 @@ export function BookDraftEditor({
         ) : null}
 
         {selectedPage && inspectorTab === "spread" ? (
-          <section className="rounded-[2rem] border border-[#00000012] bg-white/92 p-5">
+          <section className="rounded-[1.6rem] border border-[#00000012] bg-white/92 p-4">
             <div className="eyebrow">Selected spread</div>
-            <div className="mt-4 space-y-4">
+            <div className="mt-3 space-y-3">
               <div className="rounded-[1.3rem] border border-[#00000010] bg-[#fff9f4] px-4 py-4 text-sm leading-7 text-[#655a53]">
                 {selectedChapter ? (
                   <>
@@ -1177,9 +1177,9 @@ export function BookDraftEditor({
         ) : null}
 
         {selectedPhoto && inspectorTab === "photo" ? (
-          <section className="rounded-[2rem] border border-[#00000012] bg-white/92 p-5">
+          <section className="rounded-[1.6rem] border border-[#00000012] bg-white/92 p-4">
             <div className="eyebrow">Selected photo</div>
-            <div className="mt-4 space-y-4">
+            <div className="mt-3 space-y-3">
               <div className="overflow-hidden rounded-[1.5rem] border border-[#00000010] bg-[#f7f0ea]">
                 <div className="relative aspect-[4/3] overflow-hidden bg-[#e9dfd3]">
                   {selectedPhoto.imageUri ? (
@@ -1246,9 +1246,9 @@ export function BookDraftEditor({
         ) : null}
 
         {inspectorTab === "publish" ? (
-        <section className="rounded-[2rem] border border-[#00000012] bg-white/92 p-5">
+        <section className="rounded-[1.6rem] border border-[#00000012] bg-white/92 p-4">
           <div className="eyebrow">Publish draft</div>
-          <div className="mt-4 space-y-4">
+          <div className="mt-3 space-y-3">
             <label className="block">
               <span className="text-xs uppercase tracking-[0.18em] text-[#7a6e65]">
                 Draft name
@@ -1348,7 +1348,7 @@ function InspectorTabButton({
     <button
       type="button"
       onClick={onClick}
-      className={`rounded-[1.2rem] border px-3 py-3 text-sm font-semibold transition-colors ${
+      className={`rounded-[1rem] border px-2.5 py-2.5 text-xs font-semibold uppercase tracking-[0.14em] transition-colors ${
         active
           ? "border-[#8f4f2e33] bg-[#1f1814] text-[#f9f2ea]"
           : "border-[#00000010] bg-white/72 text-[#1f1814] hover:bg-white"
@@ -1377,25 +1377,25 @@ function EditorPageNavigator({
   }
 
   return (
-    <div className="mt-5 space-y-3 border-t border-black/5 pt-4">
+    <div className="mt-4 space-y-2.5 border-t border-black/5 pt-3">
       <div className="flex items-center justify-between gap-3">
         <button
           type="button"
           onClick={() => onSelectPage(Math.max(0, currentIndex - 1))}
           disabled={currentIndex === 0}
-          className="rounded-full px-4 py-2 text-sm font-semibold disabled:cursor-not-allowed disabled:opacity-40"
+          className="rounded-full px-3.5 py-1.5 text-xs font-semibold uppercase tracking-[0.14em] disabled:cursor-not-allowed disabled:opacity-40"
           style={idleStyle}
         >
           Previous page
         </button>
-        <div className="text-xs uppercase tracking-[0.18em] text-[#7a6e65]">
+        <div className="text-[11px] uppercase tracking-[0.16em] text-[#7a6e65]">
           Flip through the book without leaving the workspace
         </div>
         <button
           type="button"
           onClick={() => onSelectPage(Math.min(pages.length - 1, currentIndex + 1))}
           disabled={currentIndex === pages.length - 1}
-          className="rounded-full px-4 py-2 text-sm font-semibold disabled:cursor-not-allowed disabled:opacity-40"
+          className="rounded-full px-3.5 py-1.5 text-xs font-semibold uppercase tracking-[0.14em] disabled:cursor-not-allowed disabled:opacity-40"
           style={activeStyle}
         >
           Next page
@@ -1408,7 +1408,7 @@ function EditorPageNavigator({
             key={page.id}
             type="button"
             onClick={() => onSelectPage(index)}
-            className="rounded-full px-3 py-2 text-xs font-semibold uppercase tracking-[0.15em]"
+            className="rounded-full px-2.5 py-1.5 text-[10px] font-semibold uppercase tracking-[0.14em]"
             style={index === currentIndex ? activeStyle : idleStyle}
           >
             {index + 1}. {truncateLabel(page.title)}
@@ -2092,17 +2092,17 @@ function SelectField({
     options.find((option) => option.id === selectedId) ?? options[0];
 
   return (
-    <div className="space-y-3">
+    <div className="space-y-2.5">
       <div>
         <div className="text-xs uppercase tracking-[0.18em] text-[#7a6e65]">{label}</div>
-        <div className="mt-1 text-sm leading-6 text-[#6a5f58]">{helper}</div>
+        <div className="mt-1 text-xs leading-5 text-[#6a5f58]">{helper}</div>
       </div>
-      <div className="space-y-2">
+      <div className="space-y-1.5">
         <div className="relative">
           <select
             value={selectedId}
             onChange={(event) => onSelect(event.target.value)}
-            className="w-full appearance-none rounded-[1.2rem] border border-[#00000012] bg-[#fffaf5] px-4 py-3 pr-12 text-sm font-medium text-[#1f1814] outline-none transition-colors focus:border-[#8f4f2e44]"
+            className="w-full appearance-none rounded-[1rem] border border-[#00000012] bg-[#fffaf5] px-3.5 py-2.5 pr-11 text-sm font-medium text-[#1f1814] outline-none transition-colors focus:border-[#8f4f2e44]"
           >
             {options.map((option) => (
               <option key={option.id} value={option.id}>
@@ -2115,7 +2115,7 @@ function SelectField({
           </span>
         </div>
         {selectedOption ? (
-          <div className="rounded-[1rem] border border-[#0000000d] bg-[#fff9f4] px-4 py-3 text-sm text-[#6a5f58]">
+          <div className="rounded-[0.95rem] border border-[#0000000d] bg-[#fff9f4] px-3.5 py-2.5 text-xs leading-5 text-[#6a5f58]">
             {selectedOption.helper}
           </div>
         ) : null}
@@ -2136,7 +2136,7 @@ function ToggleField({
   onChange: (checked: boolean) => void;
 }) {
   return (
-    <label className="flex items-start gap-3 rounded-[1.2rem] border border-[#00000010] bg-[#fff9f4] px-4 py-3">
+    <label className="flex items-start gap-3 rounded-[1rem] border border-[#00000010] bg-[#fff9f4] px-3.5 py-2.5">
       <input
         type="checkbox"
         checked={checked}
@@ -2145,7 +2145,7 @@ function ToggleField({
       />
       <span className="min-w-0">
         <span className="block text-sm font-semibold text-[#1f1814]">{label}</span>
-        <span className="mt-1 block text-sm leading-6 text-[#675c55]">{helper}</span>
+        <span className="mt-1 block text-xs leading-5 text-[#675c55]">{helper}</span>
       </span>
     </label>
   );
@@ -2169,13 +2169,13 @@ function RangeField({
   value: number;
 }) {
   return (
-    <div className="space-y-3">
+    <div className="space-y-2.5">
       <div className="flex items-center justify-between gap-3">
         <div>
           <div className="text-xs uppercase tracking-[0.18em] text-[#7a6e65]">{label}</div>
-          <div className="mt-1 text-sm leading-6 text-[#6a5f58]">{helper}</div>
+          <div className="mt-1 text-xs leading-5 text-[#6a5f58]">{helper}</div>
         </div>
-        <div className="rounded-full border border-[#00000010] bg-[#fff9f4] px-3 py-1 text-xs font-semibold uppercase tracking-[0.16em] text-[#7c6f67]">
+        <div className="rounded-full border border-[#00000010] bg-[#fff9f4] px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.16em] text-[#7c6f67]">
           {value}
         </div>
       </div>
@@ -2194,9 +2194,9 @@ function RangeField({
 
 function EditorStat({ label, value }: { label: string; value: string }) {
   return (
-    <div className="rounded-[1.4rem] border border-[#00000010] bg-white/74 px-4 py-4">
-      <div className="text-xl font-semibold text-[#1f1814]">{value}</div>
-      <div className="mt-2 text-xs uppercase tracking-[0.18em] text-[#7b6f67]">
+    <div className="rounded-[1rem] border border-[#00000010] bg-white/74 px-3 py-3">
+      <div className="text-base font-semibold leading-5 text-[#1f1814]">{value}</div>
+      <div className="mt-1.5 text-[10px] uppercase tracking-[0.16em] text-[#7b6f67]">
         {label}
       </div>
     </div>
@@ -2212,7 +2212,7 @@ function EditorTag({
 }) {
   return (
     <span
-      className={`rounded-full px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.16em] ${className}`}
+      className={`rounded-full px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.14em] ${className}`}
     >
       {children}
     </span>
