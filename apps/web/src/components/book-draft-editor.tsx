@@ -1930,7 +1930,6 @@ function EditorSpreadCanvasV2({
   const leadPhoto = pagePhotos[0];
   const secondaryPhotos = pagePhotos.slice(1);
   const tertiaryPhotos = pagePhotos.slice(2);
-  const storyLabel = page.storyBeat.replaceAll("_", " ");
   const displayCopy = buildDisplayCaption(page, pagePhotos, project, controls.captionTone);
   const metaLines =
     (controls.showDates || controls.showLocations) && pagePhotos.length
@@ -1944,8 +1943,8 @@ function EditorSpreadCanvasV2({
 
   const metaTags = metaLines.length ? (
     <div className="mt-4 flex flex-wrap gap-2">
-      {metaLines.map((line) => (
-        <EditorTag key={line} className="bg-[#f7efe8] text-[#7b6f67]">
+      {metaLines.map((line, index) => (
+        <EditorTag key={`${line}-${index}`} className="bg-[#f7efe8] text-[#7b6f67]">
           {line}
         </EditorTag>
       ))}
@@ -2048,28 +2047,7 @@ function EditorSpreadCanvasV2({
                 </div>
               </div>
             </div>
-            <div className="rounded-[1.7rem] border border-[#00000010] bg-white/78 px-5 py-4">
-              <div className="flex flex-wrap items-start justify-between gap-3">
-                <div className="min-w-0 flex-1">
-                  <div className="text-[11px] uppercase tracking-[0.2em] text-[#8b5a40]">
-                    Spread {pageIndex + 1} / {storyLabel}
-                  </div>
-                  <h3
-                    className="mt-2 text-2xl leading-tight text-[#1f1814]"
-                    style={{ fontFamily: fontPreset.headline }}
-                  >
-                    {page.title}
-                  </h3>
-                  <p
-                    className="mt-2 text-sm leading-7 text-[#5d524b]"
-                    style={{ fontFamily: fontPreset.body }}
-                  >
-                    {displayCopy}
-                  </p>
-                </div>
-                <EditorTag className="bg-[#faf1e7] text-[#76584a]">{page.curationNote}</EditorTag>
-              </div>
-            </div>
+            {renderNarrativeStrip()}
           </div>
         );
       case "balanced_two_up":
@@ -2096,29 +2074,12 @@ function EditorSpreadCanvasV2({
                     )}
               </div>
             </div>
-            <div className="grid gap-4 lg:grid-cols-[1.08fr_0.92fr]">
-              {tertiaryPhotos.length ? (
-                <div className="rounded-[1.8rem] border border-[#00000010] bg-[#fffaf4] p-3">
-                  {renderGrid(tertiaryPhotos, { maxColumns: 3, minHeight: "min-h-[8rem]" })}
-                </div>
-              ) : (
-                <div className="rounded-[1.7rem] border border-dashed border-[#d9cabf] bg-white/58 px-5 py-4 text-sm leading-7 text-[#776b63]">
-                  Keep this spread quiet if the pairing already says enough.
-                </div>
-              )}
-              <div className="rounded-[1.7rem] border border-[#00000010] bg-white/78 px-5 py-4">
-                <div className="text-[11px] uppercase tracking-[0.2em] text-[#8b5a40]">
-                  Pairing note
-                </div>
-                <p
-                  className="mt-3 text-sm leading-7 text-[#5d524b]"
-                  style={{ fontFamily: fontPreset.body }}
-                >
-                  {displayCopy}
-                </p>
-                {metaTags}
+            {tertiaryPhotos.length ? (
+              <div className="rounded-[1.8rem] border border-[#00000010] bg-[#fffaf4] p-3">
+                {renderGrid(tertiaryPhotos, { maxColumns: 3, minHeight: "min-h-[8rem]" })}
               </div>
-            </div>
+            ) : null}
+            {renderNarrativeStrip()}
           </div>
         );
       case "four_up_grid":
@@ -2142,12 +2103,7 @@ function EditorSpreadCanvasV2({
                 treatment: "default",
               })}
             </div>
-            <div className="grid gap-4 lg:grid-cols-[0.86fr_1.14fr]">
-              <div className="rounded-[1.7rem] border border-[#00000010] bg-[#fbf5ef] px-5 py-4 text-sm leading-7 text-[#61554d]">
-                Clean recap spreads should feel measured and quiet, never like a collage.
-              </div>
-              {renderNarrativeStrip()}
-            </div>
+            {renderNarrativeStrip()}
           </div>
         );
       case "dense_candid_grid":
@@ -2187,12 +2143,7 @@ function EditorSpreadCanvasV2({
                     )}
               </div>
             </div>
-            <div className="grid gap-4 lg:grid-cols-[1.15fr_0.85fr]">
-              <div className="rounded-[1.7rem] border border-[#00000010] bg-white/76 px-5 py-4 text-sm leading-7 text-[#61554d]">
-                This page should feel energetic and slightly imperfect, like a pocket of in-between moments.
-              </div>
-              {renderNarrativeStrip()}
-            </div>
+            {renderNarrativeStrip()}
           </div>
         );
       case "panorama_spread":
@@ -2225,19 +2176,8 @@ function EditorSpreadCanvasV2({
                   Panorama pages work best when they stay quiet.
                 </div>
               )}
-              <div className="rounded-[1.7rem] border border-[#00000010] bg-white/78 px-5 py-4">
-                <div className="text-[11px] uppercase tracking-[0.2em] text-[#8b5a40]">
-                  Minimal caption
-                </div>
-                <p
-                  className="mt-3 text-sm leading-7 text-[#5d524b]"
-                  style={{ fontFamily: fontPreset.body }}
-                >
-                  {displayCopy}
-                </p>
-                {metaTags}
-              </div>
             </div>
+            {renderNarrativeStrip()}
           </div>
         );
       case "text_divider":
@@ -2353,23 +2293,7 @@ function EditorSpreadCanvasV2({
                 </div>
               </div>
             </div>
-            <div className="grid gap-4 lg:grid-cols-[0.92fr_1.08fr]">
-              <div className="rounded-[1.7rem] border border-[#00000010] bg-white/76 px-5 py-4 text-sm leading-7 text-[#61554d]">
-                This spread should feel tactile and layered, like a keepsake board rather than a standard image page.
-              </div>
-              {metaTags ? (
-                <div className="rounded-[1.7rem] border border-[#00000010] bg-white/76 px-5 py-4">
-                  <div className="text-[11px] uppercase tracking-[0.2em] text-[#8b5a40]">
-                    Labels
-                  </div>
-                  {metaTags}
-                </div>
-              ) : (
-                <div className="rounded-[1.7rem] border border-dashed border-[#d9cabf] bg-white/58 px-5 py-4 text-sm leading-7 text-[#776b63]">
-                  Detail photos and note blocks will make this page feel richer.
-                </div>
-              )}
-            </div>
+            {metaTags}
           </div>
         );
       case "pattern_repetition":
@@ -2398,12 +2322,7 @@ function EditorSpreadCanvasV2({
                     )}
               </div>
             </div>
-            <div className="grid gap-4 lg:grid-cols-[1.06fr_0.94fr]">
-              <div className="rounded-[1.7rem] border border-[#00000010] bg-white/76 px-5 py-4 text-sm leading-7 text-[#61554d]">
-                This one should feel deliberate and rhythmic, almost like a visual study.
-              </div>
-              {renderNarrativeStrip()}
-            </div>
+            {renderNarrativeStrip()}
           </div>
         );
       case "burst_sequence":
@@ -2446,43 +2365,37 @@ function EditorSpreadCanvasV2({
                     )}
               </div>
             </div>
-            <div className="grid gap-4 lg:grid-cols-[0.88fr_1.12fr]">
-              <div className="rounded-[1.7rem] border border-[#00000010] bg-[#fbf5ef] px-5 py-4 text-sm leading-7 text-[#61554d]">
-                Burst pages should feel like a storyboard or contact strip, not a static grid.
-              </div>
-              {renderNarrativeStrip()}
-            </div>
+            {renderNarrativeStrip()}
           </div>
         );
       case "map_timeline":
         return (
-          <div className="grid gap-4 lg:grid-cols-[0.82fr_1.18fr]">
-            <div className="space-y-4 rounded-[2rem] border border-[#00000010] bg-[linear-gradient(180deg,rgba(250,246,240,0.98),rgba(245,236,227,0.96))] p-5">
-              <div className="text-[11px] uppercase tracking-[0.22em] text-[#8b5a40]">
-                Route context
-              </div>
-              <MapTimelineCard project={project} pagePhotos={pagePhotos} />
-              <div className="rounded-[1.5rem] border border-[#00000010] bg-white/82 px-4 py-4 text-sm leading-7 text-[#61554d]">
-                {displayCopy}
-              </div>
-            </div>
-            <div className="space-y-4">
-              {leadPhoto
-                ? renderPhotoTile(leadPhoto, "min-h-[23rem] md:min-h-[29rem]", "hero")
-                : renderEmptyTile(
-                    "Context spreads can hold a single travel image.",
-                    "min-h-[23rem]",
-                  )}
-              {secondaryPhotos.length ? (
-                <div className="rounded-[1.8rem] border border-[#00000010] bg-white/72 p-3">
-                  {renderGrid(secondaryPhotos, {
-                    maxColumns: 2,
-                    minHeight: "min-h-[8.5rem]",
-                  })}
+          <div className="space-y-4">
+            <div className="grid gap-4 lg:grid-cols-[0.82fr_1.18fr]">
+              <div className="space-y-4 rounded-[2rem] border border-[#00000010] bg-[linear-gradient(180deg,rgba(250,246,240,0.98),rgba(245,236,227,0.96))] p-5">
+                <div className="text-[11px] uppercase tracking-[0.22em] text-[#8b5a40]">
+                  Route context
                 </div>
-              ) : null}
-              {renderNarrativeStrip()}
+                <MapTimelineCard project={project} pagePhotos={pagePhotos} />
+              </div>
+              <div className="space-y-4">
+                {leadPhoto
+                  ? renderPhotoTile(leadPhoto, "min-h-[23rem] md:min-h-[29rem]", "hero")
+                  : renderEmptyTile(
+                      "Context spreads can hold a single travel image.",
+                      "min-h-[23rem]",
+                    )}
+                {secondaryPhotos.length ? (
+                  <div className="rounded-[1.8rem] border border-[#00000010] bg-white/72 p-3">
+                    {renderGrid(secondaryPhotos, {
+                      maxColumns: 2,
+                      minHeight: "min-h-[8.5rem]",
+                    })}
+                  </div>
+                ) : null}
+              </div>
             </div>
+            {renderNarrativeStrip()}
           </div>
         );
       default:
@@ -2543,46 +2456,55 @@ function EditorNarrativeStrip({
   project: Project;
 }) {
   const copy = buildDisplayCaption(page, pagePhotos, project, controls.captionTone);
+  const metaLines =
+    (controls.showDates || controls.showLocations) && pagePhotos.length
+      ? pagePhotos
+          .slice(0, 3)
+          .map((photo) =>
+            buildPhotoMetaLine(photo, project, controls.showDates, controls.showLocations),
+          )
+          .filter(Boolean)
+      : [];
 
   return (
-    <div className="rounded-[1.7rem] border border-[#00000010] bg-white/90 px-5 py-4 shadow-[0_12px_26px_rgba(49,33,22,0.05)]">
+    <div className="mx-auto max-w-[44rem] rounded-[1.45rem] border border-[#00000010] bg-white/92 px-4 py-3 shadow-[0_10px_22px_rgba(49,33,22,0.045)]">
       <div className="flex flex-wrap items-start justify-between gap-3">
-        <div className="min-w-0 flex-1">
+        <div className="min-w-0 max-w-[28rem] flex-1">
           <div className="text-[11px] uppercase tracking-[0.2em] text-[#8b5a40]">
             Spread {pageIndex + 1} / {page.storyBeat.replaceAll("_", " ")}
           </div>
-          <h3
-            className="mt-2 text-2xl leading-tight text-[#1f1814]"
-            style={{ fontFamily: fontPreset.headline }}
-          >
-            {page.title}
-          </h3>
+          <div className="mt-2 flex flex-wrap items-center gap-2">
+            <h3
+              className="text-[1.15rem] leading-tight text-[#1f1814]"
+              style={{ fontFamily: fontPreset.headline }}
+            >
+              {page.title}
+            </h3>
+            <EditorTag
+              className={
+                page.copyStatus === "confirmed"
+                  ? "bg-[#dfeee7] text-[#2d624b]"
+                  : "bg-[#f2ebe4] text-[#6f625b]"
+              }
+            >
+              {page.copyStatus === "confirmed" ? "copy confirmed" : "prefilled copy"}
+            </EditorTag>
+          </div>
           <p
-            className="mt-2 text-sm leading-7 text-[#5d524b]"
+            className="mt-1.5 max-w-[40ch] text-[13px] leading-6 text-[#5d524b]"
             style={{ fontFamily: fontPreset.body }}
           >
             {copy}
           </p>
         </div>
-        <EditorTag
-          className={
-            page.copyStatus === "confirmed"
-              ? "bg-[#dfeee7] text-[#2d624b]"
-              : "bg-[#f2ebe4] text-[#6f625b]"
-          }
-        >
-          {page.copyStatus === "confirmed" ? "copy confirmed" : "prefilled copy"}
-        </EditorTag>
-      </div>
-      <div className="mt-4 flex flex-wrap items-center gap-2">
-        <EditorTag className="bg-[#faf1e7] text-[#76584a]">{page.curationNote}</EditorTag>
-        {(controls.showDates || controls.showLocations) && pagePhotos.length
-          ? pagePhotos.slice(0, 3).map((photo) => (
-              <EditorTag key={photo.id} className="bg-[#f7efe8] text-[#7b6f67]">
-                {buildPhotoMetaLine(photo, project, controls.showDates, controls.showLocations)}
-              </EditorTag>
-            ))
-          : null}
+        <div className="flex max-w-[14rem] flex-wrap justify-end gap-2">
+          <EditorTag className="bg-[#faf1e7] text-[#76584a]">{page.curationNote}</EditorTag>
+          {metaLines.map((line, index) => (
+            <EditorTag key={`${line}-${index}`} className="bg-[#f7efe8] text-[#7b6f67]">
+              {line}
+            </EditorTag>
+          ))}
+        </div>
       </div>
     </div>
   );
