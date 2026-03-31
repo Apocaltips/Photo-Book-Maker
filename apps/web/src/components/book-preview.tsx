@@ -572,20 +572,21 @@ function PreviewPhotoTile({
 
   return (
     <div
-      className={`relative overflow-hidden rounded-[1.8rem] border border-[#00000010] bg-[linear-gradient(180deg,rgba(255,255,255,0.86),rgba(234,225,216,0.96))] ${className}`}
+      className={`flex flex-col overflow-hidden rounded-[1.8rem] border border-[#00000010] bg-[linear-gradient(180deg,rgba(255,255,255,0.86),rgba(234,225,216,0.96))] ${className}`}
       style={{
         boxShadow: emphasis === "large" ? `inset 0 0 0 1px ${accent}22` : undefined,
       }}
     >
-      {photo?.imageUri ? (
-        <>
-          <img src={photo.imageUri} alt={photo.title} className="absolute inset-0 h-full w-full object-cover" />
-          <div className="absolute inset-0 bg-[linear-gradient(180deg,rgba(16,11,8,0.03),rgba(16,11,8,0.16))]" />
-        </>
-      ) : (
-        <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(255,255,255,0.92),rgba(232,221,212,0.98))]" />
-      )}
-      <div className="absolute inset-0 flex flex-col justify-between p-4">
+      <div className="relative min-h-[12rem] flex-1 overflow-hidden">
+        {photo?.imageUri ? (
+          <>
+            <img src={photo.imageUri} alt={photo.title} className="absolute inset-0 h-full w-full object-cover" />
+            <div className="absolute inset-0 bg-[linear-gradient(180deg,rgba(16,11,8,0.03),rgba(16,11,8,0.16))]" />
+          </>
+        ) : (
+          <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(255,255,255,0.92),rgba(232,221,212,0.98))]" />
+        )}
+        <div className="absolute inset-0 flex flex-col justify-between p-4">
         <div className="text-[11px] uppercase tracking-[0.18em] text-[#786b62]">
           {photo?.orientation ?? "layout"}
         </div>
@@ -600,8 +601,9 @@ function PreviewPhotoTile({
           </div>
         ) : null}
       </div>
+      </div>
       {showFooter ? (
-        <div className="absolute inset-x-0 bottom-0 border-t border-white/25 bg-[linear-gradient(180deg,rgba(255,250,246,0.94),rgba(243,233,224,0.96))] px-4 py-3">
+        <div className="border-t border-white/25 bg-[linear-gradient(180deg,rgba(255,250,246,0.94),rgba(243,233,224,0.96))] px-4 py-3">
           <div className="text-sm font-semibold text-[#211a16]">
             {photo?.title ?? "Reserved image field"}
           </div>

@@ -1910,12 +1910,12 @@ function EditorPhotoTile({
     <button
       type="button"
       onClick={onSelect}
-      className={`group ${showInlineFooter ? "grid [grid-template-rows:minmax(0,1fr)_auto]" : "block"} w-full overflow-hidden rounded-[1.8rem] border bg-[#fffdf9] text-left transition-transform hover:-translate-y-0.5 ${className} ${selected ? "border-[#8f4f2e66] shadow-[0_0_0_3px_rgba(143,79,46,0.16)]" : "border-white/45"}`}
+      className={`group flex w-full flex-col overflow-hidden rounded-[1.8rem] border bg-[#fffdf9] text-left transition-transform hover:-translate-y-0.5 ${className} ${selected ? "border-[#8f4f2e66] shadow-[0_0_0_3px_rgba(143,79,46,0.16)]" : "border-white/45"}`}
       style={{
         boxShadow: `inset 0 0 0 1px ${accent}22`,
       }}
     >
-      <div className="relative min-h-0 overflow-hidden bg-[#e9dfd3]">
+      <div className="relative min-h-[12rem] flex-1 overflow-hidden bg-[#e9dfd3]">
         {photo.imageUri ? (
           <>
             <img
