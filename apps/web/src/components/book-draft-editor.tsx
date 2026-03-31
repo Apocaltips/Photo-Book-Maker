@@ -51,6 +51,8 @@ type EditorControls = Pick<
   | "showMemorabilia"
 >;
 
+type InspectorTab = "book" | "story" | "spread" | "photo" | "publish";
+
 const FORMAT_OPTIONS: Array<{
   helper: string;
   id: BookDraftFormatId;
@@ -180,6 +182,7 @@ export function BookDraftEditor({
     project.bookDraft.pages[0]?.photoIds[0] ?? "",
   );
   const [publishMessage, setPublishMessage] = useState<string | null>(null);
+  const [inspectorTab, setInspectorTab] = useState<InspectorTab>("spread");
   const [isAiRefreshing, setIsAiRefreshing] = useState(false);
   const [isPublishing, setIsPublishing] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
@@ -194,6 +197,7 @@ export function BookDraftEditor({
     setDraftName(`${project.title} - Curated edit`);
     setSelectedPageId(project.bookDraft.pages[0]?.id ?? "");
     setSelectedPhotoId(project.bookDraft.pages[0]?.photoIds[0] ?? "");
+    setInspectorTab("spread");
   }, [project]);
 
   useEffect(() => {
@@ -460,6 +464,7 @@ export function BookDraftEditor({
     setSelectedPageId(projectFromSnapshot.bookDraft.pages[0]?.id ?? "");
     setSelectedPhotoId(projectFromSnapshot.bookDraft.pages[0]?.photoIds[0] ?? "");
     setDraftName(snapshot.name);
+    setInspectorTab("spread");
     setPublishMessage(`Loaded ${snapshot.name}`);
   }
 
@@ -574,6 +579,7 @@ export function BookDraftEditor({
                         const firstPageId = chapter.pageIds[0];
                         if (firstPageId) {
                           setSelectedPageId(firstPageId);
+                          setInspectorTab("spread");
                         }
                       }}
                       className="w-full rounded-[1.2rem] border px-4 py-3 text-left transition-colors"
@@ -693,6 +699,7 @@ export function BookDraftEditor({
                     onSelectPhoto={(photoId) => {
                       setSelectedPageId(selectedPage.id);
                       setSelectedPhotoId(photoId);
+                      setInspectorTab("photo");
                     }}
                   />
                 </div>
@@ -705,6 +712,7 @@ export function BookDraftEditor({
                     const nextPage = editorState.project.bookDraft.pages[index];
                     if (nextPage) {
                       setSelectedPageId(nextPage.id);
+                      setInspectorTab("spread");
                     }
                   }}
                   pages={editorState.project.bookDraft.pages}
@@ -715,7 +723,48 @@ export function BookDraftEditor({
         ) : null}
       </div>
 
-      <aside className="space-y-4 xl:sticky xl:top-6 xl:max-h-[calc(100vh-3rem)] xl:self-start xl:overflow-y-auto">
+      <aside className="space-y-4 xl:sticky xl:top-6 xl:max-h-[calc(100vh-3rem)] xl:self-start">
+        <section
+          className="rounded-[2rem] border border-[#00000012] bg-white/92 p-3"
+          style={themePresentation.chromeStyle}
+        >
+          <div className="grid grid-cols-2 gap-2">
+            <InspectorTabButton
+              active={inspectorTab === "book"}
+              label="Book"
+              onClick={() => setInspectorTab("book")}
+            />
+            <InspectorTabButton
+              active={inspectorTab === "story"}
+              label="Story"
+              onClick={() => setInspectorTab("story")}
+            />
+            <InspectorTabButton
+              active={inspectorTab === "spread"}
+              label="Spread"
+              onClick={() => setInspectorTab("spread")}
+            />
+            <InspectorTabButton
+              active={inspectorTab === "photo"}
+              label="Photo"
+              onClick={() => setInspectorTab("photo")}
+            />
+            <InspectorTabButton
+              active={inspectorTab === "publish"}
+              label="Publish"
+              onClick={() => setInspectorTab("publish")}
+            />
+            <div
+              className="rounded-[1.2rem] border border-black/5 bg-white/62 px-3 py-3 text-xs uppercase tracking-[0.16em]"
+              style={{ color: themePresentation.textMuted }}
+            >
+              {selectedPageIndex + 1}/{pageCount} active
+            </div>
+          </div>
+        </section>
+
+        <div className="space-y-4 xl:max-h-[calc(100vh-11rem)] xl:overflow-y-auto xl:pr-1">
+        {inspectorTab === "book" ? (
         <section className="rounded-[2rem] border border-[#00000012] bg-white/92 p-5">
           <div className="eyebrow">Book system</div>
           <div className="mt-4 space-y-4">
@@ -819,7 +868,9 @@ export function BookDraftEditor({
             />
           </div>
         </section>
+        ) : null}
 
+        {inspectorTab === "story" ? (
         <section className="rounded-[2rem] border border-[#00000012] bg-white/92 p-5">
           <div className="eyebrow">Story controls</div>
           <div className="mt-4 space-y-3">
@@ -891,7 +942,9 @@ export function BookDraftEditor({
             />
           </div>
         </section>
+        ) : null}
 
+        {inspectorTab === "book" ? (
         <section className="rounded-[2rem] border border-[#00000012] bg-white/92 p-5">
           <div className="eyebrow">Cover and title wizard</div>
           <div className="mt-4 space-y-4">
@@ -971,8 +1024,9 @@ export function BookDraftEditor({
             />
           </div>
         </section>
+        ) : null}
 
-        {selectedPage ? (
+        {selectedPage && inspectorTab === "spread" ? (
           <section className="rounded-[2rem] border border-[#00000012] bg-white/92 p-5">
             <div className="eyebrow">Selected spread</div>
             <div className="mt-4 space-y-4">
@@ -1122,7 +1176,7 @@ export function BookDraftEditor({
           </section>
         ) : null}
 
-        {selectedPhoto ? (
+        {selectedPhoto && inspectorTab === "photo" ? (
           <section className="rounded-[2rem] border border-[#00000012] bg-white/92 p-5">
             <div className="eyebrow">Selected photo</div>
             <div className="mt-4 space-y-4">
@@ -1191,6 +1245,7 @@ export function BookDraftEditor({
           </section>
         ) : null}
 
+        {inspectorTab === "publish" ? (
         <section className="rounded-[2rem] border border-[#00000012] bg-white/92 p-5">
           <div className="eyebrow">Publish draft</div>
           <div className="mt-4 space-y-4">
@@ -1273,8 +1328,34 @@ export function BookDraftEditor({
             </div>
           </div>
         </section>
+        ) : null}
+        </div>
       </aside>
     </div>
+  );
+}
+
+function InspectorTabButton({
+  active,
+  label,
+  onClick,
+}: {
+  active: boolean;
+  label: string;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={`rounded-[1.2rem] border px-3 py-3 text-sm font-semibold transition-colors ${
+        active
+          ? "border-[#8f4f2e33] bg-[#1f1814] text-[#f9f2ea]"
+          : "border-[#00000010] bg-white/72 text-[#1f1814] hover:bg-white"
+      }`}
+    >
+      {label}
+    </button>
   );
 }
 
