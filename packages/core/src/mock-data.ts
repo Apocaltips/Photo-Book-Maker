@@ -7,6 +7,7 @@ import {
   type ProjectMember,
   type ProjectSummary,
 } from "./types";
+import { normalizeProjectDraftState } from "./editorial";
 
 const editorialThemes: BookTheme[] = [
   {
@@ -500,7 +501,7 @@ export function createSeedProjects(): Project[] {
     },
   };
 
-  return [weekendTrip, yearbook];
+  return [normalizeProjectDraftState(weekendTrip), normalizeProjectDraftState(yearbook)];
 }
 
 export function getProjectSummary(project: Project): ProjectSummary {
@@ -529,7 +530,7 @@ export function createMockProject(input: CreateProjectInput): Project {
     .replace(/[^a-z0-9]+/g, "-")
     .replace(/(^-|-$)/g, "");
 
-  return {
+  return normalizeProjectDraftState({
     id: `${input.type}-${titleSeed || "new-project"}`,
     type: input.type,
     title: input.title,
@@ -580,5 +581,5 @@ export function createMockProject(input: CreateProjectInput): Project {
       estimatedShipWindow: "5-7 business days",
       orderCode: `PBM-${(titleSeed || "NEW").toUpperCase().slice(0, 6)}`,
     },
-  };
+  });
 }

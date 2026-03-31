@@ -1,9 +1,10 @@
-import type { Project } from "@photo-book-maker/core";
+import { normalizeProjectDraftState, type Project } from "@photo-book-maker/core";
 import { signObjectReadUrl } from "@/lib/server/object-storage";
 
 export async function hydrateProjectForClient(project: Project): Promise<Project> {
+  const normalizedProject = normalizeProjectDraftState(project);
   const photos = await Promise.all(
-    project.photos.map(async (photo) => {
+    normalizedProject.photos.map(async (photo) => {
       if (!photo.storagePath) {
         return photo;
       }
@@ -18,7 +19,7 @@ export async function hydrateProjectForClient(project: Project): Promise<Project
   );
 
   return {
-    ...project,
+    ...normalizedProject,
     photos,
   };
 }

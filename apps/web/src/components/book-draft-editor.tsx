@@ -1,10 +1,17 @@
 "use client";
 
-import type {
-  BookPage,
-  PageLayoutStyle,
-  PhotoAsset,
-  Project,
+import {
+  buildDefaultDraftEditorState,
+  ensureDraftEditorState,
+  getBookDraftFormatLabel,
+  normalizeProjectDraftState,
+  type BookDraftEditorState,
+  type BookDraftFormatId,
+  type BookPage,
+  type PublishedBookDraft,
+  type PageLayoutStyle,
+  type PhotoAsset,
+  type Project,
 } from "@photo-book-maker/core";
 import Link from "next/link";
 import type { CSSProperties, ReactNode } from "react";
@@ -27,36 +34,8 @@ import {
 } from "@/lib/book-editor";
 import { FONT_PRESETS, type FontPresetId } from "@/lib/font-presets";
 
-type DraftFormatId =
-  | "8x8-square"
-  | "10x10-square"
-  | "12x12-square"
-  | "11x8.5-landscape";
-
-type EditorState = {
-  captionTone: EditorCaptionTone;
-  density: number;
-  fontPresetId: FontPresetId;
-  formatId: DraftFormatId;
-  lockedPageIds: string[];
-  lockedPhotoIds: string[];
-  photoCaptions: Record<string, string>;
-  printPreviewMode: PrintPreviewMode;
+type EditorState = BookDraftEditorState & {
   project: Project;
-  showChapterDividers: boolean;
-  showDates: boolean;
-  showHandwrittenNotes: boolean;
-  showLocations: boolean;
-  showMaps: boolean;
-  showMemorabilia: boolean;
-  storyMode: EditorStoryMode;
-  styleMode: EditorStyleMode;
-};
-
-type PublishedDraftSnapshot = EditorState & {
-  id: string;
-  name: string;
-  savedAt: string;
 };
 
 type EditorControls = Pick<
@@ -73,7 +52,7 @@ type EditorControls = Pick<
 
 const FORMAT_OPTIONS: Array<{
   helper: string;
-  id: DraftFormatId;
+  id: BookDraftFormatId;
   label: string;
   maxWidth: string;
 }> = [
@@ -125,11 +104,73 @@ const PRINT_PREVIEW_OPTIONS: Array<{
   },
 ];
 
-export function BookDraftEditor({ project }: { project: Project }) {
+type DraftMutationPayload = {
+  bookDraft: Project["bookDraft"];
+  draftEditorState: BookDraftEditorState;
+  selectedThemeId: string;
+  subtitle: string;
+  title: string;
+};
+
+function buildDraftMutationPayload(editorState: EditorState): DraftMutationPayload {
+  const normalizedEditorState = ensureDraftEditorState({
+    ...editorState.project,
+    draftEditorState: {
+      ...editorState,
+    },
+  });
+
+  return {
+    bookDraft: {
+      ...editorState.project.bookDraft,
+      format: getBookDraftFormatLabel(normalizedEditorState.formatId),
+      themeId: editorState.project.selectedThemeId,
+    },
+    draftEditorState: {
+      ...normalizedEditorState,
+      fontPresetId: editorState.fontPresetId,
+    },
+    selectedThemeId: editorState.project.selectedThemeId,
+    subtitle: editorState.project.subtitle,
+    title: editorState.project.title,
+  };
+}
+
+function buildEditorStateSignature(editorState: EditorState) {
+  const normalizedEditorState = ensureDraftEditorState({
+    ...editorState.project,
+    draftEditorState: {
+      ...editorState,
+    },
+  });
+
+  return JSON.stringify({
+    draftEditorState: normalizedEditorState,
+    bookDraft: editorState.project.bookDraft,
+    selectedThemeId: editorState.project.selectedThemeId,
+    subtitle: editorState.project.subtitle,
+    title: editorState.project.title,
+  });
+}
+
+export function BookDraftEditor({
+  onPublishDraft,
+  onRefreshAi,
+  onSaveDraft,
+  previewHref,
+  project,
+  workspaceMode = "demo",
+}: {
+  onPublishDraft?: (name: string, payload: DraftMutationPayload) => Promise<Project>;
+  onRefreshAi?: (payload: DraftMutationPayload) => Promise<Project>;
+  onSaveDraft?: (payload: DraftMutationPayload) => Promise<Project>;
+  previewHref?: (draftId?: string) => string;
+  project: Project;
+  workspaceMode?: "authenticated" | "demo";
+}) {
   const [editorState, setEditorState] = useState<EditorState>(() =>
     createInitialEditorState(project),
   );
-  const [publishedDrafts, setPublishedDrafts] = useState<PublishedDraftSnapshot[]>([]);
   const [draftName, setDraftName] = useState(`${project.title} - Curated edit`);
   const [selectedPageId, setSelectedPageId] = useState(
     project.bookDraft.pages[0]?.id ?? "",
@@ -138,18 +179,21 @@ export function BookDraftEditor({ project }: { project: Project }) {
     project.bookDraft.pages[0]?.photoIds[0] ?? "",
   );
   const [publishMessage, setPublishMessage] = useState<string | null>(null);
+  const [isAiRefreshing, setIsAiRefreshing] = useState(false);
+  const [isPublishing, setIsPublishing] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
+  const [lastSyncedSignature, setLastSyncedSignature] = useState(() =>
+    buildEditorStateSignature(createInitialEditorState(project)),
+  );
 
   useEffect(() => {
-    const workingDraft = readDraftStorage<EditorState>(getWorkingDraftKey(project.id));
-    const savedDrafts =
-      readDraftStorage<PublishedDraftSnapshot[]>(getPublishedDraftsKey(project.id)) ?? [];
-
-    if (workingDraft?.project?.id === project.id) {
-      setEditorState(workingDraft);
-    }
-
-    setPublishedDrafts(savedDrafts);
-  }, [project.id]);
+    const nextEditorState = createInitialEditorState(project);
+    setEditorState(nextEditorState);
+    setLastSyncedSignature(buildEditorStateSignature(nextEditorState));
+    setDraftName(`${project.title} - Curated edit`);
+    setSelectedPageId(project.bookDraft.pages[0]?.id ?? "");
+    setSelectedPhotoId(project.bookDraft.pages[0]?.photoIds[0] ?? "");
+  }, [project]);
 
   useEffect(() => {
     if (!selectedPageId) {
@@ -180,12 +224,36 @@ export function BookDraftEditor({ project }: { project: Project }) {
   }, [editorState.project.bookDraft.pages, selectedPageId, selectedPhotoId]);
 
   useEffect(() => {
-    writeDraftStorage(getWorkingDraftKey(project.id), editorState);
-  }, [editorState, project.id]);
+    if (!onSaveDraft || workspaceMode !== "authenticated") {
+      return;
+    }
 
-  useEffect(() => {
-    writeDraftStorage(getPublishedDraftsKey(project.id), publishedDrafts);
-  }, [publishedDrafts, project.id]);
+    const signature = buildEditorStateSignature(editorState);
+    if (signature === lastSyncedSignature) {
+      return;
+    }
+
+    const timeout = window.setTimeout(async () => {
+      setIsSaving(true);
+      try {
+        const projectFromServer = await onSaveDraft(buildDraftMutationPayload(editorState));
+        const nextEditorState = createInitialEditorState(projectFromServer);
+        setEditorState(nextEditorState);
+        setLastSyncedSignature(buildEditorStateSignature(nextEditorState));
+        setPublishMessage("Working draft saved.");
+      } catch (caughtError) {
+        setPublishMessage(
+          caughtError instanceof Error
+            ? caughtError.message
+            : "Unable to save the working draft.",
+        );
+      } finally {
+        setIsSaving(false);
+      }
+    }, 700);
+
+    return () => window.clearTimeout(timeout);
+  }, [editorState, lastSyncedSignature, onSaveDraft, workspaceMode]);
 
   const selectedPage =
     editorState.project.bookDraft.pages.find((page) => page.id === selectedPageId) ??
@@ -208,6 +276,7 @@ export function BookDraftEditor({ project }: { project: Project }) {
     editorState.project.bookThemes.find(
       (theme) => theme.id === editorState.project.selectedThemeId,
     ) ?? editorState.project.bookThemes[0];
+  const publishedDrafts = editorState.project.publishedDrafts ?? [];
 
   const storyModeOptions = getStoryModeOptions(editorState.project);
   const captionToneOptions = getCaptionToneOptions();
@@ -347,26 +416,75 @@ export function BookDraftEditor({ project }: { project: Project }) {
     setPublishMessage(`Switched to ${getSpreadLabel(next)}.`);
   }
 
-  function publishDraft() {
-    const snapshot: PublishedDraftSnapshot = {
-      ...editorState,
-      id: globalThis.crypto?.randomUUID?.() ?? `draft-${Date.now()}`,
-      name:
-        draftName.trim() ||
-        `${editorState.project.title} - ${new Date().toLocaleTimeString()}`,
-      savedAt: new Date().toISOString(),
-    };
+  async function publishDraft() {
+    if (!onPublishDraft || workspaceMode !== "authenticated") {
+      setPublishMessage("Sign in to publish drafts across devices.");
+      return;
+    }
 
-    setPublishedDrafts((current) => [snapshot, ...current]);
-    setPublishMessage(`Published ${snapshot.name}`);
+    setIsPublishing(true);
+    try {
+      const projectFromServer = await onPublishDraft(
+        draftName.trim() ||
+          `${editorState.project.title} - ${new Date().toLocaleTimeString()}`,
+        buildDraftMutationPayload(editorState),
+      );
+      const nextEditorState = createInitialEditorState(projectFromServer);
+      setEditorState(nextEditorState);
+      setLastSyncedSignature(buildEditorStateSignature(nextEditorState));
+      const latestDraft = projectFromServer.publishedDrafts?.[0];
+      setPublishMessage(
+        latestDraft ? `Published ${latestDraft.name}` : "Published current draft.",
+      );
+    } catch (caughtError) {
+      setPublishMessage(
+        caughtError instanceof Error ? caughtError.message : "Unable to publish this draft.",
+      );
+    } finally {
+      setIsPublishing(false);
+    }
   }
 
-  function loadDraft(snapshot: PublishedDraftSnapshot) {
-    setEditorState(snapshot);
-    setSelectedPageId(snapshot.project.bookDraft.pages[0]?.id ?? "");
-    setSelectedPhotoId(snapshot.project.bookDraft.pages[0]?.photoIds[0] ?? "");
+  function loadDraft(snapshot: PublishedBookDraft) {
+    const projectFromSnapshot = normalizeProjectDraftState({
+      ...editorState.project,
+      title: snapshot.projectTitle,
+      subtitle: snapshot.projectSubtitle,
+      selectedThemeId: snapshot.selectedThemeId,
+      bookDraft: snapshot.bookDraft,
+      draftEditorState: snapshot.editorState,
+    });
+    const nextEditorState = createInitialEditorState(projectFromSnapshot);
+    setEditorState(nextEditorState);
+    setLastSyncedSignature(buildEditorStateSignature(nextEditorState));
+    setSelectedPageId(projectFromSnapshot.bookDraft.pages[0]?.id ?? "");
+    setSelectedPhotoId(projectFromSnapshot.bookDraft.pages[0]?.photoIds[0] ?? "");
     setDraftName(snapshot.name);
     setPublishMessage(`Loaded ${snapshot.name}`);
+  }
+
+  async function refreshAiSuggestions() {
+    if (!onRefreshAi || workspaceMode !== "authenticated") {
+      setPublishMessage("Sign in to refresh AI suggestions.");
+      return;
+    }
+
+    setIsAiRefreshing(true);
+    try {
+      const projectFromServer = await onRefreshAi(buildDraftMutationPayload(editorState));
+      const nextEditorState = createInitialEditorState(projectFromServer);
+      setEditorState(nextEditorState);
+      setLastSyncedSignature(buildEditorStateSignature(nextEditorState));
+      setPublishMessage("Rebuilt the draft with updated AI suggestions.");
+    } catch (caughtError) {
+      setPublishMessage(
+        caughtError instanceof Error
+          ? caughtError.message
+          : "Unable to refresh AI suggestions right now.",
+      );
+    } finally {
+      setIsAiRefreshing(false);
+    }
   }
 
   return (
@@ -394,11 +512,18 @@ export function BookDraftEditor({ project }: { project: Project }) {
                 Back to proof board
               </Link>
               <Link
-                href={`/projects/${project.id}/preview`}
+                href={previewHref?.() ?? `/projects/${project.id}/preview`}
                 className="rounded-full border border-[#1f18141f] bg-[#1f1814] px-4 py-2 text-sm font-medium text-[#f8efe7] transition-colors hover:bg-[#302721]"
               >
                 Open clean preview
               </Link>
+              <span className="rounded-full border border-[#00000010] bg-white/75 px-4 py-2 text-sm font-medium text-[#685d55]">
+                {workspaceMode === "authenticated"
+                  ? isSaving
+                    ? "Saving..."
+                    : "Syncing to your account"
+                  : "Demo mode"}
+              </span>
             </div>
           </div>
 
@@ -660,12 +785,12 @@ export function BookDraftEditor({ project }: { project: Project }) {
                 label: option.label,
               }))}
               selectedId={editorState.formatId}
-              onSelect={(formatId) =>
-                updateEditorState((current) => ({
-                  ...current,
-                  formatId: formatId as DraftFormatId,
-                }))
-              }
+                onSelect={(formatId) =>
+                  updateEditorState((current) => ({
+                    ...current,
+                    formatId: formatId as BookDraftFormatId,
+                  }))
+                }
             />
             <SelectField
               label="Style mode"
@@ -1139,10 +1264,20 @@ export function BookDraftEditor({ project }: { project: Project }) {
 
             <button
               type="button"
-              onClick={publishDraft}
-              className="w-full rounded-full bg-[#1f1814] px-4 py-3 text-sm font-semibold text-[#f8efe7] transition-colors hover:bg-[#302721]"
+              onClick={refreshAiSuggestions}
+              disabled={isAiRefreshing || workspaceMode !== "authenticated"}
+              className="w-full rounded-full border border-[#00000014] bg-[#fff9f4] px-4 py-3 text-sm font-semibold text-[#1f1814] transition-colors hover:bg-white disabled:cursor-not-allowed disabled:opacity-60"
             >
-              Publish draft
+              {isAiRefreshing ? "Refreshing AI suggestions..." : "Rebuild story + AI captions"}
+            </button>
+
+            <button
+              type="button"
+              onClick={publishDraft}
+              disabled={isPublishing || workspaceMode !== "authenticated"}
+              className="w-full rounded-full bg-[#1f1814] px-4 py-3 text-sm font-semibold text-[#f8efe7] transition-colors hover:bg-[#302721] disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              {isPublishing ? "Publishing draft..." : "Publish draft"}
             </button>
 
             {publishMessage ? (
@@ -1168,12 +1303,22 @@ export function BookDraftEditor({ project }: { project: Project }) {
                       })}
                     </div>
                     <div className="mt-2 text-sm text-[#5d524b]">
-                      {FORMAT_OPTIONS.find((option) => option.id === snapshot.formatId)?.label}
+                      {FORMAT_OPTIONS.find((option) => option.id === snapshot.editorState.formatId)?.label}
                       {" / "}
                       {STYLE_MODE_OPTIONS.find(
-                        (option) => option.id === snapshot.styleMode,
+                        (option) => option.id === snapshot.editorState.styleMode,
                       )?.label}
                     </div>
+                    {previewHref ? (
+                      <div className="mt-3">
+                        <Link
+                          href={previewHref(snapshot.id)}
+                          className="inline-flex rounded-full border border-[#00000012] bg-white/75 px-3 py-1.5 text-xs font-semibold uppercase tracking-[0.14em] text-[#1f1814] transition-colors hover:bg-white"
+                        >
+                          Preview this version
+                        </Link>
+                      </div>
+                    ) : null}
                   </button>
                 ))
               ) : (
@@ -1266,7 +1411,7 @@ function EditorSpreadCanvas({
   accent: string;
   controls: EditorControls;
   fontPreset: { body: string; headline: string; accent?: string };
-  formatId: DraftFormatId;
+  formatId: BookDraftFormatId;
   page: BookPage;
   pageIndex: number;
   pagePhotos: PhotoAsset[];
@@ -1825,7 +1970,7 @@ function PrintPreviewGuides({
   formatId,
   mode,
 }: {
-  formatId: DraftFormatId;
+  formatId: BookDraftFormatId;
   mode: PrintPreviewMode;
 }) {
   if (mode === "clean") {
@@ -2013,29 +2158,20 @@ function EditorTag({
 }
 
 function createInitialEditorState(project: Project): EditorState {
-  const storyOptions = getStoryModeOptions(project);
+  const normalizedProject = normalizeProjectDraftState(project);
+  const draftEditorState =
+    normalizedProject.draftEditorState ?? buildDefaultDraftEditorState(normalizedProject);
 
   return {
-    captionTone: "warm",
-    density: 55,
-    fontPresetId: "gallery",
-    formatId: "12x12-square",
-    lockedPageIds: [],
-    lockedPhotoIds: [],
-    photoCaptions: project.photos.reduce<Record<string, string>>((captions, photo) => {
-      captions[photo.id] = photo.locationLabel ?? photo.title;
-      return captions;
-    }, {}),
-    printPreviewMode: "clean",
-    project: cloneProject(project),
-    showChapterDividers: true,
-    showDates: true,
-    showHandwrittenNotes: project.type === "yearbook",
-    showLocations: true,
-    showMaps: project.type === "trip",
-    showMemorabilia: true,
-    storyMode: storyOptions[0]?.id ?? "route_story",
-    styleMode: project.type === "yearbook" ? "timeless_yearbook" : "minimal_editorial",
+    ...draftEditorState,
+    fontPresetId: (draftEditorState.fontPresetId as FontPresetId) ?? "gallery",
+    project: cloneProject({
+      ...normalizedProject,
+      bookDraft: {
+        ...normalizedProject.bookDraft,
+        format: getBookDraftFormatLabel(draftEditorState.formatId),
+      },
+    }),
   };
 }
 
@@ -2152,39 +2288,6 @@ function getSpreadLabel(style: PageLayoutStyle | ApprovedSpreadType) {
     );
 
   return normalized?.label ?? sentenceCase(String(style).replaceAll("_", " "));
-}
-
-function getWorkingDraftKey(projectId: string) {
-  return `photo-book-maker:working-draft:${projectId}`;
-}
-
-function getPublishedDraftsKey(projectId: string) {
-  return `photo-book-maker:published-drafts:${projectId}`;
-}
-
-function readDraftStorage<T>(key: string) {
-  if (typeof window === "undefined") {
-    return null;
-  }
-
-  try {
-    const raw = window.localStorage.getItem(key);
-    return raw ? (JSON.parse(raw) as T) : null;
-  } catch {
-    return null;
-  }
-}
-
-function writeDraftStorage(key: string, value: unknown) {
-  if (typeof window === "undefined") {
-    return;
-  }
-
-  try {
-    window.localStorage.setItem(key, JSON.stringify(value));
-  } catch {
-    // Ignore storage failures in preview mode.
-  }
 }
 
 function sentenceCase(value: string) {

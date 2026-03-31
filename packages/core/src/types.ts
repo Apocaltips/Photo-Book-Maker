@@ -3,6 +3,32 @@ export type YearbookCycle =
   | "calendar_year"
   | "dating_anniversary"
   | "wedding_anniversary";
+export type BookDraftFormatId =
+  | "8x8-square"
+  | "10x10-square"
+  | "12x12-square"
+  | "11x8.5-landscape";
+export type BookDraftFormat =
+  | "8x8 square"
+  | "10x10 square"
+  | "12x12 square"
+  | "11x8.5 landscape";
+export type BookStyleMode =
+  | "minimal_editorial"
+  | "warm_scrapbook"
+  | "clean_modern"
+  | "bold_travel"
+  | "timeless_yearbook";
+export type BookCaptionTone = "factual" | "warm" | "reflective" | "playful";
+export type BookStoryMode =
+  | "route_story"
+  | "day_by_day"
+  | "location_clusters"
+  | "theme_clusters"
+  | "month_by_month"
+  | "seasonal"
+  | "people_focus";
+export type BookPrintPreviewMode = "clean" | "print_safe" | "bleed";
 export type MemberRole = "owner" | "collaborator";
 export type ProjectStatus =
   | "collecting"
@@ -147,11 +173,44 @@ export interface BookPage {
 export interface BookDraft {
   id: string;
   title: string;
-  format: "12x12 square";
+  format: BookDraftFormat;
   status: "draft" | "reviewing" | "approved";
   themeId: string;
   summary: string;
   pages: BookPage[];
+}
+
+export interface BookDraftEditorState {
+  formatId: BookDraftFormatId;
+  styleMode: BookStyleMode;
+  fontPresetId: string;
+  captionTone: BookCaptionTone;
+  storyMode: BookStoryMode;
+  printPreviewMode: BookPrintPreviewMode;
+  density: number;
+  showChapterDividers: boolean;
+  showDates: boolean;
+  showHandwrittenNotes: boolean;
+  showLocations: boolean;
+  showMaps: boolean;
+  showMemorabilia: boolean;
+  lockedPageIds: string[];
+  lockedPhotoIds: string[];
+  photoCaptions: Record<string, string>;
+  updatedAt?: string;
+  lastAiRefreshAt?: string;
+  aiProvider?: "openai" | "fallback" | "manual";
+}
+
+export interface PublishedBookDraft {
+  id: string;
+  name: string;
+  savedAt: string;
+  bookDraft: BookDraft;
+  editorState: BookDraftEditorState;
+  selectedThemeId: string;
+  projectTitle: string;
+  projectSubtitle: string;
 }
 
 export interface MockPrintOrder {
@@ -186,6 +245,8 @@ export interface Project {
   bookThemes: BookTheme[];
   selectedThemeId: string;
   bookDraft: BookDraft;
+  draftEditorState?: BookDraftEditorState;
+  publishedDrafts?: PublishedBookDraft[];
   mockPrintOrder: MockPrintOrder;
 }
 

@@ -1,4 +1,5 @@
 import { createMockProject, createSeedProjects, getProjectSummary } from "./mock-data";
+import { normalizeProjectDraftState } from "./editorial";
 import type {
   AddLocalPhotoInput,
   AddProjectNoteInput,
@@ -516,6 +517,306 @@ function preserveExistingEditorialChoices(project: Project, generatedPage: BookP
   };
 }
 
+type EditorialChapter = {
+  id: string;
+  index: number;
+  label: string;
+  note?: ProjectNote;
+  photos: PhotoAsset[];
+};
+
+function getChapterKey(project: Project, photo: PhotoAsset) {
+  if (project.type === "yearbook") {
+    return new Date(photo.capturedAt).toLocaleDateString("en-US", {
+      month: "long",
+      year: "numeric",
+      timeZone: project.timezone,
+    });
+  }
+
+  return (
+    photo.locationLabel?.trim() ||
+    new Date(photo.capturedAt).toLocaleDateString("en-US", {
+      month: "short",
+      day: "numeric",
+      timeZone: project.timezone,
+    })
+  );
+}
+
+function buildEditorialChapters(
+  project: Project,
+  orderedPhotos: PhotoAsset[],
+  orderedNotes: ProjectNote[],
+) {
+  const chapters: EditorialChapter[] = [];
+
+  for (const photo of orderedPhotos) {
+    const key = getChapterKey(project, photo);
+    const lastChapter = chapters.at(-1);
+
+    if (!lastChapter || lastChapter.label !== key || lastChapter.photos.length >= 6) {
+      chapters.push({
+        id: `chapter-${chapters.length + 1}`,
+        index: chapters.length,
+        label: key,
+        note: orderedNotes[chapters.length],
+        photos: [photo],
+      });
+      continue;
+    }
+
+    lastChapter.photos.push(photo);
+  }
+
+  return chapters;
+}
+
+function isPanoramaPhoto(photo: PhotoAsset) {
+  const bestVersion = [...photo.versions].sort(
+    (left, right) => right.width * right.height - left.width * left.height,
+  )[0];
+
+  if (!bestVersion) {
+    return false;
+  }
+
+  return bestVersion.width / bestVersion.height >= 1.75;
+}
+
+function isDetailPhoto(photo: PhotoAsset) {
+  const haystack = `${photo.title} ${photo.qualityNotes.join(" ")}`.toLowerCase();
+  return ["food", "coffee", "ticket", "detail", "close", "breakfast", "candid"].some(
+    (keyword) => haystack.includes(keyword),
+  );
+}
+
+function buildChapterDividerPage(project: Project, chapter: EditorialChapter): BookPage {
+  const noteSentence = chapter.note ? firstSentence(chapter.note.body) : "";
+  const firstPhoto = chapter.photos[0];
+  const dateLabel = firstPhoto
+    ? formatCaptureLabel(project, firstPhoto.capturedAt, {
+        month: "long",
+        day: "numeric",
+      })
+    : formatProjectRange(project);
+
+  return {
+    id: createPageId("scene_setter", firstPhoto ? [firstPhoto.id] : [chapter.id]),
+    style: project.type === "trip" ? "map_timeline" : "text_divider",
+    storyBeat: "scene_setter",
+    title: chapter.note?.title?.trim() || chapter.label,
+    caption: truncateCopy(
+      noteSentence ||
+        `${chapter.label} sets up the next run of pages. Use a quieter divider here so the book breathes before the hero image lands.`,
+      220,
+    ),
+    copyStatus: "prefilled",
+    copySource: chapter.note ? "hybrid" : "metadata",
+    photoIds:
+      project.type === "trip"
+        ? chapter.photos.slice(0, 2).map((photo) => photo.id)
+        : firstPhoto
+          ? [firstPhoto.id]
+          : [],
+    layoutNote:
+      project.type === "trip"
+        ? `Use the route context from ${dateLabel} to orient the reader before the next image-led spread.`
+        : "Keep this divider sparse with disciplined typography and a lot of white space.",
+    curationNote:
+      "Chapter dividers keep the book from feeling like a long feed of equally weighted pages.",
+    approved: false,
+  };
+}
+
+function buildHeroSpread(project: Project, chapter: EditorialChapter, heroPhoto: PhotoAsset): BookPage {
+  const moment = describePhotoMoment(project, [heroPhoto]);
+  const title = chapter.note?.title?.trim()
+    ? chapter.note.title.trim()
+    : moment.location
+      ? `${moment.location} carried this chapter`
+      : `${sentenceCase(moment.timeOfDay)} became the visual anchor`;
+  const caption = truncateCopy(
+    chapter.note
+      ? firstSentence(chapter.note.body)
+      : `${moment.location ?? project.title} on ${moment.dateLabel}. Keep the opening caption short and let the image do most of the work.`,
+    220,
+  );
+
+  return {
+    id: createPageId("highlight", [heroPhoto.id]),
+    style: isPanoramaPhoto(heroPhoto)
+      ? "panorama_spread"
+      : heroPhoto.orientation === "landscape"
+        ? "hero_full_bleed"
+        : "hero_support_strip",
+    storyBeat: chapter.index === 0 ? "opener" : "highlight",
+    title,
+    caption,
+    copyStatus: "prefilled",
+    copySource: chapter.note ? "hybrid" : "metadata",
+    photoIds: [heroPhoto.id],
+    layoutNote:
+      "Reserve the hero spread for the image that can carry an entire chapter without supporting clutter.",
+    curationNote:
+      "The focal image should read like a deliberate editorial pick, not just the first image in the timeline.",
+    approved: false,
+  };
+}
+
+function buildSupportSpread(
+  project: Project,
+  chapter: EditorialChapter,
+  photos: PhotoAsset[],
+): BookPage | null {
+  if (!photos.length) {
+    return null;
+  }
+
+  const moment = describePhotoMoment(project, photos);
+  const detailHeavy = photos.every((photo) => isDetailPhoto(photo));
+  const style =
+    photos.length === 1
+      ? "photo_journal"
+      : photos.length === 2
+        ? "balanced_two_up"
+        : detailHeavy
+          ? "memorabilia_spread"
+          : "four_up_grid";
+
+  return {
+    id: createPageId("details", photos.map((photo) => photo.id)),
+    style,
+    storyBeat: "details",
+    title:
+      style === "memorabilia_spread"
+        ? `${chapter.label} in the smaller details`
+        : `${moment.location ?? chapter.label} needed context`,
+    caption: truncateCopy(
+      detailHeavy
+        ? `Keep the food, small textures, and supporting ephemera together so they read as one collected memory instead of stealing a hero page.`
+        : `These supporting frames add context without competing with the chapter opener. Keep the pacing calm and the hierarchy obvious.`,
+      230,
+    ),
+    copyStatus: "prefilled",
+    copySource: "metadata",
+    photoIds: photos.map((photo) => photo.id),
+    layoutNote:
+      style === "memorabilia_spread"
+        ? "Use a denser, smaller treatment for details and tactile memories."
+        : "Support pages should widen the story without flattening the book into repeated hero spreads.",
+    curationNote:
+      "Context spreads are where the reader gets atmosphere, details, and supporting beats around the main image.",
+    approved: false,
+  };
+}
+
+function buildReflectionSpread(project: Project, chapter: EditorialChapter, photos: PhotoAsset[]): BookPage | null {
+  if (!photos.length) {
+    return null;
+  }
+
+  const style =
+    photos.length >= 4
+      ? "dense_candid_grid"
+      : photos.length === 3
+        ? "pattern_repetition"
+        : "photo_journal";
+
+  return {
+    id: createPageId("reflection", photos.map((photo) => photo.id)),
+    style,
+    storyBeat: "reflection",
+    title: `${chapter.label} after the hero moment`,
+    caption: truncateCopy(
+      `Alternate the quieter pages with the denser ones here so the book keeps a deliberate rhythm instead of repeating the same layout back to back.`,
+      220,
+    ),
+    copyStatus: "prefilled",
+    copySource: "metadata",
+    photoIds: photos.map((photo) => photo.id),
+    layoutNote:
+      style === "dense_candid_grid"
+        ? "Use a compact candid grid that feels intentional, not overfilled."
+        : "Reflection spreads should gather repeat motifs and in-between frames without crowding the page.",
+    curationNote:
+      "Use this page to lower the volume after the hero spread and collect the chapter's supporting memory texture.",
+    approved: false,
+  };
+}
+
+function buildChapterClosingSpread(
+  project: Project,
+  chapter: EditorialChapter,
+  photos: PhotoAsset[],
+): BookPage | null {
+  if (!photos.length) {
+    return null;
+  }
+
+  const noteSentence = chapter.note ? firstSentence(chapter.note.body) : "";
+
+  return {
+    id: createPageId("closing", photos.map((photo) => photo.id)),
+    style: photos.length > 1 ? "photo_journal" : "closing",
+    storyBeat: "closing",
+    title: `${chapter.label} settled into a softer finish`,
+    caption: truncateCopy(
+      noteSentence ||
+        "End the chapter on a quieter note so the overall book has ebb and flow instead of constant visual intensity.",
+      220,
+    ),
+    copyStatus: "prefilled",
+    copySource: chapter.note ? "hybrid" : "metadata",
+    photoIds: photos.map((photo) => photo.id),
+    layoutNote:
+      "Closing pages should feel calmer and more spacious than the chapter's hero and detail spreads.",
+    curationNote:
+      "A softer closer gives the next divider or hero spread room to feel distinct.",
+    approved: false,
+  };
+}
+
+function buildEditorialPages(
+  project: Project,
+  chapter: EditorialChapter,
+): BookPage[] {
+  const heroPhoto = chooseLeadPhoto(chapter.photos);
+  const remainingPhotos = chapter.photos.filter((photo) => photo.id !== heroPhoto.id);
+  const pages: BookPage[] = [];
+
+  if (project.type === "yearbook" || chapter.index > 0) {
+    pages.push(buildChapterDividerPage(project, chapter));
+  }
+
+  pages.push(buildHeroSpread(project, chapter, heroPhoto));
+
+  if (remainingPhotos.length) {
+    const supportSlice = remainingPhotos.slice(0, Math.min(2, remainingPhotos.length));
+    const supportPage = buildSupportSpread(project, chapter, supportSlice);
+    if (supportPage) {
+      pages.push(supportPage);
+    }
+  }
+
+  if (remainingPhotos.length > 2) {
+    const reflectionPhotos = remainingPhotos.slice(2, Math.min(6, remainingPhotos.length));
+    const reflectionPage = buildReflectionSpread(project, chapter, reflectionPhotos);
+    if (reflectionPage) {
+      pages.push(reflectionPage);
+    }
+  }
+
+  if (remainingPhotos.length > 4) {
+    const closingPage = buildChapterClosingSpread(project, chapter, remainingPhotos.slice(-2));
+    if (closingPage) {
+      pages.push(closingPage);
+    }
+  }
+
+  return pages;
+}
+
 export function resolveProjectTask(
   project: Project,
   taskId: string,
@@ -765,72 +1066,50 @@ export function toggleMustIncludePhoto(project: Project, photoId: string): Proje
 }
 
 export function regenerateBookDraft(project: Project): Project {
-  const orderedPhotos = [...project.photos]
+  const normalizedProject = normalizeProjectDraftState(project);
+  const orderedPhotos = [...normalizedProject.photos]
     .filter((photo) => photo.approved)
     .sort((a, b) => a.capturedAt.localeCompare(b.capturedAt));
-  const orderedNotes = [...project.notes].sort((a, b) =>
+  const orderedNotes = [...normalizedProject.notes].sort((a, b) =>
     a.createdAt.localeCompare(b.createdAt),
   );
 
   if (orderedPhotos.length === 0) {
     return {
-      ...project,
+      ...normalizedProject,
       bookDraft: {
-        ...project.bookDraft,
+        ...normalizedProject.bookDraft,
         pages: [],
         summary:
           "Add approved photos and a few memory notes so the first curated proof has enough story to work with.",
       },
     };
   }
-
-  const leadPhoto = chooseLeadPhoto(orderedPhotos);
-  const openingNote = orderedNotes[0];
-  const closingNote = orderedNotes.at(-1);
-  const remainingPhotos = orderedPhotos.filter((photo) => photo.id !== leadPhoto.id);
-  const closingPhotos = remainingPhotos.length >= 3 ? remainingPhotos.slice(-2) : [];
-  const bodySeed = closingPhotos.length
-    ? remainingPhotos.slice(0, Math.max(remainingPhotos.length - closingPhotos.length, 0))
-    : remainingPhotos;
-  const chapterAnchor = openingNote && bodySeed.length ? bodySeed[0] : undefined;
-  const bodyPhotos = chapterAnchor ? bodySeed.slice(1) : bodySeed;
-  const generatedPages: BookPage[] = [buildOpenerPage(project, leadPhoto, openingNote)];
-
-  if (openingNote) {
-    generatedPages.push(buildChapterPage(project, chapterAnchor, openingNote));
-  }
-
-  for (let index = 0; index < bodyPhotos.length;) {
-    const chunkSize = chooseChunkSize(bodyPhotos, index);
-    const chunk = bodyPhotos.slice(index, index + chunkSize);
-
-    if (chunk.length > 0) {
-      generatedPages.push(buildStoryPage(project, chunk, generatedPages.length));
-    }
-
-    index += chunkSize;
-  }
-
-  if (closingPhotos.length) {
-    generatedPages.push(buildClosingPage(project, closingPhotos, closingNote));
-  } else if (generatedPages.length === 1 && remainingPhotos.length) {
-    generatedPages.push(buildClosingPage(project, remainingPhotos, closingNote));
-  }
+  const chapters = buildEditorialChapters(normalizedProject, orderedPhotos, orderedNotes);
+  const generatedPages = chapters.flatMap((chapter) =>
+    buildEditorialPages(normalizedProject, chapter),
+  );
 
   const pages = generatedPages.map((page) =>
-    preserveExistingEditorialChoices(project, page),
+    preserveExistingEditorialChoices(normalizedProject, page),
   );
-  const soloPages = pages.filter((page) => page.photoIds.length === 1).length;
-  const multiPhotoPages = pages.length - soloPages;
+  const heroPages = pages.filter((page) =>
+    ["hero_full_bleed", "panorama_spread", "hero_support_strip"].includes(page.style),
+  ).length;
+  const densePages = pages.filter((page) =>
+    ["four_up_grid", "dense_candid_grid", "memorabilia_spread", "pattern_repetition"].includes(
+      page.style,
+    ),
+  ).length;
   const unconfirmedCopy = pages.filter((page) => page.copyStatus !== "confirmed").length;
 
   return {
-    ...project,
+    ...normalizedProject,
     bookDraft: {
-      ...project.bookDraft,
+      ...normalizedProject.bookDraft,
       status: "reviewing",
       pages,
-      summary: `Curated ${pages.length}-spread draft from ${orderedPhotos.length} approved photos: ${soloPages} cinematic single-image pages, ${multiPhotoPages} paced multi-photo spreads, and ${unconfirmedCopy} prefilled copy blocks still ready for confirmation.`,
+      summary: `Curated ${pages.length}-spread draft across ${chapters.length} chapters from ${orderedPhotos.length} approved photos: ${heroPages} hero spreads, ${densePages} detail grids, and ${unconfirmedCopy} prefilled copy blocks ready for confirmation.`,
     },
   };
 }

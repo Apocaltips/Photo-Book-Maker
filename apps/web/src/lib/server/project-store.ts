@@ -159,7 +159,7 @@ export async function writeProjects(projects: Project[]) {
 
 export async function updateProject(
   projectId: string,
-  updater: (project: Project) => Project,
+  updater: (project: Project) => Project | Promise<Project>,
 ) {
   const projects = await readProjects();
   const index = projects.findIndex((project) => project.id === projectId);
@@ -168,7 +168,7 @@ export async function updateProject(
     return null;
   }
 
-  const updatedProject = updater(projects[index]);
+  const updatedProject = await updater(projects[index]);
   projects[index] = updatedProject;
   await writeProjects(projects);
   return updatedProject;
