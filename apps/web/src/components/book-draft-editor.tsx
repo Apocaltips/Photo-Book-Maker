@@ -675,7 +675,7 @@ export function BookDraftEditor({
                     maxWidth: selectedFormat.maxWidth,
                   }}
                 >
-                  <EditorSpreadCanvas
+                  <EditorSpreadCanvasV2
                     accent={selectedTheme.accent}
                     controls={{
                       captionTone: editorState.captionTone,
@@ -1454,6 +1454,8 @@ function ChapterDividerPreview({
   );
 }
 
+// Legacy renderer kept temporarily while the new spread system settles.
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 function EditorSpreadCanvas({
   accent,
   controls,
@@ -1808,6 +1810,723 @@ function EditorSpreadCanvas({
   );
 }
 
+function EditorSpreadCanvasV2({
+  accent,
+  controls,
+  fontPreset,
+  formatId,
+  page,
+  pageIndex,
+  pagePhotos,
+  photoCaptions,
+  project,
+  selectedPhotoId,
+  styleMode,
+  onSelectPhoto,
+}: {
+  accent: string;
+  controls: EditorControls;
+  fontPreset: { body: string; headline: string; accent?: string };
+  formatId: BookDraftFormatId;
+  page: BookPage;
+  pageIndex: number;
+  pagePhotos: PhotoAsset[];
+  photoCaptions: Record<string, string>;
+  project: Project;
+  selectedPhotoId: string;
+  styleMode: EditorStyleMode;
+  onSelectPhoto: (photoId: string) => void;
+}) {
+  const spreadType = normalizeSpreadType(page.style);
+  const style =
+    STYLE_MODE_OPTIONS.find((entry) => entry.id === styleMode) ?? STYLE_MODE_OPTIONS[0];
+  const columns =
+    controls.density >= 75 ? 4 : controls.density >= 55 ? 3 : controls.density >= 35 ? 2 : 1;
+  const supportHeight =
+    controls.density >= 70
+      ? "min-h-[8.5rem]"
+      : controls.density >= 45
+        ? "min-h-[10rem]"
+        : "min-h-[12rem]";
+
+  const renderNarrativeStrip = () => (
+    <EditorNarrativeStrip
+      controls={controls}
+      fontPreset={fontPreset}
+      page={page}
+      pageIndex={pageIndex}
+      pagePhotos={pagePhotos}
+      project={project}
+    />
+  );
+
+  const renderPhotoTile = (
+    photo: PhotoAsset,
+    className = "min-h-[16rem]",
+    treatment: "default" | "hero" | "compact" = "default",
+  ) => (
+    <EditorPhotoTile
+      key={photo.id}
+      accent={accent}
+      caption={photoCaptions[photo.id]}
+      className={className}
+      fontPreset={fontPreset}
+      photo={photo}
+      project={project}
+      selected={photo.id === selectedPhotoId}
+      showDates={controls.showDates}
+      showLocations={controls.showLocations}
+      treatment={treatment}
+      onSelect={() => onSelectPhoto(photo.id)}
+    />
+  );
+
+  const renderEmptyTile = (
+    message: string,
+    className = "min-h-[16rem]",
+    tone: "default" | "quiet" = "default",
+  ) => (
+    <EmptyPhotoSlot className={className} tone={tone}>
+      {message}
+    </EmptyPhotoSlot>
+  );
+
+  const renderGrid = (
+    photos: PhotoAsset[],
+    {
+      minHeight = supportHeight,
+      maxColumns = columns,
+      treatment = "compact" as const,
+    }: {
+      maxColumns?: number;
+      minHeight?: string;
+      treatment?: "default" | "hero" | "compact";
+    } = {},
+  ) => {
+    if (!photos.length) {
+      return renderEmptyTile(
+        "Move more support photos here and the spread will rebalance.",
+        minHeight,
+        "quiet",
+      );
+    }
+
+    const columnClass =
+      maxColumns <= 1
+        ? "grid-cols-1"
+        : maxColumns === 2
+          ? "md:grid-cols-2"
+          : maxColumns === 3
+            ? "md:grid-cols-2 xl:grid-cols-3"
+            : "md:grid-cols-2 xl:grid-cols-4";
+
+    return (
+      <div className={`grid gap-4 ${columnClass}`}>
+        {photos.map((photo) => renderPhotoTile(photo, minHeight, treatment))}
+      </div>
+    );
+  };
+
+  const leadPhoto = pagePhotos[0];
+  const secondaryPhotos = pagePhotos.slice(1);
+  const tertiaryPhotos = pagePhotos.slice(2);
+  const storyLabel = page.storyBeat.replaceAll("_", " ");
+  const displayCopy = buildDisplayCaption(page, pagePhotos, project, controls.captionTone);
+  const metaLines =
+    (controls.showDates || controls.showLocations) && pagePhotos.length
+      ? pagePhotos
+          .slice(0, 3)
+          .map((photo) =>
+            buildPhotoMetaLine(photo, project, controls.showDates, controls.showLocations),
+          )
+          .filter(Boolean)
+      : [];
+
+  const metaTags = metaLines.length ? (
+    <div className="mt-4 flex flex-wrap gap-2">
+      {metaLines.map((line) => (
+        <EditorTag key={line} className="bg-[#f7efe8] text-[#7b6f67]">
+          {line}
+        </EditorTag>
+      ))}
+    </div>
+  ) : null;
+
+  const preview = (() => {
+    switch (spreadType) {
+      case "hero_full_bleed":
+        return (
+          <div className="space-y-4">
+            <div className="rounded-[2.35rem] bg-[#15110d] p-2 shadow-[0_28px_60px_rgba(24,16,10,0.2)]">
+              {leadPhoto
+                ? renderPhotoTile(leadPhoto, "min-h-[30rem] md:min-h-[36rem]", "hero")
+                : renderEmptyTile(
+                    "Pick one dominant image for this hero spread.",
+                    "min-h-[30rem]",
+                  )}
+            </div>
+            <div className="grid gap-4 lg:grid-cols-[0.88fr_1.12fr]">
+              <div className="rounded-[1.9rem] border border-[#00000010] bg-white/78 px-5 py-5">
+                <div className="text-[11px] uppercase tracking-[0.24em] text-[#8b5a40]">
+                  Opening statement
+                </div>
+                <h3
+                  className="mt-3 text-3xl leading-[0.95] text-[#1f1814]"
+                  style={{ fontFamily: fontPreset.headline }}
+                >
+                  {page.title}
+                </h3>
+                <p
+                  className="mt-4 text-sm leading-7 text-[#61554d]"
+                  style={{ fontFamily: fontPreset.body }}
+                >
+                  {displayCopy}
+                </p>
+                {metaTags}
+              </div>
+              {secondaryPhotos.length ? (
+                <div className="rounded-[1.9rem] border border-[#00000010] bg-[#fbf6f1] p-3">
+                  <div className="mb-3 text-[11px] uppercase tracking-[0.2em] text-[#7d7067]">
+                    Quiet follow-through
+                  </div>
+                  {renderGrid(secondaryPhotos, {
+                    maxColumns: 3,
+                    minHeight: "min-h-[8rem]",
+                  })}
+                </div>
+              ) : (
+                <div className="rounded-[1.9rem] border border-dashed border-[#d8c9bf] bg-white/58 px-5 py-5 text-sm leading-7 text-[#776b63]">
+                  Leave the opener quiet if the lead image is already doing the work.
+                </div>
+              )}
+            </div>
+          </div>
+        );
+      case "hero_support_strip":
+        return (
+          <div className="space-y-4">
+            <div className="grid gap-4 lg:grid-cols-[1.1fr_0.9fr]">
+              <div className="rounded-[2rem] bg-[linear-gradient(180deg,rgba(255,255,255,0.94),rgba(245,237,231,0.92))] p-3">
+                {leadPhoto
+                  ? renderPhotoTile(leadPhoto, "min-h-[27rem] md:min-h-[32rem]", "hero")
+                  : renderEmptyTile(
+                      "Choose a hero image for the opening column.",
+                      "min-h-[27rem]",
+                    )}
+              </div>
+              <div className="rounded-[2rem] border border-[#00000010] bg-[#fbf5ef] p-4">
+                <div className="mb-4 flex items-start justify-between gap-3">
+                  <div>
+                    <div className="text-[11px] uppercase tracking-[0.22em] text-[#8b5a40]">
+                      Contact strip
+                    </div>
+                    <div className="mt-1 text-sm leading-6 text-[#655952]">
+                      Support images should read like a sequence, not equal heroes.
+                    </div>
+                  </div>
+                  <EditorTag className="bg-[#f2e3d8] text-[#8b5a40]">Lead + details</EditorTag>
+                </div>
+                <div className="space-y-3">
+                  {secondaryPhotos.length
+                    ? secondaryPhotos.map((photo, index) => (
+                        <div
+                          key={photo.id}
+                          className={index === 0 ? "" : "lg:ml-5 xl:ml-8"}
+                        >
+                          {renderPhotoTile(
+                            photo,
+                            index === 0 ? "min-h-[11rem]" : "min-h-[8.75rem]",
+                            "compact",
+                          )}
+                        </div>
+                      ))
+                    : renderEmptyTile(
+                        "Support photos will stack here as a slim contextual strip.",
+                        "min-h-[10rem]",
+                        "quiet",
+                      )}
+                </div>
+              </div>
+            </div>
+            <div className="rounded-[1.7rem] border border-[#00000010] bg-white/78 px-5 py-4">
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <div className="min-w-0 flex-1">
+                  <div className="text-[11px] uppercase tracking-[0.2em] text-[#8b5a40]">
+                    Spread {pageIndex + 1} / {storyLabel}
+                  </div>
+                  <h3
+                    className="mt-2 text-2xl leading-tight text-[#1f1814]"
+                    style={{ fontFamily: fontPreset.headline }}
+                  >
+                    {page.title}
+                  </h3>
+                  <p
+                    className="mt-2 text-sm leading-7 text-[#5d524b]"
+                    style={{ fontFamily: fontPreset.body }}
+                  >
+                    {displayCopy}
+                  </p>
+                </div>
+                <EditorTag className="bg-[#faf1e7] text-[#76584a]">{page.curationNote}</EditorTag>
+              </div>
+            </div>
+          </div>
+        );
+      case "balanced_two_up":
+        return (
+          <div className="space-y-4">
+            <div className="rounded-[2rem] border border-[#00000010] bg-white/72 p-4">
+              <div className="mb-4 flex items-center justify-between gap-3">
+                <div className="text-[11px] uppercase tracking-[0.22em] text-[#8b5a40]">
+                  Gallery diptych
+                </div>
+                <EditorTag className="bg-[#f1e8df] text-[#7a6251]">Equal weight</EditorTag>
+              </div>
+              <div className="grid gap-4 lg:grid-cols-[1fr_auto_1fr] lg:items-stretch">
+                {leadPhoto
+                  ? renderPhotoTile(leadPhoto, "min-h-[23rem] md:min-h-[27rem]", "hero")
+                  : renderEmptyTile("Balanced spreads need a first image.", "min-h-[23rem]")}
+                <div className="hidden w-px bg-[#dbc9bc] lg:block" />
+                {pagePhotos[1]
+                  ? renderPhotoTile(pagePhotos[1], "min-h-[23rem] md:min-h-[27rem]", "hero")
+                  : renderEmptyTile(
+                      "Add a second image or switch to a hero spread.",
+                      "min-h-[23rem]",
+                      "quiet",
+                    )}
+              </div>
+            </div>
+            <div className="grid gap-4 lg:grid-cols-[1.08fr_0.92fr]">
+              {tertiaryPhotos.length ? (
+                <div className="rounded-[1.8rem] border border-[#00000010] bg-[#fffaf4] p-3">
+                  {renderGrid(tertiaryPhotos, { maxColumns: 3, minHeight: "min-h-[8rem]" })}
+                </div>
+              ) : (
+                <div className="rounded-[1.7rem] border border-dashed border-[#d9cabf] bg-white/58 px-5 py-4 text-sm leading-7 text-[#776b63]">
+                  Keep this spread quiet if the pairing already says enough.
+                </div>
+              )}
+              <div className="rounded-[1.7rem] border border-[#00000010] bg-white/78 px-5 py-4">
+                <div className="text-[11px] uppercase tracking-[0.2em] text-[#8b5a40]">
+                  Pairing note
+                </div>
+                <p
+                  className="mt-3 text-sm leading-7 text-[#5d524b]"
+                  style={{ fontFamily: fontPreset.body }}
+                >
+                  {displayCopy}
+                </p>
+                {metaTags}
+              </div>
+            </div>
+          </div>
+        );
+      case "four_up_grid":
+        return (
+          <div className="space-y-4">
+            <div className="rounded-[2rem] border border-[#00000010] bg-white/78 p-4">
+              <div className="mb-4 flex items-center justify-between gap-3">
+                <div>
+                  <div className="text-[11px] uppercase tracking-[0.22em] text-[#8b5a40]">
+                    Gallery wall
+                  </div>
+                  <div className="mt-1 text-sm leading-6 text-[#645851]">
+                    Calm, even spacing with identical editorial weight.
+                  </div>
+                </div>
+                <EditorTag className="bg-[#f1e8df] text-[#7a6251]">4-up grid</EditorTag>
+              </div>
+              {renderGrid(pagePhotos, {
+                maxColumns: 2,
+                minHeight: controls.density >= 55 ? "min-h-[11rem]" : "min-h-[13rem]",
+                treatment: "default",
+              })}
+            </div>
+            <div className="grid gap-4 lg:grid-cols-[0.86fr_1.14fr]">
+              <div className="rounded-[1.7rem] border border-[#00000010] bg-[#fbf5ef] px-5 py-4 text-sm leading-7 text-[#61554d]">
+                Clean recap spreads should feel measured and quiet, never like a collage.
+              </div>
+              {renderNarrativeStrip()}
+            </div>
+          </div>
+        );
+      case "dense_candid_grid":
+        return (
+          <div className="space-y-4">
+            <div className="rounded-[2rem] border border-[#00000010] bg-[linear-gradient(180deg,rgba(255,249,243,0.98),rgba(247,238,229,0.96))] p-4">
+              <div className="mb-4 text-[11px] uppercase tracking-[0.22em] text-[#8b5a40]">
+                Collected candids
+              </div>
+              <div className="grid gap-3 md:grid-cols-6">
+                {pagePhotos.length
+                  ? pagePhotos.map((photo, index) => (
+                      <div
+                        key={photo.id}
+                        className={[
+                          index % 5 === 0 ? "md:col-span-3" : "md:col-span-2",
+                          index % 4 === 1 ? "md:-rotate-[1.4deg]" : "",
+                          index % 4 === 2 ? "md:rotate-[1.2deg]" : "",
+                        ]
+                          .filter(Boolean)
+                          .join(" ")}
+                      >
+                        {renderPhotoTile(
+                          photo,
+                          index % 5 === 0
+                            ? "min-h-[11rem] md:min-h-[14rem]"
+                            : controls.density >= 65
+                              ? "min-h-[8rem]"
+                              : "min-h-[9rem]",
+                          "compact",
+                        )}
+                      </div>
+                    ))
+                  : renderEmptyTile(
+                      "Add food, candids, and details to make this spread feel collected.",
+                      "min-h-[12rem]",
+                    )}
+              </div>
+            </div>
+            <div className="grid gap-4 lg:grid-cols-[1.15fr_0.85fr]">
+              <div className="rounded-[1.7rem] border border-[#00000010] bg-white/76 px-5 py-4 text-sm leading-7 text-[#61554d]">
+                This page should feel energetic and slightly imperfect, like a pocket of in-between moments.
+              </div>
+              {renderNarrativeStrip()}
+            </div>
+          </div>
+        );
+      case "panorama_spread":
+        return (
+          <div className="space-y-4">
+            <div className="rounded-[2.15rem] border border-[#00000010] bg-white/88 px-4 py-6">
+              <div className="mb-4 text-center text-[11px] uppercase tracking-[0.24em] text-[#8b5a40]">
+                Cinematic spread
+              </div>
+              {leadPhoto
+                ? renderPhotoTile(leadPhoto, "min-h-[18rem] md:min-h-[22rem]", "hero")
+                : renderEmptyTile(
+                    "Reserve panoramas for wide scenic images.",
+                    "min-h-[18rem]",
+                  )}
+            </div>
+            <div className="grid gap-4 lg:grid-cols-[1.16fr_0.84fr]">
+              {secondaryPhotos.length ? (
+                <div className="rounded-[1.8rem] border border-[#00000010] bg-[#fbf6f0] p-3">
+                  <div className="mb-3 text-[11px] uppercase tracking-[0.2em] text-[#7d7067]">
+                    Supporting stills
+                  </div>
+                  {renderGrid(secondaryPhotos, {
+                    maxColumns: 4,
+                    minHeight: "min-h-[7.5rem]",
+                  })}
+                </div>
+              ) : (
+                <div className="rounded-[1.7rem] border border-dashed border-[#d9cabf] bg-white/58 px-5 py-4 text-sm leading-7 text-[#776b63]">
+                  Panorama pages work best when they stay quiet.
+                </div>
+              )}
+              <div className="rounded-[1.7rem] border border-[#00000010] bg-white/78 px-5 py-4">
+                <div className="text-[11px] uppercase tracking-[0.2em] text-[#8b5a40]">
+                  Minimal caption
+                </div>
+                <p
+                  className="mt-3 text-sm leading-7 text-[#5d524b]"
+                  style={{ fontFamily: fontPreset.body }}
+                >
+                  {displayCopy}
+                </p>
+                {metaTags}
+              </div>
+            </div>
+          </div>
+        );
+      case "text_divider":
+        return (
+          <div className="grid gap-4 lg:grid-cols-[0.86fr_1.14fr]">
+            <div className="rounded-[2rem] border border-[#00000010] bg-[linear-gradient(180deg,rgba(255,255,255,0.95),rgba(246,238,231,0.95))] px-6 py-8">
+              <div className="text-[11px] uppercase tracking-[0.24em] text-[#8b5a40]">
+                Divider spread
+              </div>
+              <h3
+                className="mt-4 text-5xl leading-[0.88] text-[#1f1814]"
+                style={{ fontFamily: fontPreset.headline }}
+              >
+                {page.title}
+              </h3>
+              <p
+                className="mt-5 max-w-sm text-sm leading-7 text-[#5f544d]"
+                style={{ fontFamily: fontPreset.body }}
+              >
+                {displayCopy}
+              </p>
+              {controls.showMaps ? (
+                <div className="mt-6">
+                  <MapTimelineCard project={project} pagePhotos={pagePhotos} />
+                </div>
+              ) : null}
+            </div>
+            <div className="space-y-4 rounded-[2rem] border border-dashed border-[#d8c7ba] bg-white/58 p-4">
+              <div className="text-[11px] uppercase tracking-[0.22em] text-[#7d7067]">
+                Optional anchor image
+              </div>
+              {leadPhoto
+                ? renderPhotoTile(leadPhoto, "min-h-[24rem]", "hero")
+                : renderEmptyTile(
+                    "Optional supporting image only.",
+                    "min-h-[24rem]",
+                    "quiet",
+                  )}
+            </div>
+          </div>
+        );
+      case "photo_journal":
+        return (
+          <div className="grid gap-4 lg:grid-cols-[1.05fr_0.95fr]">
+            <div className="space-y-4">
+              {leadPhoto
+                ? renderPhotoTile(leadPhoto, "min-h-[22rem] md:min-h-[28rem]", "hero")
+                : renderEmptyTile(
+                    "Journal spreads still need one supporting frame.",
+                    "min-h-[22rem]",
+                  )}
+              {secondaryPhotos.length ? (
+                <div className="rounded-[1.7rem] border border-[#00000010] bg-white/72 p-3">
+                  {renderGrid(secondaryPhotos, {
+                    maxColumns: 2,
+                    minHeight: "min-h-[9rem]",
+                  })}
+                </div>
+              ) : null}
+            </div>
+            <div className="space-y-4 rounded-[2rem] border border-[#00000010] bg-[linear-gradient(180deg,rgba(255,251,246,0.98),rgba(246,236,226,0.96))] p-5">
+              <div className="text-[11px] uppercase tracking-[0.22em] text-[#8b5a40]">
+                Journal page
+              </div>
+              <div className="space-y-4 rounded-[1.6rem] border border-[#00000010] bg-[#fffdf8] px-5 py-5">
+                <div className="border-b border-dashed border-[#dccfc4] pb-3">
+                  <div
+                    className="text-base leading-7 text-[#5e5048]"
+                    style={{ fontFamily: fontPreset.body }}
+                  >
+                    {displayCopy}
+                  </div>
+                </div>
+                {[0, 1, 2].map((index) => (
+                  <div
+                    key={index}
+                    className="border-b border-dashed border-[#dccfc4] pb-3 last:border-none last:pb-0"
+                  >
+                    <div
+                      className="text-sm leading-7 text-[#7a6d65]"
+                      style={{ fontFamily: fontPreset.accent ?? fontPreset.body }}
+                    >
+                      {controls.showHandwrittenNotes && index === 0
+                        ? "Handwritten note block: add the emotional detail that makes the page feel personal."
+                        : "Leave space for a short reflection, route note, or a detail the photos cannot carry alone."}
+                    </div>
+                  </div>
+                ))}
+              </div>
+              {metaTags}
+            </div>
+          </div>
+        );
+      case "memorabilia_spread":
+        return (
+          <div className="space-y-4">
+            <div className="grid gap-4 lg:grid-cols-[1.02fr_0.98fr]">
+              <div className="space-y-4">
+                {leadPhoto
+                  ? renderPhotoTile(leadPhoto, "min-h-[20rem] md:min-h-[24rem]", "hero")
+                  : renderEmptyTile(
+                      "Use one image to anchor the memorabilia page.",
+                      "min-h-[20rem]",
+                    )}
+              </div>
+              <div className="space-y-4 rounded-[2rem] border border-[#00000010] bg-[linear-gradient(180deg,rgba(252,246,239,0.98),rgba(246,237,228,0.96))] p-5">
+                <div className="text-[11px] uppercase tracking-[0.22em] text-[#8b5a40]">
+                  Keepsake board
+                </div>
+                {controls.showMemorabilia ? <MemorabiliaStrip photos={secondaryPhotos} /> : null}
+                <div className="rounded-[1.6rem] border border-[#00000010] bg-white/82 px-4 py-4 text-sm leading-7 text-[#62564f]">
+                  {displayCopy}
+                </div>
+              </div>
+            </div>
+            <div className="grid gap-4 lg:grid-cols-[0.92fr_1.08fr]">
+              <div className="rounded-[1.7rem] border border-[#00000010] bg-white/76 px-5 py-4 text-sm leading-7 text-[#61554d]">
+                This spread should feel tactile and layered, like a keepsake board rather than a standard image page.
+              </div>
+              {metaTags ? (
+                <div className="rounded-[1.7rem] border border-[#00000010] bg-white/76 px-5 py-4">
+                  <div className="text-[11px] uppercase tracking-[0.2em] text-[#8b5a40]">
+                    Labels
+                  </div>
+                  {metaTags}
+                </div>
+              ) : (
+                <div className="rounded-[1.7rem] border border-dashed border-[#d9cabf] bg-white/58 px-5 py-4 text-sm leading-7 text-[#776b63]">
+                  Detail photos and note blocks will make this page feel richer.
+                </div>
+              )}
+            </div>
+          </div>
+        );
+      case "pattern_repetition":
+        return (
+          <div className="space-y-4">
+            <div className="rounded-[2rem] border border-[#00000010] bg-[#f8f4ee] p-4">
+              <div className="mb-4 flex items-center justify-between gap-3">
+                <div className="text-[11px] uppercase tracking-[0.22em] text-[#8b5a40]">
+                  Repetition study
+                </div>
+                <EditorTag className="bg-[#efe5d8] text-[#7b6452]">Pattern / motif</EditorTag>
+              </div>
+              <div className="grid gap-3 md:grid-cols-3">
+                {pagePhotos.length
+                  ? pagePhotos.map((photo) => (
+                      <div
+                        key={photo.id}
+                        className="rounded-[1.5rem] border border-[#00000010] bg-white/88 p-2"
+                      >
+                        {renderPhotoTile(photo, "min-h-[11rem] md:min-h-[13rem]", "default")}
+                      </div>
+                    ))
+                  : renderEmptyTile(
+                      "Use repeated angles, repeated people, or repeated motifs here.",
+                      "min-h-[12rem]",
+                    )}
+              </div>
+            </div>
+            <div className="grid gap-4 lg:grid-cols-[1.06fr_0.94fr]">
+              <div className="rounded-[1.7rem] border border-[#00000010] bg-white/76 px-5 py-4 text-sm leading-7 text-[#61554d]">
+                This one should feel deliberate and rhythmic, almost like a visual study.
+              </div>
+              {renderNarrativeStrip()}
+            </div>
+          </div>
+        );
+      case "burst_sequence":
+        return (
+          <div className="space-y-4">
+            <div className="rounded-[2rem] border border-[#00000010] bg-[linear-gradient(180deg,rgba(255,255,255,0.94),rgba(240,234,228,0.94))] p-4">
+              <div className="mb-4 flex items-center justify-between gap-3">
+                <div className="text-[11px] uppercase tracking-[0.24em] text-[#8b5a40]">
+                  Motion strip
+                </div>
+                <div className="text-xs uppercase tracking-[0.2em] text-[#7a6d65]">
+                  sequence / rhythm / movement
+                </div>
+              </div>
+              <div className="grid gap-3 md:grid-cols-12">
+                {pagePhotos.length
+                  ? pagePhotos.map((photo, index) => {
+                      const spanClass =
+                        index === 0
+                          ? "md:col-span-12"
+                          : index % 4 === 0
+                            ? "md:col-span-4"
+                            : "md:col-span-2";
+
+                      return (
+                        <div key={photo.id} className={spanClass}>
+                          {renderPhotoTile(
+                            photo,
+                            index === 0
+                              ? "min-h-[15rem] md:min-h-[17rem]"
+                              : "min-h-[8rem] md:min-h-[9rem]",
+                            index === 0 ? "hero" : "compact",
+                          )}
+                        </div>
+                      );
+                    })
+                  : renderEmptyTile(
+                      "Burst spreads need a short run of repeated frames.",
+                      "min-h-[14rem]",
+                    )}
+              </div>
+            </div>
+            <div className="grid gap-4 lg:grid-cols-[0.88fr_1.12fr]">
+              <div className="rounded-[1.7rem] border border-[#00000010] bg-[#fbf5ef] px-5 py-4 text-sm leading-7 text-[#61554d]">
+                Burst pages should feel like a storyboard or contact strip, not a static grid.
+              </div>
+              {renderNarrativeStrip()}
+            </div>
+          </div>
+        );
+      case "map_timeline":
+        return (
+          <div className="grid gap-4 lg:grid-cols-[0.82fr_1.18fr]">
+            <div className="space-y-4 rounded-[2rem] border border-[#00000010] bg-[linear-gradient(180deg,rgba(250,246,240,0.98),rgba(245,236,227,0.96))] p-5">
+              <div className="text-[11px] uppercase tracking-[0.22em] text-[#8b5a40]">
+                Route context
+              </div>
+              <MapTimelineCard project={project} pagePhotos={pagePhotos} />
+              <div className="rounded-[1.5rem] border border-[#00000010] bg-white/82 px-4 py-4 text-sm leading-7 text-[#61554d]">
+                {displayCopy}
+              </div>
+            </div>
+            <div className="space-y-4">
+              {leadPhoto
+                ? renderPhotoTile(leadPhoto, "min-h-[23rem] md:min-h-[29rem]", "hero")
+                : renderEmptyTile(
+                    "Context spreads can hold a single travel image.",
+                    "min-h-[23rem]",
+                  )}
+              {secondaryPhotos.length ? (
+                <div className="rounded-[1.8rem] border border-[#00000010] bg-white/72 p-3">
+                  {renderGrid(secondaryPhotos, {
+                    maxColumns: 2,
+                    minHeight: "min-h-[8.5rem]",
+                  })}
+                </div>
+              ) : null}
+              {renderNarrativeStrip()}
+            </div>
+          </div>
+        );
+      default:
+        return (
+          <div className="space-y-4">
+            <div className="grid gap-4 lg:grid-cols-[1.24fr_0.76fr]">
+              <div>
+                {leadPhoto
+                  ? renderPhotoTile(leadPhoto, "min-h-[24rem] md:min-h-[29rem]", "hero")
+                  : renderEmptyTile(
+                      "Pick a lead image to start shaping this spread.",
+                      "min-h-[24rem]",
+                    )}
+              </div>
+              <div>{renderGrid(secondaryPhotos, { maxColumns: 2 })}</div>
+            </div>
+            {renderNarrativeStrip()}
+          </div>
+        );
+    }
+  })();
+
+  const canvasStyle = {
+    boxShadow:
+      styleMode === "clean_modern"
+        ? "0 12px 32px rgba(31, 24, 20, 0.05)"
+        : "0 18px 48px rgba(31, 24, 20, 0.08)",
+    maxWidth: formatId === "11x8.5-landscape" ? "54rem" : undefined,
+  } satisfies CSSProperties;
+
+  return (
+    <div
+      className="relative mx-auto w-full overflow-hidden rounded-[1.8rem] border border-white/50 bg-white/82 p-4"
+      style={canvasStyle}
+    >
+      <PrintPreviewGuides formatId={formatId} mode={controls.printPreviewMode} />
+      <div className="relative z-10 space-y-4">{preview}</div>
+      <div className="mt-4 rounded-[1.2rem] border border-[#00000010] bg-[#fffaf5] px-4 py-3 text-xs uppercase tracking-[0.18em] text-[#7e7067]">
+        Photo-first layout / {style.label} / {getSpreadLabel(spreadType)} / density {controls.density}
+      </div>
+    </div>
+  );
+}
+
 function EditorNarrativeStrip({
   controls,
   fontPreset,
@@ -1986,9 +2705,9 @@ function MapTimelineCard({
     pagePhotos.at(-1)?.capturedAt ?? `${project.endDate}T12:00:00.000Z`;
 
   return (
-    <div className="rounded-[1.6rem] border border-[#00000010] bg-[#f8f1ea] px-4 py-4">
+    <div className="rounded-[1.7rem] border border-[#00000010] bg-[linear-gradient(180deg,rgba(248,241,234,0.98),rgba(244,234,224,0.96))] px-4 py-4">
       <div className="text-[11px] uppercase tracking-[0.2em] text-[#8b5a40]">
-        Map / timeline
+        Route / timeline
       </div>
       <div className="mt-3 text-xl font-semibold text-[#1f1814]">{location}</div>
       <div className="mt-2 text-sm leading-7 text-[#61554d]">
@@ -1996,7 +2715,21 @@ function MapTimelineCard({
         {" -> "}
         {formatPhotoDate(project, lastDate)}
       </div>
-      <div className="mt-4 h-24 rounded-[1.2rem] border border-dashed border-[#c9b5a3] bg-[linear-gradient(180deg,rgba(255,255,255,0.65),rgba(247,236,225,0.78))]" />
+      <div className="mt-4 grid gap-3 lg:grid-cols-[auto_1fr]">
+        <div className="flex flex-col items-center gap-1 pt-1">
+          <span className="h-2.5 w-2.5 rounded-full bg-[#8b5a40]" />
+          <span className="h-10 w-px bg-[#c9b5a3]" />
+          <span className="h-2.5 w-2.5 rounded-full bg-[#8b5a40]" />
+        </div>
+        <div className="space-y-3">
+          <div className="rounded-[1.1rem] border border-[#00000010] bg-white/76 px-3 py-3 text-sm text-[#5f544d]">
+            Arrival / scenic setup
+          </div>
+          <div className="rounded-[1.1rem] border border-[#00000010] bg-white/76 px-3 py-3 text-sm text-[#5f544d]">
+            Mid-route highlights / details
+          </div>
+        </div>
+      </div>
     </div>
   );
 }
@@ -2013,12 +2746,13 @@ function MemorabiliaStrip({ photos }: { photos: PhotoAsset[] }) {
 
   return (
     <div className="grid gap-3 sm:grid-cols-2">
-      {photos.slice(0, 4).map((photo) => (
+      {photos.slice(0, 4).map((photo, index) => (
         <div
           key={photo.id}
-          className="rounded-[1.4rem] border border-[#00000010] bg-white/82 px-4 py-4"
+          className={`rounded-[1.4rem] border border-[#00000010] bg-white/82 px-4 py-4 ${index % 2 === 0 ? "rotate-[-1deg]" : "rotate-[1deg]"}`}
         >
-          <div className="text-sm font-semibold text-[#1f1814]">{photo.title}</div>
+          <div className="text-[10px] uppercase tracking-[0.18em] text-[#8b5a40]">Artifact note</div>
+          <div className="mt-2 text-sm font-semibold text-[#1f1814]">{photo.title}</div>
           <div className="mt-2 text-xs uppercase tracking-[0.16em] text-[#7b6f67]">
             {photo.locationLabel ?? "Memorabilia note"}
           </div>

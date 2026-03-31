@@ -159,7 +159,7 @@ export function BookPreview({
                 </div>
               </div>
 
-              <PreviewCanvas
+              <PreviewCanvasV2
                 accent={selectedTheme.accent}
                 editorState={editorState}
                 page={selectedPage}
@@ -232,6 +232,8 @@ export function BookPreview({
   );
 }
 
+// Legacy preview renderer kept temporarily while the new spread system settles.
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 function PreviewCanvas({
   accent,
   editorState,
@@ -399,6 +401,521 @@ function PreviewCanvas({
               <PreviewPhotoGrid accent={accent} photos={supportingPhotos} minHeight="min-h-[10rem]" maxColumns={1} />
             </div>
             {narrativeStrip}
+          </div>
+        );
+    }
+  })();
+
+  return (
+    <div className="overflow-hidden rounded-[2rem] p-4 shadow-[0_18px_44px_rgba(42,29,19,0.08)]" style={themePresentation.canvasStyle}>
+      {previewBody}
+      {editorState.printPreviewMode !== "clean" ? (
+        <div className="mt-4 rounded-[1.2rem] px-4 py-3 text-xs uppercase tracking-[0.18em]" style={themePresentation.secondaryButtonStyle}>
+          {editorState.printPreviewMode === "bleed" ? "Bleed + gutter preview" : "Print-safe preview"}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+function PreviewCanvasV2({
+  accent,
+  editorState,
+  page,
+  photos,
+  project,
+  spreadType,
+  themePresentation,
+}: {
+  accent: string;
+  editorState: BookDraftEditorState;
+  page: BookPage;
+  photos: PhotoAsset[];
+  project: Project;
+  spreadType: ReturnType<typeof normalizeSpreadType>;
+  themePresentation: ReturnType<typeof getBookThemePresentation>;
+}) {
+  const heroPhoto = photos[0];
+  const supportingPhotos = photos.slice(1);
+  const tertiaryPhotos = photos.slice(2);
+  const densityClass =
+    editorState.density >= 70
+      ? "min-h-[8rem]"
+      : editorState.density >= 50
+        ? "min-h-[10rem]"
+        : "min-h-[12rem]";
+  const metaTags = photos.length ? (
+    <div className="mt-4 flex flex-wrap gap-2">
+      {photos.slice(0, 3).map((photo) => (
+        <PreviewTag key={photo.id}>{photo.locationLabel ?? project.title}</PreviewTag>
+      ))}
+    </div>
+  ) : null;
+  const renderNarrativeStrip = () => (
+    <PreviewNarrativeStrip
+      page={page}
+      photos={photos}
+      project={project}
+      themePresentation={themePresentation}
+    />
+  );
+
+  const previewBody = (() => {
+    switch (spreadType) {
+      case "hero_full_bleed":
+        return (
+          <div className="space-y-4">
+            <div className="rounded-[2.3rem] bg-[#16110d] p-2 shadow-[0_24px_54px_rgba(24,16,10,0.18)]">
+              <PreviewPhotoTile
+                photo={heroPhoto}
+                accent={accent}
+                className="min-h-[26rem] md:min-h-[33rem]"
+                emphasis="large"
+              />
+            </div>
+            <div className="grid gap-4 lg:grid-cols-[0.88fr_1.12fr]">
+              <div className="rounded-[1.8rem] border border-black/5 bg-white/82 px-5 py-5">
+                <div className="text-[11px] uppercase tracking-[0.22em]" style={{ color: themePresentation.textMuted }}>
+                  Opening spread
+                </div>
+                <h3 className="mt-3 text-3xl font-semibold leading-[0.95]" style={{ color: themePresentation.textColor }}>
+                  {page.title}
+                </h3>
+                <p className="mt-4 text-sm leading-7" style={{ color: themePresentation.textMuted }}>
+                  {page.caption}
+                </p>
+                {metaTags}
+              </div>
+              {supportingPhotos.length ? (
+                <div className="rounded-[1.8rem] border border-black/5 bg-white/68 p-3">
+                  <div className="mb-3 text-[11px] uppercase tracking-[0.2em]" style={{ color: themePresentation.textMuted }}>
+                    Follow-through
+                  </div>
+                  <PreviewPhotoGrid
+                    accent={accent}
+                    photos={supportingPhotos}
+                    minHeight="min-h-[8rem]"
+                    maxColumns={3}
+                  />
+                </div>
+              ) : null}
+            </div>
+          </div>
+        );
+      case "hero_support_strip":
+        return (
+          <div className="space-y-4">
+            <div className="grid gap-4 lg:grid-cols-[1.1fr_0.9fr]">
+              <div className="rounded-[2rem] bg-[linear-gradient(180deg,rgba(255,255,255,0.94),rgba(245,237,231,0.92))] p-3">
+                <PreviewPhotoTile
+                  photo={heroPhoto}
+                  accent={accent}
+                  className="min-h-[25rem] md:min-h-[31rem]"
+                  emphasis="large"
+                />
+              </div>
+              <div className="rounded-[2rem] border border-black/5 bg-[#fbf5ef] p-4">
+                <div className="mb-4 flex items-start justify-between gap-3">
+                  <div>
+                    <div className="text-[11px] uppercase tracking-[0.22em]" style={{ color: themePresentation.textMuted }}>
+                      Contact strip
+                    </div>
+                    <div className="mt-1 text-sm leading-6" style={{ color: themePresentation.textMuted }}>
+                      Support moments stay smaller and more rhythmic.
+                    </div>
+                  </div>
+                  <PreviewTag tone="accent">Lead + details</PreviewTag>
+                </div>
+                <div className="space-y-3">
+                  {supportingPhotos.length
+                    ? supportingPhotos.map((photo, index) => (
+                        <div
+                          key={photo.id}
+                          className={index === 0 ? "" : "lg:ml-5 xl:ml-8"}
+                        >
+                          <PreviewPhotoTile
+                            photo={photo}
+                            accent={accent}
+                            className={index === 0 ? "min-h-[11rem]" : "min-h-[8.5rem]"}
+                          />
+                        </div>
+                      ))
+                    : (
+                        <div className="rounded-[1.6rem] border border-dashed border-black/10 bg-white/60 px-5 py-5 text-sm leading-7" style={{ color: themePresentation.textMuted }}>
+                          Add a few smaller context images here.
+                        </div>
+                      )}
+                </div>
+              </div>
+            </div>
+            <div className="rounded-[1.7rem] border border-black/5 bg-white/82 px-5 py-4">
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <div className="min-w-0 flex-1">
+                  <div className="text-[11px] uppercase tracking-[0.2em]" style={{ color: themePresentation.textMuted }}>
+                    {page.storyBeat.replaceAll("_", " ")}
+                  </div>
+                  <h3 className="mt-2 text-2xl font-semibold leading-tight" style={{ color: themePresentation.textColor }}>
+                    {page.title}
+                  </h3>
+                  <p className="mt-2 text-sm leading-7" style={{ color: themePresentation.textMuted }}>
+                    {page.caption}
+                  </p>
+                </div>
+                <PreviewTag>{page.curationNote}</PreviewTag>
+              </div>
+            </div>
+          </div>
+        );
+      case "balanced_two_up":
+        return (
+          <div className="space-y-4">
+            <div className="rounded-[2rem] border border-black/5 bg-white/74 p-4">
+              <div className="mb-4 flex items-center justify-between gap-3">
+                <div className="text-[11px] uppercase tracking-[0.22em]" style={{ color: themePresentation.textMuted }}>
+                  Gallery diptych
+                </div>
+                <PreviewTag tone="accent">Equal weight</PreviewTag>
+              </div>
+              <div className="grid gap-4 lg:grid-cols-[1fr_auto_1fr]">
+                {photos.slice(0, 2).map((photo, index) => (
+                  <div key={photo.id} className={index === 1 ? "lg:col-start-3" : ""}>
+                    <PreviewPhotoTile
+                      photo={photo}
+                      accent={accent}
+                      className="min-h-[22rem] md:min-h-[27rem]"
+                      emphasis="large"
+                    />
+                  </div>
+                ))}
+                <div className="hidden w-px bg-[#dbc9bc] lg:block" />
+              </div>
+            </div>
+            <div className="grid gap-4 lg:grid-cols-[1.08fr_0.92fr]">
+              {tertiaryPhotos.length ? (
+                <div className="rounded-[1.8rem] border border-black/5 bg-[#fffaf4] p-3">
+                  <PreviewPhotoGrid
+                    accent={accent}
+                    photos={tertiaryPhotos}
+                    minHeight="min-h-[8rem]"
+                    maxColumns={3}
+                  />
+                </div>
+              ) : null}
+              <div className={tertiaryPhotos.length ? "" : "lg:col-span-2"}>{renderNarrativeStrip()}</div>
+            </div>
+          </div>
+        );
+      case "four_up_grid":
+        return (
+          <div className="space-y-4">
+            <div className="rounded-[2rem] border border-black/5 bg-white/78 p-4">
+              <div className="mb-4 flex items-center justify-between gap-3">
+                <div>
+                  <div className="text-[11px] uppercase tracking-[0.22em]" style={{ color: themePresentation.textMuted }}>
+                    Gallery wall
+                  </div>
+                  <div className="mt-1 text-sm leading-6" style={{ color: themePresentation.textMuted }}>
+                    Structured, calm, and evenly weighted.
+                  </div>
+                </div>
+                <PreviewTag tone="accent">4-up grid</PreviewTag>
+              </div>
+              <PreviewPhotoGrid accent={accent} photos={photos} minHeight={densityClass} maxColumns={2} />
+            </div>
+            <div className="grid gap-4 lg:grid-cols-[0.86fr_1.14fr]">
+              <div className="rounded-[1.7rem] border border-black/5 bg-white/76 px-5 py-4 text-sm leading-7" style={{ color: themePresentation.textMuted }}>
+                This spread should feel measured and gallery-like.
+              </div>
+              {renderNarrativeStrip()}
+            </div>
+          </div>
+        );
+      case "dense_candid_grid":
+        return (
+          <div className="space-y-4">
+            <div className="rounded-[2rem] border border-black/5 bg-[linear-gradient(180deg,rgba(255,249,243,0.98),rgba(247,238,229,0.96))] p-4">
+              <div className="mb-4 text-[11px] uppercase tracking-[0.22em]" style={{ color: themePresentation.textMuted }}>
+                Collected candids
+              </div>
+              <div className="grid gap-3 md:grid-cols-6">
+                {photos.map((photo, index) => (
+                  <div
+                    key={photo.id}
+                    className={[
+                      index % 5 === 0 ? "md:col-span-3" : "md:col-span-2",
+                      index % 4 === 1 ? "md:-rotate-[1.4deg]" : "",
+                      index % 4 === 2 ? "md:rotate-[1.2deg]" : "",
+                    ]
+                      .filter(Boolean)
+                      .join(" ")}
+                  >
+                    <PreviewPhotoTile
+                      photo={photo}
+                      accent={accent}
+                      className={index % 5 === 0 ? "min-h-[11rem] md:min-h-[14rem]" : "min-h-[8rem] md:min-h-[9rem]"}
+                    />
+                  </div>
+                ))}
+              </div>
+            </div>
+            <div className="grid gap-4 lg:grid-cols-[1.15fr_0.85fr]">
+              <div className="rounded-[1.7rem] border border-black/5 bg-white/76 px-5 py-4 text-sm leading-7" style={{ color: themePresentation.textMuted }}>
+                This spread should feel collected and lively, not orderly.
+              </div>
+              {renderNarrativeStrip()}
+            </div>
+          </div>
+        );
+      case "panorama_spread":
+        return (
+          <div className="space-y-4">
+            <div className="rounded-[2.15rem] border border-black/5 bg-white/88 px-4 py-6">
+              <div className="mb-4 text-center text-[11px] uppercase tracking-[0.24em]" style={{ color: themePresentation.textMuted }}>
+                Cinematic spread
+              </div>
+              <PreviewPhotoTile
+                photo={heroPhoto}
+                accent={accent}
+                className="min-h-[18rem] md:min-h-[22rem]"
+                emphasis="large"
+              />
+            </div>
+            <div className="grid gap-4 lg:grid-cols-[1.16fr_0.84fr]">
+              {supportingPhotos.length ? (
+                <div className="rounded-[1.8rem] border border-black/5 bg-white/68 p-3">
+                  <div className="mb-3 text-[11px] uppercase tracking-[0.2em]" style={{ color: themePresentation.textMuted }}>
+                    Supporting stills
+                  </div>
+                  <PreviewPhotoGrid accent={accent} photos={supportingPhotos} minHeight="min-h-[7.5rem]" maxColumns={4} />
+                </div>
+              ) : null}
+              <div className={supportingPhotos.length ? "" : "lg:col-span-2"}>
+                <div className="rounded-[1.7rem] border border-black/5 bg-white/82 px-5 py-4">
+                  <div className="text-[11px] uppercase tracking-[0.2em]" style={{ color: themePresentation.textMuted }}>
+                    Minimal caption
+                  </div>
+                  <p className="mt-3 text-sm leading-7" style={{ color: themePresentation.textMuted }}>
+                    {page.caption}
+                  </p>
+                  {metaTags}
+                </div>
+              </div>
+            </div>
+          </div>
+        );
+      case "text_divider":
+        return (
+          <div className="grid gap-4 lg:grid-cols-[0.86fr_1.14fr]">
+            <div className="rounded-[2rem] border border-black/5 px-6 py-8" style={themePresentation.mutedPanelStyle}>
+              <div className="text-[11px] uppercase tracking-[0.24em]" style={{ color: themePresentation.textMuted }}>
+                Divider spread
+              </div>
+              <h2 className="display mt-4 text-5xl leading-[0.88]" style={{ color: themePresentation.textColor }}>
+                {page.title}
+              </h2>
+              <p className="mt-5 max-w-sm text-sm leading-7" style={{ color: themePresentation.textMuted }}>
+                {page.caption}
+              </p>
+            </div>
+            <div className="space-y-4 rounded-[2rem] border border-dashed border-black/10 bg-white/58 p-4">
+              <div className="text-[11px] uppercase tracking-[0.22em]" style={{ color: themePresentation.textMuted }}>
+                Optional anchor image
+              </div>
+              <PreviewPhotoTile
+                photo={heroPhoto}
+                accent={accent}
+                className="min-h-[24rem] md:min-h-[30rem]"
+                emphasis="large"
+              />
+            </div>
+          </div>
+        );
+      case "photo_journal":
+        return (
+          <div className="grid gap-4 lg:grid-cols-[1.05fr_0.95fr]">
+            <div className="space-y-4">
+              <PreviewPhotoTile
+                photo={heroPhoto}
+                accent={accent}
+                className="min-h-[24rem] md:min-h-[30rem]"
+                emphasis="large"
+              />
+              {supportingPhotos.length ? (
+                <div className="rounded-[1.7rem] border border-black/5 bg-white/72 p-3">
+                  <PreviewPhotoGrid accent={accent} photos={supportingPhotos} minHeight="min-h-[9rem]" maxColumns={2} />
+                </div>
+              ) : null}
+            </div>
+            <div className="space-y-4 rounded-[2rem] border border-black/5 bg-[linear-gradient(180deg,rgba(255,251,246,0.98),rgba(246,236,226,0.96))] p-5">
+              <div className="text-[11px] uppercase tracking-[0.22em]" style={{ color: themePresentation.textMuted }}>
+                Journal page
+              </div>
+              <div className="space-y-4 rounded-[1.6rem] border border-black/5 bg-[#fffdf8] px-5 py-5">
+                <div className="border-b border-dashed border-[#dccfc4] pb-3 text-base leading-7" style={{ color: themePresentation.textColor }}>
+                  {page.caption}
+                </div>
+                {[0, 1, 2].map((index) => (
+                  <div key={index} className="border-b border-dashed border-[#dccfc4] pb-3 last:border-none last:pb-0 text-sm leading-7" style={{ color: themePresentation.textMuted }}>
+                    Leave room for a small memory, note, or route detail here.
+                  </div>
+                ))}
+              </div>
+              {metaTags}
+            </div>
+          </div>
+        );
+      case "memorabilia_spread":
+        return (
+          <div className="space-y-4">
+            <div className="grid gap-4 lg:grid-cols-[1.02fr_0.98fr]">
+              <PreviewPhotoTile
+                photo={heroPhoto}
+                accent={accent}
+                className="min-h-[24rem] md:min-h-[28rem]"
+                emphasis="large"
+              />
+              <div className="space-y-4 rounded-[2rem] border border-black/5 bg-[linear-gradient(180deg,rgba(252,246,239,0.98),rgba(246,237,228,0.96))] p-5">
+                <div className="text-[11px] uppercase tracking-[0.22em]" style={{ color: themePresentation.textMuted }}>
+                  Keepsake board
+                </div>
+                <div className="grid gap-3 sm:grid-cols-2">
+                  {supportingPhotos.slice(0, 4).map((photo, index) => (
+                    <div
+                      key={photo.id}
+                      className={`rounded-[1.3rem] border border-black/10 bg-white/86 p-2 ${index % 2 === 0 ? "rotate-[-1deg]" : "rotate-[1deg]"}`}
+                    >
+                      <PreviewPhotoTile photo={photo} accent={accent} className="min-h-[8rem]" />
+                    </div>
+                  ))}
+                </div>
+                <div className="rounded-[1.5rem] border border-black/5 bg-white/82 px-4 py-4 text-sm leading-7" style={{ color: themePresentation.textMuted }}>
+                  {page.caption}
+                </div>
+              </div>
+            </div>
+            <div className="grid gap-4 lg:grid-cols-[0.92fr_1.08fr]">
+              <div className="rounded-[1.7rem] border border-black/5 bg-white/76 px-5 py-4 text-sm leading-7" style={{ color: themePresentation.textMuted }}>
+                This spread should feel tactile and layered, like a keepsake board.
+              </div>
+              {renderNarrativeStrip()}
+            </div>
+          </div>
+        );
+      case "pattern_repetition":
+        return (
+          <div className="space-y-4">
+            <div className="rounded-[2rem] border border-black/5 bg-[#f8f4ee] p-4">
+              <div className="mb-4 flex items-center justify-between gap-3">
+                <div className="text-[11px] uppercase tracking-[0.22em]" style={{ color: themePresentation.textMuted }}>
+                  Repetition study
+                </div>
+                <PreviewTag tone="accent">Pattern / motif</PreviewTag>
+              </div>
+              <div className="grid gap-3 md:grid-cols-3">
+                {photos.map((photo) => (
+                  <div key={photo.id} className="rounded-[1.5rem] border border-black/5 bg-white/88 p-2">
+                    <PreviewPhotoTile photo={photo} accent={accent} className="min-h-[11rem] md:min-h-[13rem]" />
+                  </div>
+                ))}
+              </div>
+            </div>
+            <div className="grid gap-4 lg:grid-cols-[1.06fr_0.94fr]">
+              <div className="rounded-[1.7rem] border border-black/5 bg-white/76 px-5 py-4 text-sm leading-7" style={{ color: themePresentation.textMuted }}>
+                This one should feel like a visual study, not a recap page.
+              </div>
+              {renderNarrativeStrip()}
+            </div>
+          </div>
+        );
+      case "burst_sequence":
+        return (
+          <div className="space-y-4">
+            <div className="rounded-[2rem] border border-black/5 bg-[linear-gradient(180deg,rgba(255,255,255,0.94),rgba(240,234,228,0.94))] p-4">
+              <div className="mb-4 flex items-center justify-between gap-3">
+                <div className="text-[11px] uppercase tracking-[0.24em]" style={{ color: themePresentation.textMuted }}>
+                  Motion strip
+                </div>
+                <div className="text-xs uppercase tracking-[0.2em]" style={{ color: themePresentation.textMuted }}>
+                  sequence / rhythm / movement
+                </div>
+              </div>
+              <div className="grid gap-3 md:grid-cols-12">
+                {photos.map((photo, index) => {
+                  const spanClass =
+                    index === 0 ? "md:col-span-12" : index % 4 === 0 ? "md:col-span-4" : "md:col-span-2";
+
+                  return (
+                    <div key={photo.id} className={spanClass}>
+                      <PreviewPhotoTile
+                        photo={photo}
+                        accent={accent}
+                        className={index === 0 ? "min-h-[15rem] md:min-h-[17rem]" : "min-h-[8rem] md:min-h-[9rem]"}
+                        emphasis={index === 0 ? "large" : undefined}
+                      />
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+            <div className="grid gap-4 lg:grid-cols-[0.88fr_1.12fr]">
+              <div className="rounded-[1.7rem] border border-black/5 bg-white/76 px-5 py-4 text-sm leading-7" style={{ color: themePresentation.textMuted }}>
+                Burst pages should read like a storyboard or contact strip.
+              </div>
+              {renderNarrativeStrip()}
+            </div>
+          </div>
+        );
+      case "map_timeline":
+        return (
+          <div className="grid gap-4 lg:grid-cols-[0.82fr_1.18fr]">
+            <div className="space-y-4 rounded-[2rem] border border-black/5 bg-[linear-gradient(180deg,rgba(250,246,240,0.98),rgba(245,236,227,0.96))] p-5">
+              <div className="text-[11px] uppercase tracking-[0.22em]" style={{ color: themePresentation.textMuted }}>
+                Route context
+              </div>
+              <div className="rounded-[1.6rem] border border-dashed border-black/10 px-4 py-4">
+                <div className="text-xl font-semibold" style={{ color: themePresentation.textColor }}>
+                  {photos.find((photo) => photo.locationLabel)?.locationLabel ?? project.title}
+                </div>
+                <div className="mt-2 text-sm leading-7" style={{ color: themePresentation.textMuted }}>
+                  {photos[0]?.capturedAt
+                    ? new Date(photos[0].capturedAt).toLocaleDateString("en-US", {
+                        month: "short",
+                        day: "numeric",
+                        year: "numeric",
+                        timeZone: project.timezone,
+                      })
+                    : project.startDate}
+                </div>
+                <div className="mt-4 h-24 rounded-[1.2rem] border border-dashed border-black/10 bg-[linear-gradient(180deg,rgba(255,255,255,0.65),rgba(247,236,225,0.78))]" />
+              </div>
+              <div className="rounded-[1.5rem] border border-black/5 bg-white/82 px-4 py-4 text-sm leading-7" style={{ color: themePresentation.textMuted }}>
+                {page.caption}
+              </div>
+            </div>
+            <div className="space-y-4">
+              <PreviewPhotoTile
+                photo={heroPhoto}
+                accent={accent}
+                className="min-h-[24rem] md:min-h-[30rem]"
+                emphasis="large"
+              />
+              {supportingPhotos.length ? (
+                <div className="rounded-[1.8rem] border border-black/5 bg-white/72 p-3">
+                  <PreviewPhotoGrid accent={accent} photos={supportingPhotos} minHeight="min-h-[8.5rem]" maxColumns={2} />
+                </div>
+              ) : null}
+              {renderNarrativeStrip()}
+            </div>
+          </div>
+        );
+      default:
+        return (
+          <div className="space-y-4">
+            <div className="grid gap-4 lg:grid-cols-[1.24fr_0.76fr]">
+              <PreviewPhotoTile photo={heroPhoto} accent={accent} className="min-h-[24rem] md:min-h-[30rem]" emphasis="large" />
+              <PreviewPhotoGrid accent={accent} photos={supportingPhotos} minHeight="min-h-[10rem]" maxColumns={1} />
+            </div>
+            {renderNarrativeStrip()}
           </div>
         );
     }
