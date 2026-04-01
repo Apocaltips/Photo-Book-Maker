@@ -51,8 +51,8 @@ function getProofTheme(project: Project): ProofTheme {
   }
 }
 
-function escapeHtml(value: string) {
-  return value
+function escapeHtml(value?: string | null) {
+  return (value ?? "")
     .replaceAll("&", "&amp;")
     .replaceAll("<", "&lt;")
     .replaceAll(">", "&gt;")
@@ -68,6 +68,18 @@ function findPagePhotos(page: BookPage, project: Project) {
   return page.photoIds
     .map((photoId) => project.photos.find((photo) => photo.id === photoId))
     .filter((photo): photo is PhotoAsset => Boolean(photo));
+}
+
+function getStoryBeatLabel(page: Pick<BookPage, "storyBeat" | "style">) {
+  const beat =
+    page.storyBeat ??
+    (page.style === "full_bleed" || page.style === "hero" || page.style === "hero_full_bleed"
+      ? "opener"
+      : page.style === "recap" || page.style === "closing"
+        ? "closing"
+        : "details");
+
+  return String(beat).replaceAll("_", " ");
 }
 
 function formatProjectMeta(project: Project) {
@@ -121,7 +133,7 @@ function renderSpread(page: BookPage, project: Project) {
           <div class="spread-kicker">${escapeHtml(getStoryLayoutLabel(layout.layoutType))}</div>
           <div class="spread-title">${escapeHtml(page.title)}</div>
         </div>
-        <div class="spread-status">${escapeHtml(page.storyBeat.replaceAll("_", " "))}</div>
+        <div class="spread-status">${escapeHtml(getStoryBeatLabel(page))}</div>
       </div>
       <div class="story-canvas" style="aspect-ratio:${aspectRatio};background:${layout.style.backgroundColor};padding:${layout.style.padding}px;">
         ${layout.elements.map(renderCanvasElement).join("")}

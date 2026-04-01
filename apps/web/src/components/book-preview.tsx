@@ -13,6 +13,10 @@ import { APPROVED_SPREAD_LIBRARY, normalizeSpreadType } from "@/lib/book-editor"
 import { StorybookPageCanvas } from "@/components/storybook-page-canvas";
 import { getBookThemePresentation } from "@/lib/book-theme-styles";
 
+function formatStoryBeat(value?: string | null) {
+  return (value ?? "details").replaceAll("_", " ");
+}
+
 export function BookPreview({
   draft,
   draftName = "Working draft",
@@ -153,7 +157,7 @@ export function BookPreview({
                 </div>
                 <div className="flex flex-wrap gap-2">
                   <PreviewTag>{selectedSpreadLabel}</PreviewTag>
-                  <PreviewTag tone="accent">{selectedPage.storyBeat.replaceAll("_", " ")}</PreviewTag>
+                  <PreviewTag tone="accent">{formatStoryBeat(selectedPage.storyBeat)}</PreviewTag>
                   <PreviewTag tone={selectedPage.copyStatus === "confirmed" ? "success" : "neutral"}>
                     {selectedPage.copyStatus === "confirmed" ? "Copy confirmed" : "Prefilled copy"}
                   </PreviewTag>

@@ -90,7 +90,7 @@ function getStoryBeatLabel(page: Project["bookDraft"]["pages"][number]) {
         ? "closing"
         : "details");
 
-  return beat.replaceAll("_", " ");
+  return String(beat).replaceAll("_", " ");
 }
 
 function getCopySourceLabel(page: Project["bookDraft"]["pages"][number]) {
@@ -139,8 +139,8 @@ export function MobileEditorTab({
         project.bookDraft.pages.map((page) => [
           page.id,
           {
-            caption: page.caption,
-            title: page.title,
+            caption: page.caption ?? "",
+            title: page.title ?? "",
           },
         ]),
       ),
@@ -158,8 +158,8 @@ export function MobileEditorTab({
   const safeIndex = Math.min(activePageIndex, Math.max(0, pages.length - 1));
   const activePage = pages[safeIndex];
   const activeDraft = pageDrafts[activePage.id] ?? {
-    caption: activePage.caption,
-    title: activePage.title,
+    caption: activePage.caption ?? "",
+    title: activePage.title ?? "",
   };
   const activePhotos = activePage.photoIds
     .map((photoId) => project.photos.find((photo) => photo.id === photoId))

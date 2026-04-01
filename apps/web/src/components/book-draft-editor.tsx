@@ -140,6 +140,10 @@ function buildDraftMutationPayload(editorState: EditorState): DraftMutationPaylo
   };
 }
 
+function formatStoryBeat(value?: string | null) {
+  return (value ?? "details").replaceAll("_", " ");
+}
+
 function buildEditorStateSignature(editorState: EditorState) {
   const normalizedEditorState = ensureDraftEditorState({
     ...editorState.project,
@@ -655,7 +659,7 @@ export function BookDraftEditor({
                       {getSpreadLabel(selectedPage.style)}
                     </EditorTag>
                     <EditorTag className="bg-[#f2ebe4] text-[#6f625b]">
-                      {selectedPage.storyBeat.replaceAll("_", " ")}
+                      {formatStoryBeat(selectedPage.storyBeat)}
                     </EditorTag>
                     <EditorTag
                       className={

@@ -68,15 +68,30 @@ function hashString(value: string) {
   return Math.abs(hash);
 }
 
+function normalizeCopy(value?: string | null) {
+  return (value ?? "").trim().replace(/\s+/g, " ");
+}
+
+function getStoryBeatToken(page: Pick<BookPage, "storyBeat" | "style">) {
+  return (
+    page.storyBeat ??
+    (page.style === "full_bleed" || page.style === "hero" || page.style === "hero_full_bleed"
+      ? "opener"
+      : page.style === "recap" || page.style === "closing"
+        ? "closing"
+        : "details")
+  );
+}
+
 function buildCopy(page: BookPage) {
-  const title = truncateWords(page.title, 6);
-  const body = truncateSentence(firstSentence(page.caption || page.curationNote), 88);
-  const eyebrow = sentenceCase(page.storyBeat.replaceAll("_", " "));
+  const title = truncateWords(page.title ?? "", 6);
+  const body = truncateSentence(firstSentence(page.caption ?? page.curationNote ?? ""), 88);
+  const eyebrow = sentenceCase(getStoryBeatToken(page).replaceAll("_", " "));
   return { body, eyebrow, title };
 }
 
-function firstSentence(value: string) {
-  const trimmed = value.trim().replace(/\s+/g, " ");
+function firstSentence(value?: string | null) {
+  const trimmed = normalizeCopy(value);
   if (!trimmed) {
     return "";
   }
@@ -89,8 +104,8 @@ function sentenceCase(value: string) {
   return value ? `${value.slice(0, 1).toUpperCase()}${value.slice(1)}` : value;
 }
 
-function truncateSentence(value: string, maxLength: number) {
-  const normalized = value.trim().replace(/\s+/g, " ");
+function truncateSentence(value: string | null | undefined, maxLength: number) {
+  const normalized = normalizeCopy(value);
   if (normalized.length <= maxLength) {
     return normalized;
   }
@@ -99,10 +114,11 @@ function truncateSentence(value: string, maxLength: number) {
   return `${clipped.replace(/[,\s]+$/, "")}...`;
 }
 
-function truncateWords(value: string, maxWords: number) {
-  const words = value.trim().split(/\s+/).filter(Boolean);
+function truncateWords(value: string | null | undefined, maxWords: number) {
+  const normalized = normalizeCopy(value);
+  const words = normalized.split(/\s+/).filter(Boolean);
   if (words.length <= maxWords) {
-    return value.trim();
+    return normalized;
   }
 
   return `${words.slice(0, maxWords).join(" ")}...`;

@@ -68,8 +68,8 @@ function hashString(value: string) {
   return Math.abs(hash);
 }
 
-function normalizeCopy(value: string) {
-  return value.trim().replace(/\s+/g, " ");
+function normalizeCopy(value?: string | null) {
+  return (value ?? "").trim().replace(/\s+/g, " ");
 }
 
 function truncateSentence(value: string, maxLength: number) {
@@ -109,12 +109,23 @@ function sentenceCase(value: string) {
   return `${normalized.slice(0, 1).toUpperCase()}${normalized.slice(1)}`;
 }
 
+function getStoryBeatToken(page: Pick<BookPage, "storyBeat" | "style">) {
+  return (
+    page.storyBeat ??
+    (page.style === "full_bleed" || page.style === "hero" || page.style === "hero_full_bleed"
+      ? "opener"
+      : page.style === "recap" || page.style === "closing"
+        ? "closing"
+        : "details")
+  );
+}
+
 function buildCopy(page: BookPage) {
-  const title = truncateWords(page.title, 6);
-  const body = truncateSentence(firstSentence(page.caption || page.curationNote), 88);
+  const title = truncateWords(page.title ?? "", 6);
+  const body = truncateSentence(firstSentence(page.caption ?? page.curationNote ?? ""), 88);
   return {
     body,
-    eyebrow: sentenceCase(page.storyBeat.replaceAll("_", " ")),
+    eyebrow: sentenceCase(getStoryBeatToken(page).replaceAll("_", " ")),
     title,
   };
 }
