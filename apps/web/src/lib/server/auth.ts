@@ -90,12 +90,9 @@ export function getProjectAccess(project: Project, email: string) {
     (member) =>
       member.id === project.ownerId && member.email.toLowerCase() === normalizedEmail,
   );
-  const isInvited = project.invites.some(
-    (invite) => invite.email.toLowerCase() === normalizedEmail,
-  );
 
   return {
-    canView: isMember || isInvited,
+    canView: isMember,
     canEdit: isMember,
     canManage: isOwner,
   };

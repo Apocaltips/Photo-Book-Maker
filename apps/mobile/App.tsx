@@ -36,7 +36,6 @@ import {
   uploadFileToRemoteStorage,
 } from "./src/api";
 import {
-  addCollaborator,
   addNoteToProject,
   addPhotosToProject,
   buildAnniversaryYearEndDate,
@@ -48,6 +47,7 @@ import {
   formatProjectRange,
   getProjectSummary,
   getYearbookCycleLabel,
+  inviteCollaborator,
   listOpenTasks,
   resolveProjectTask,
   toggleMustIncludePhoto,
@@ -598,26 +598,52 @@ export default function App() {
     });
   }
 
-  async function handleInviteCollaborator() {
+async function handleInviteCollaborator() {
     if (!selectedProject) {
       return;
     }
 
-    const localProject = addCollaborator(selectedProject, {
+    const localProject = inviteCollaborator(selectedProject, {
       name: inviteName,
       email: inviteEmail,
     });
-    const remoteProject = await inviteCollaboratorRemote(selectedProject.id, {
+    const remoteInvite = await inviteCollaboratorRemote(selectedProject.id, {
       name: inviteName,
       email: inviteEmail,
-    }).catch(() => null);
+    }).catch((caughtError) => {
+      Alert.alert(
+        "Invite could not be sent",
+        caughtError instanceof Error
+          ? caughtError.message
+          : "The collaborator invite did not go through.",
+      );
+      return null;
+    });
 
-    if (remoteProject) {
+    if (remoteInvite?.project) {
       markSharedSync();
     }
 
-    replaceProject(remoteProject ?? localProject);
-    setInviteName("New friend");
+    replaceProject(remoteInvite?.project ?? localProject);
+    if (remoteInvite?.message) {
+      const shouldShowManualLink =
+        Boolean(remoteInvite.inviteUrl) &&
+        /could not|not configured|manual/i.test(remoteInvite.message);
+
+      Alert.alert(
+        shouldShowManualLink ? "Invite created" : "Invite sent",
+        shouldShowManualLink
+          ? `${remoteInvite.message}\n\nFallback invite link:\n${remoteInvite.inviteUrl}`
+          : remoteInvite.message,
+      );
+    } else if (!remoteInvite) {
+      Alert.alert(
+        "Invite saved locally",
+        "This phone is in local-only mode, so the collaborator was only recorded on this device.",
+      );
+    }
+
+    setInviteName("New collaborator");
     setInviteEmail("friend@example.com");
   }
 
@@ -1544,7 +1570,7 @@ function ProjectsTab({
           <SurfaceCard
             title={`${selectedProject.title} collaborators`}
             subtitle="Invite workflow"
-            body="Only the owner finalizes, but collaborators can upload, tag, and resolve blockers."
+            body="Only the owner finalizes, but collaborators can upload, tag, and resolve blockers. Invites stay pending until the recipient joins from their email link."
           >
             <View style={styles.memberGrid}>
               {selectedProject.members.map((member) => (
@@ -1558,6 +1584,26 @@ function ProjectsTab({
               ))}
             </View>
 
+            {selectedProject.invites.some((invite) => invite.status === "sent") ? (
+              <View style={styles.cardStack}>
+                <Text style={styles.surfaceEyebrow}>Pending invites</Text>
+                {selectedProject.invites
+                  .filter((invite) => invite.status === "sent")
+                  .map((invite) => (
+                    <View key={invite.id} style={styles.memberCard}>
+                      <Text style={styles.memberInitial}>
+                        {(invite.name.slice(0, 1) || invite.email.slice(0, 1) || "I").toUpperCase()}
+                      </Text>
+                      <View style={styles.memberMeta}>
+                        <Text style={styles.memberName}>{invite.name}</Text>
+                        <Text style={styles.memberEmail}>{invite.email}</Text>
+                      </View>
+                      <Text style={styles.taskDue}>Pending</Text>
+                    </View>
+                  ))}
+              </View>
+            ) : null}
+
             <Field
               label="Invite name"
               value={inviteName}
@@ -1568,7 +1614,7 @@ function ProjectsTab({
               value={inviteEmail}
               onChangeText={onInviteEmailChange}
             />
-            <PrimaryButton label="Send mock invite" onPress={onInviteCollaborator} />
+            <PrimaryButton label="Send real invite" onPress={onInviteCollaborator} />
           </SurfaceCard>
         </>
       ) : null}
@@ -1623,7 +1669,7 @@ function AuthScreen({
       <SurfaceCard
         title={isSignUp ? "Create your owner account" : "Sign in to your account"}
         subtitle="Supabase auth"
-        body="Use email and password for now. Once this is stable, we can replace it with invite links and collaborator onboarding."
+        body="Use email and password for now. Collaborator invite acceptance happens on the web from the invite link."
       >
         <View style={styles.segmentedRow}>
           {(["sign_in", "sign_up"] as const).map((authMode) => (

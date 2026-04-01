@@ -107,36 +107,60 @@ export function listOpenTasks(projects: Project[]) {
   );
 }
 
-export function addCollaborator(
+function slugifyEmail(email: string) {
+  return email.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "");
+}
+
+function getInviteId(email: string) {
+  return `invite-${slugifyEmail(email) || "collaborator"}`;
+}
+
+function getInviteDisplayName(input: { name?: string; email: string }) {
+  const trimmedName = input.name?.trim();
+  if (trimmedName) {
+    return trimmedName;
+  }
+
+  return input.email.split("@")[0] ?? "Collaborator";
+}
+
+export function inviteCollaborator(
   project: Project,
-  input: { name: string; email: string },
+  input: {
+    name: string;
+    email: string;
+    invitedByMemberId?: string;
+    sentAt?: string;
+    token?: string;
+  },
 ): Project {
-  const id = input.email.toLowerCase().replace(/[^a-z0-9]+/g, "-");
+  const normalizedEmail = input.email.trim().toLowerCase();
+  const inviteId = getInviteId(normalizedEmail);
+  const name = getInviteDisplayName({ name: input.name, email: normalizedEmail });
 
   return {
     ...project,
-    members: [
-      ...project.members,
-      {
-        id,
-        name: input.name,
-        email: input.email,
-        role: "collaborator",
-        avatarLabel: input.name.slice(0, 1).toUpperCase(),
-        homeBase: "Invite pending",
-      },
-    ],
     invites: [
-      ...project.invites,
+      ...project.invites.filter((invite) => invite.id !== inviteId),
       {
-        id: `invite-${id}`,
-        email: input.email,
+        id: inviteId,
+        name,
+        email: normalizedEmail,
         role: "collaborator",
         status: "sent",
-        sentAt: new Date().toISOString(),
+        sentAt: input.sentAt ?? new Date().toISOString(),
+        invitedByMemberId: input.invitedByMemberId,
+        token: input.token,
       },
     ],
   };
+}
+
+export function addCollaborator(
+  project: Project,
+  input: { name: string; email: string },
+) {
+  return inviteCollaborator(project, input);
 }
 
 export function updateTaskStatus(

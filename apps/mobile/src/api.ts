@@ -93,7 +93,18 @@ async function request<T>(path: string, init?: RequestInit): Promise<T | null> {
   });
 
   if (!response.ok) {
-    throw new Error(`API request failed: ${response.status}`);
+    let message = `API request failed: ${response.status}`;
+
+    try {
+      const body = (await response.json()) as { message?: string };
+      if (body.message) {
+        message = body.message;
+      }
+    } catch {
+      // Ignore parse failures and fall back to the status-based error.
+    }
+
+    throw new Error(message);
   }
 
   return (await response.json()) as T;
@@ -128,14 +139,20 @@ export async function inviteCollaboratorRemote(
   projectId: string,
   input: { email: string; name: string },
 ) {
-  const data = await request<{ project: Project }>(
+  const data = await request<{ inviteUrl?: string; message?: string; project: Project }>(
     `/projects/${projectId}/collaborators`,
     {
       method: "POST",
       body: JSON.stringify(input),
     },
   );
-  return data?.project ?? null;
+  return data
+    ? {
+        inviteUrl: data.inviteUrl ?? null,
+        message: data.message ?? null,
+        project: data.project,
+      }
+    : null;
 }
 
 export async function resolveTaskRemote(

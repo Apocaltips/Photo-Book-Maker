@@ -108,35 +108,132 @@ export function listOpenTasks(projects: Project[]) {
   );
 }
 
+function slugifyEmail(email: string) {
+  return email.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "");
+}
+
+function getInviteId(email: string) {
+  return `invite-${slugifyEmail(email) || "collaborator"}`;
+}
+
+function getInviteMemberId(email: string) {
+  return slugifyEmail(email) || `collaborator-${Date.now()}`;
+}
+
+function getInviteDisplayName(input: { name?: string; email: string }) {
+  const trimmedName = input.name?.trim();
+  if (trimmedName) {
+    return trimmedName;
+  }
+
+  return input.email.split("@")[0] ?? "Collaborator";
+}
+
+function getAvatarLabel(name: string, email: string) {
+  return (name.trim().slice(0, 1) || email.slice(0, 1) || "C").toUpperCase();
+}
+
+export function inviteCollaborator(
+  project: Project,
+  input: {
+    name: string;
+    email: string;
+    invitedByMemberId?: string;
+    sentAt?: string;
+    token?: string;
+  },
+): Project {
+  const normalizedEmail = input.email.trim().toLowerCase();
+  const inviteId = getInviteId(normalizedEmail);
+  const sentAt = input.sentAt ?? new Date().toISOString();
+  const name = getInviteDisplayName({ name: input.name, email: normalizedEmail });
+  const nextInvite = {
+    id: inviteId,
+    name,
+    email: normalizedEmail,
+    role: "collaborator" as const,
+    status: "sent" as const,
+    sentAt,
+    invitedByMemberId: input.invitedByMemberId,
+    token: input.token,
+  };
+
+  return {
+    ...project,
+    invites: [
+      ...project.invites.filter((invite) => invite.id !== inviteId),
+      nextInvite,
+    ],
+  };
+}
+
 export function addCollaborator(
   project: Project,
   input: { name: string; email: string },
+) {
+  return inviteCollaborator(project, input);
+}
+
+export function acceptProjectInvite(
+  project: Project,
+  input: {
+    acceptedAt?: string;
+    acceptedByUserId: string;
+    acceptedEmail: string;
+    acceptedName?: string;
+    inviteId: string;
+  },
 ): Project {
-  const id = input.email.toLowerCase().replace(/[^a-z0-9]+/g, "-");
+  const normalizedEmail = input.acceptedEmail.trim().toLowerCase();
+  const invite = project.invites.find((entry) => entry.id === input.inviteId);
+
+  if (!invite || invite.email.toLowerCase() !== normalizedEmail) {
+    return project;
+  }
+
+  const acceptedAt = input.acceptedAt ?? new Date().toISOString();
+  const existingMember = project.members.find(
+    (member) => member.email.toLowerCase() === normalizedEmail,
+  );
+  const name = getInviteDisplayName({
+    name: input.acceptedName ?? invite.name,
+    email: normalizedEmail,
+  });
+
+  const nextMember = existingMember
+    ? {
+        ...existingMember,
+        name,
+        email: normalizedEmail,
+        avatarLabel: existingMember.avatarLabel || getAvatarLabel(name, normalizedEmail),
+      }
+    : {
+        id: input.acceptedByUserId || getInviteMemberId(normalizedEmail),
+        name,
+        email: normalizedEmail,
+        role: invite.role,
+        avatarLabel: getAvatarLabel(name, normalizedEmail),
+        homeBase: "Joined by invite",
+      };
 
   return {
     ...project,
     members: [
-      ...project.members,
-      {
-        id,
-        name: input.name,
-        email: input.email,
-        role: "collaborator",
-        avatarLabel: input.name.slice(0, 1).toUpperCase(),
-        homeBase: "Invite pending",
-      },
+      ...project.members.filter((member) => member.email.toLowerCase() !== normalizedEmail),
+      nextMember,
     ],
-    invites: [
-      ...project.invites,
-      {
-        id: `invite-${id}`,
-        email: input.email,
-        role: "collaborator",
-        status: "sent",
-        sentAt: new Date().toISOString(),
-      },
-    ],
+    invites: project.invites.map((entry) =>
+      entry.id === input.inviteId
+        ? {
+            ...entry,
+            name,
+            status: "accepted",
+            acceptedAt,
+            acceptedByUserId: input.acceptedByUserId,
+            token: undefined,
+          }
+        : entry,
+    ),
   };
 }
 

@@ -6,10 +6,16 @@ export function WorkspaceAuthCard({
   isConfigured,
   onSignIn,
   onSignUp,
+  body,
+  helperText,
+  title,
 }: {
+  body?: string;
+  helperText?: string;
   isConfigured: boolean;
   onSignIn: (input: { email: string; password: string }) => Promise<void>;
   onSignUp: (input: { email: string; name: string; password: string }) => Promise<void>;
+  title?: string;
 }) {
   const [mode, setMode] = useState<"sign-in" | "sign-up">("sign-in");
   const [name, setName] = useState("");
@@ -50,11 +56,11 @@ export function WorkspaceAuthCard({
     <section className="surface rounded-[2.2rem] p-6 md:p-8">
       <div className="eyebrow">Private workspace</div>
       <h2 className="display mt-3 text-4xl text-[#1f1814] sm:text-5xl">
-        Sign in to load your saved draft.
+        {title ?? "Sign in to load your saved draft."}
       </h2>
       <p className="mt-4 max-w-2xl text-sm leading-7 text-[#5b4f47]">
-        The Yellowstone demo stays public, but your saved editor state and published
-        draft versions live behind your Supabase account.
+        {body ??
+          "The Yellowstone demo stays public, but your saved editor state and published draft versions live behind your Supabase account."}
       </p>
 
       <div className="mt-6 flex flex-wrap gap-3">
@@ -122,7 +128,8 @@ export function WorkspaceAuthCard({
           {isSubmitting ? "Working..." : mode === "sign-up" ? "Create account" : "Sign in"}
         </button>
         <div className="text-sm leading-7 text-[#6c6058]">
-          Use the same owner account you created in the mobile app if you want the same projects.
+          {helperText ??
+            "Use the same owner account you created in the mobile app if you want the same projects."}
         </div>
       </div>
 

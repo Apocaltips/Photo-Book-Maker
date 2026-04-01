@@ -118,10 +118,13 @@ function photo(
 function buildAcceptedInvites(members: ProjectMember[]): ProjectInvite[] {
   return members.map((member) => ({
     id: `invite-${member.id}`,
+    name: member.name,
     email: member.email,
     role: member.role,
     status: "accepted",
     sentAt: "2026-03-02T18:00:00.000Z",
+    acceptedAt: "2026-03-02T18:05:00.000Z",
+    acceptedByUserId: member.id,
   }));
 }
 
@@ -1106,10 +1109,13 @@ export function createMockProject(input: CreateProjectInput): Project {
     invites: [
       {
         id: `invite-${titleSeed || "new"}`,
+        name: owner.name,
         email: owner.email,
         role: "owner",
         status: "accepted",
         sentAt: new Date().toISOString(),
+        acceptedAt: new Date().toISOString(),
+        acceptedByUserId: owner.id,
       },
     ],
     notes: [],

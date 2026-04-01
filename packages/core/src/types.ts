@@ -94,10 +94,15 @@ export interface ProjectMember {
 
 export interface ProjectInvite {
   id: string;
+  name: string;
   email: string;
   role: MemberRole;
   status: "sent" | "accepted";
   sentAt: string;
+  invitedByMemberId?: string;
+  token?: string;
+  acceptedAt?: string;
+  acceptedByUserId?: string;
 }
 
 export interface ProjectNote {
