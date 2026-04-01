@@ -1,6 +1,7 @@
 {
   "name": "photo-book-maker",
   "private": true,
+  "main": "apps/mobile/index.js",
   "workspaces": [
     "apps/*",
     "packages/*"

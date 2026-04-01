@@ -1,0 +1,14 @@
+.git
+.codex-logs
+.expo
+.next
+node_modules
+output
+tools
+dist
+apps/mobile/dist
+apps/mobile/android/.gradle
+apps/mobile/android/build
+apps/mobile/android/app/build
+storybook_template_reference_pack.pdf
+docs/storybook-template-research.md
