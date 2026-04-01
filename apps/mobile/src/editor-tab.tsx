@@ -24,6 +24,8 @@ const palette = {
   muted: "#6f625b",
 };
 
+type InspectorTab = "book" | "spread" | "copy" | "photo";
+
 type Props = {
   onExportProof: () => void;
   onThemeSelect: (themeId: string) => void;
@@ -81,6 +83,46 @@ function EditorField({
   );
 }
 
+function MetricPill({
+  label,
+  value,
+}: {
+  label: string;
+  value: number | string;
+}) {
+  return (
+    <View style={styles.metricPill}>
+      <Text style={styles.metricValue}>{value}</Text>
+      <Text style={styles.metricLabel}>{label}</Text>
+    </View>
+  );
+}
+
+function TabButton({
+  active,
+  label,
+  onPress,
+}: {
+  active: boolean;
+  label: string;
+  onPress: () => void;
+}) {
+  return (
+    <Pressable
+      onPress={onPress}
+      style={[styles.tabButton, active ? styles.tabButtonActive : null]}
+    >
+      <Text style={[styles.tabButtonText, active ? styles.tabButtonTextActive : null]}>
+        {label}
+      </Text>
+    </Pressable>
+  );
+}
+
+function formatStoryBeat(value?: string | null) {
+  return String(value ?? "details").split("_").join(" ");
+}
+
 function getStoryBeatLabel(page: Project["bookDraft"]["pages"][number]) {
   const beat =
     page.storyBeat ??
@@ -90,7 +132,7 @@ function getStoryBeatLabel(page: Project["bookDraft"]["pages"][number]) {
         ? "closing"
         : "details");
 
-  return String(beat).replaceAll("_", " ");
+  return formatStoryBeat(beat);
 }
 
 function getCopySourceLabel(page: Project["bookDraft"]["pages"][number]) {
@@ -113,6 +155,10 @@ function getProjectAccent(project: Project) {
   );
 }
 
+function getCopyStatusLabel(page: Project["bookDraft"]["pages"][number]) {
+  return page.copyStatus === "confirmed" ? "Copy confirmed" : "Needs copy review";
+}
+
 export function MobileEditorTab({
   onExportProof,
   onThemeSelect,
@@ -125,12 +171,14 @@ export function MobileEditorTab({
   const [pageDrafts, setPageDrafts] = useState<
     Record<string, { caption: string; title: string }>
   >({});
+  const [inspectorTab, setInspectorTab] = useState<InspectorTab>("spread");
 
   useEffect(() => {
     if (!project) {
       setPageDrafts({});
       setActivePageIndex(0);
       setSelectedPhotoId(null);
+      setInspectorTab("spread");
       return;
     }
 
@@ -147,6 +195,7 @@ export function MobileEditorTab({
     );
     setActivePageIndex(0);
     setSelectedPhotoId(project.bookDraft.pages[0]?.photoIds[0] ?? null);
+    setInspectorTab("spread");
   }, [project]);
 
   if (!project) {
@@ -161,10 +210,14 @@ export function MobileEditorTab({
     caption: activePage.caption ?? "",
     title: activePage.title ?? "",
   };
+  const selectedTheme =
+    project.bookThemes.find((theme) => theme.id === project.selectedThemeId) ??
+    project.bookThemes[0];
   const activePhotos = activePage.photoIds
     .map((photoId) => project.photos.find((photo) => photo.id === photoId))
     .filter((photo): photo is Project["photos"][number] => Boolean(photo));
-  const selectedPhoto = activePhotos.find((photo) => photo.id === selectedPhotoId) ?? activePhotos[0];
+  const selectedPhoto =
+    activePhotos.find((photo) => photo.id === selectedPhotoId) ?? activePhotos[0];
 
   useEffect(() => {
     if (!selectedPhotoId && activePhotos[0]?.id) {
@@ -181,57 +234,33 @@ export function MobileEditorTab({
     () => project.bookDraft.pages.filter((page) => page.copyStatus === "confirmed").length,
     [project.bookDraft.pages],
   );
-
+  const approvedPageCount = useMemo(
+    () => project.bookDraft.pages.filter((page) => page.approved).length,
+    [project.bookDraft.pages],
+  );
   const activeLayoutLabel = getStoryLayoutLabel(normalizeStoryLayoutSystem(activePage.style));
 
   return (
     <View style={styles.sectionStack}>
-      <View style={styles.surfaceCard}>
-        <Text style={styles.cardEyebrow}>Professional proofing</Text>
-        <Text style={styles.cardTitle}>{project.title} draft editor</Text>
-        <Text style={styles.cardBody}>
-          The phone editor now uses the same constrained layout families as the web draft:
-          one spread at a time, photo-first composition, and cleaner proof exports.
-        </Text>
-
-        <View style={styles.summaryRow}>
-          <View style={styles.summaryCard}>
-            <Text style={styles.summaryValue}>{pages.length}</Text>
-            <Text style={styles.summaryLabel}>Curated spreads</Text>
+      <View style={styles.workspaceCard}>
+        <View style={styles.workspaceHeader}>
+          <View style={styles.workspaceCopy}>
+            <Text style={styles.cardEyebrow}>Layout workspace</Text>
+            <Text style={styles.workspaceTitle}>{project.title}</Text>
+            <Text style={styles.workspaceBody}>
+              Page through one spread at a time, then use the tabs below to change the
+              book system, page review, copy, or current photos.
+            </Text>
           </View>
-          <View style={styles.summaryCard}>
-            <Text style={styles.summaryValue}>{confirmedCopyCount}</Text>
-            <Text style={styles.summaryLabel}>Copy confirmed</Text>
-          </View>
-          <View style={styles.summaryCard}>
-            <Text style={styles.summaryValue}>{pages.length - confirmedCopyCount}</Text>
-            <Text style={styles.summaryLabel}>Needs review</Text>
-          </View>
+          <ActionButton label="Export proof" onPress={onExportProof} />
         </View>
 
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          contentContainerStyle={styles.themeRow}
-        >
-          {project.bookThemes.map((theme) => (
-            <Pressable
-              key={theme.id}
-              onPress={() => onThemeSelect(theme.id)}
-              style={[
-                styles.themeChip,
-                project.selectedThemeId === theme.id
-                  ? [styles.themeChipActive, { borderColor: `${theme.accent}55` }]
-                  : null,
-              ]}
-            >
-              <Text style={styles.themeChipTitle}>{theme.name}</Text>
-              <Text style={styles.themeChipBody}>{theme.mood}</Text>
-            </Pressable>
-          ))}
-        </ScrollView>
-
-        <ActionButton label="Export proof PDF" onPress={onExportProof} />
+        <View style={styles.metricRow}>
+          <MetricPill label="Spreads" value={pages.length} />
+          <MetricPill label="Approved" value={approvedPageCount} />
+          <MetricPill label="Copy locked" value={confirmedCopyCount} />
+          <MetricPill label="Theme" value={selectedTheme?.name ?? "Default"} />
+        </View>
       </View>
 
       <View style={styles.surfaceCard}>
@@ -265,7 +294,10 @@ export function MobileEditorTab({
 
         <StorybookPageCanvas
           accent={accent}
-          onSelectPhoto={setSelectedPhotoId}
+          onSelectPhoto={(photoId) => {
+            setSelectedPhotoId(photoId);
+            setInspectorTab("photo");
+          }}
           page={activePage}
           photos={activePhotos}
           project={project}
@@ -275,19 +307,23 @@ export function MobileEditorTab({
         <View style={styles.pageControls}>
           <ActionButton
             label="Previous"
-            onPress={() => setActivePageIndex((current) => Math.max(0, current - 1))}
+            onPress={() => {
+              setActivePageIndex((current) => Math.max(0, current - 1));
+              setInspectorTab("spread");
+            }}
           />
           <View style={styles.pageCounter}>
             <Text style={styles.pageCounterText}>
               {safeIndex + 1}/{pages.length}
             </Text>
-            <Text style={styles.pageCounterSubtext}>Flip through the book one spread at a time</Text>
+            <Text style={styles.pageCounterSubtext}>Flip through the proof one spread at a time</Text>
           </View>
           <ActionButton
             label="Next"
-            onPress={() =>
-              setActivePageIndex((current) => Math.min(pages.length - 1, current + 1))
-            }
+            onPress={() => {
+              setActivePageIndex((current) => Math.min(pages.length - 1, current + 1));
+              setInspectorTab("spread");
+            }}
           />
         </View>
 
@@ -299,7 +335,10 @@ export function MobileEditorTab({
           {pages.map((page, index) => (
             <Pressable
               key={page.id}
-              onPress={() => setActivePageIndex(index)}
+              onPress={() => {
+                setActivePageIndex(index);
+                setInspectorTab("spread");
+              }}
               style={[
                 styles.pagerChip,
                 index === safeIndex ? [styles.pagerChipActive, { borderColor: `${accent}44` }] : null,
@@ -316,112 +355,270 @@ export function MobileEditorTab({
             </Pressable>
           ))}
         </ScrollView>
+      </View>
 
-        <EditorField
-          label="Spread headline"
-          onChangeText={(value) =>
-            setPageDrafts((current) => ({
-              ...current,
-              [activePage.id]: {
-                ...(current[activePage.id] ?? {
-                  caption: activePage.caption,
-                  title: activePage.title,
-                }),
-                title: value,
-              },
-            }))
-          }
-          value={activeDraft.title}
-        />
-        <EditorField
-          label="Spread caption"
-          multiline
-          onChangeText={(value) =>
-            setPageDrafts((current) => ({
-              ...current,
-              [activePage.id]: {
-                ...(current[activePage.id] ?? {
-                  caption: activePage.caption,
-                  title: activePage.title,
-                }),
-                caption: value,
-              },
-            }))
-          }
-          value={activeDraft.caption}
-        />
+      <View style={styles.surfaceCard}>
+        <View style={styles.inspectorHeader}>
+          <View style={styles.inspectorHeaderCopy}>
+            <Text style={styles.cardEyebrow}>Editor controls</Text>
+            <Text style={styles.inspectorTitle}>
+              {inspectorTab === "book"
+                ? "Book system"
+                : inspectorTab === "spread"
+                  ? "Spread review"
+                  : inspectorTab === "copy"
+                    ? "Copy edits"
+                    : "Photo review"}
+            </Text>
+          </View>
+          <View style={styles.statusPill}>
+            <Text style={styles.statusPillText}>{getCopyStatusLabel(activePage)}</Text>
+          </View>
+        </View>
 
-        <View style={styles.copyActionRow}>
-          <ActionButton
-            dark
-            label="Save draft copy"
-            onPress={() =>
-              onUpdatePageCopy(activePage.id, {
-                caption: activeDraft.caption,
-                title: activeDraft.title,
-              })
-            }
+        <View style={styles.tabGrid}>
+          <TabButton
+            active={inspectorTab === "book"}
+            label="Book"
+            onPress={() => setInspectorTab("book")}
           />
-          <ActionButton
-            label={activePage.copyStatus === "confirmed" ? "Refresh confirmed copy" : "Confirm copy"}
-            onPress={() =>
-              onUpdatePageCopy(activePage.id, {
-                caption: activeDraft.caption,
-                confirmed: true,
-                title: activeDraft.title,
-              })
-            }
+          <TabButton
+            active={inspectorTab === "spread"}
+            label="Spread"
+            onPress={() => setInspectorTab("spread")}
+          />
+          <TabButton
+            active={inspectorTab === "copy"}
+            label="Copy"
+            onPress={() => setInspectorTab("copy")}
+          />
+          <TabButton
+            active={inspectorTab === "photo"}
+            label={`Photos ${activePhotos.length ? `(${activePhotos.length})` : ""}`}
+            onPress={() => setInspectorTab("photo")}
           />
         </View>
 
-        {selectedPhoto ? (
-          <View style={styles.selectedPhotoCard}>
-            <View style={styles.selectedPhotoCopy}>
-              <Text style={styles.cardEyebrow}>Selected photo</Text>
-              <Text style={styles.selectedPhotoTitle}>{selectedPhoto.title}</Text>
-              <Text style={styles.selectedPhotoBody}>
-                {selectedPhoto.locationLabel ?? "Location still missing"} · {selectedPhoto.orientation}
+        {inspectorTab === "book" ? (
+          <View style={styles.tabSection}>
+            <View style={styles.inlineInfoCard}>
+              <Text style={styles.inlineInfoTitle}>Theme direction</Text>
+              <Text style={styles.inlineInfoBody}>
+                Tap a theme to restyle the spread canvas and proof export without changing
+                the story order.
               </Text>
             </View>
-            {selectedPhoto.imageUri ? (
-              <Image source={{ uri: selectedPhoto.imageUri }} style={styles.selectedPhotoThumb} />
-            ) : null}
+
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.themeRow}
+            >
+              {project.bookThemes.map((theme) => {
+                const isActive = project.selectedThemeId === theme.id;
+                return (
+                  <Pressable
+                    key={theme.id}
+                    onPress={() => onThemeSelect(theme.id)}
+                    style={[
+                      styles.themeChip,
+                      isActive ? [styles.themeChipActive, { borderColor: `${theme.accent}55` }] : null,
+                    ]}
+                  >
+                    <View style={[styles.themeSwatch, { backgroundColor: theme.accent }]} />
+                    <View style={styles.themeChipCopy}>
+                      <Text style={styles.themeChipTitle}>{theme.name}</Text>
+                      <Text numberOfLines={2} style={styles.themeChipBody}>
+                        {theme.mood}
+                      </Text>
+                    </View>
+                  </Pressable>
+                );
+              })}
+            </ScrollView>
+
+            <View style={styles.inlineInfoCard}>
+              <Text style={styles.inlineInfoTitle}>Current proof setup</Text>
+              <Text style={styles.inlineInfoBody}>
+                {selectedTheme?.typeface ?? "Editorial serif"} · {project.bookDraft.summary}
+              </Text>
+            </View>
           </View>
         ) : null}
 
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          contentContainerStyle={styles.photoStrip}
-        >
-          {activePhotos.map((photo) => (
-            <Pressable
-              key={photo.id}
-              onPress={() => setSelectedPhotoId(photo.id)}
-              style={[
-                styles.photoCard,
-                photo.id === selectedPhoto?.id ? [styles.photoCardSelected, { borderColor: `${accent}55` }] : null,
-              ]}
-            >
-              {photo.imageUri ? (
-                <Image source={{ uri: photo.imageUri }} style={styles.photoThumb} />
-              ) : (
-                <View style={styles.photoFallback}>
-                  <Text style={styles.photoFallbackText}>{photo.orientation}</Text>
-                </View>
-              )}
-              <Text numberOfLines={2} style={styles.photoTitle}>
-                {photo.title}
-              </Text>
-            </Pressable>
-          ))}
-        </ScrollView>
+        {inspectorTab === "spread" ? (
+          <View style={styles.tabSection}>
+            <View style={styles.detailGrid}>
+              <View style={styles.detailCard}>
+                <Text style={styles.detailLabel}>Story beat</Text>
+                <Text style={styles.detailValue}>{getStoryBeatLabel(activePage)}</Text>
+              </View>
+              <View style={styles.detailCard}>
+                <Text style={styles.detailLabel}>Copy source</Text>
+                <Text style={styles.detailValue}>{getCopySourceLabel(activePage)}</Text>
+              </View>
+              <View style={styles.detailCard}>
+                <Text style={styles.detailLabel}>Photos on page</Text>
+                <Text style={styles.detailValue}>{activePhotos.length}</Text>
+              </View>
+              <View style={styles.detailCard}>
+                <Text style={styles.detailLabel}>Status</Text>
+                <Text style={styles.detailValue}>
+                  {activePage.approved ? "Ready" : "Needs approval"}
+                </Text>
+              </View>
+            </View>
 
-        <View style={styles.noteCard}>
-          <Text style={styles.noteTitle}>Curation note</Text>
-          <Text style={styles.noteBody}>{activePage.curationNote ?? activePage.layoutNote}</Text>
-          <Text style={styles.noteBodyMuted}>{activePage.layoutNote}</Text>
-        </View>
+            <View style={styles.noteCard}>
+              <Text style={styles.noteTitle}>Curation note</Text>
+              <Text style={styles.noteBody}>{activePage.curationNote ?? activePage.layoutNote}</Text>
+              {activePage.layoutNote && activePage.layoutNote !== activePage.curationNote ? (
+                <Text style={styles.noteBodyMuted}>{activePage.layoutNote}</Text>
+              ) : null}
+            </View>
+
+            <ActionButton
+              dark={!activePage.approved}
+              label={activePage.approved ? "Mark spread for another pass" : "Approve this spread"}
+              onPress={() => onTogglePage(activePage.id)}
+            />
+          </View>
+        ) : null}
+
+        {inspectorTab === "copy" ? (
+          <View style={styles.tabSection}>
+            <EditorField
+              label="Spread headline"
+              onChangeText={(value) =>
+                setPageDrafts((current) => ({
+                  ...current,
+                  [activePage.id]: {
+                    ...(current[activePage.id] ?? {
+                      caption: activePage.caption,
+                      title: activePage.title,
+                    }),
+                    title: value,
+                  },
+                }))
+              }
+              value={activeDraft.title}
+            />
+            <EditorField
+              label="Spread caption"
+              multiline
+              onChangeText={(value) =>
+                setPageDrafts((current) => ({
+                  ...current,
+                  [activePage.id]: {
+                    ...(current[activePage.id] ?? {
+                      caption: activePage.caption,
+                      title: activePage.title,
+                    }),
+                    caption: value,
+                  },
+                }))
+              }
+              value={activeDraft.caption}
+            />
+
+            <View style={styles.inlineInfoCard}>
+              <Text style={styles.inlineInfoTitle}>Copy review</Text>
+              <Text style={styles.inlineInfoBody}>
+                Save your wording as a draft first, then confirm it once the spread feels
+                final.
+              </Text>
+            </View>
+
+            <View style={styles.copyActionStack}>
+              <ActionButton
+                dark
+                label="Save draft copy"
+                onPress={() =>
+                  onUpdatePageCopy(activePage.id, {
+                    caption: activeDraft.caption,
+                    title: activeDraft.title,
+                  })
+                }
+              />
+              <ActionButton
+                label={
+                  activePage.copyStatus === "confirmed"
+                    ? "Refresh confirmed copy"
+                    : "Confirm copy"
+                }
+                onPress={() =>
+                  onUpdatePageCopy(activePage.id, {
+                    caption: activeDraft.caption,
+                    confirmed: true,
+                    title: activeDraft.title,
+                  })
+                }
+              />
+            </View>
+          </View>
+        ) : null}
+
+        {inspectorTab === "photo" ? (
+          <View style={styles.tabSection}>
+            {selectedPhoto ? (
+              <View style={styles.selectedPhotoCard}>
+                {selectedPhoto.imageUri ? (
+                  <Image source={{ uri: selectedPhoto.imageUri }} style={styles.selectedPhotoThumb} />
+                ) : (
+                  <View style={[styles.selectedPhotoThumb, styles.selectedPhotoThumbFallback]}>
+                    <Text style={styles.photoFallbackText}>{selectedPhoto.orientation}</Text>
+                  </View>
+                )}
+                <View style={styles.selectedPhotoCopy}>
+                  <Text style={styles.cardEyebrow}>Selected photo</Text>
+                  <Text style={styles.selectedPhotoTitle}>{selectedPhoto.title}</Text>
+                  <Text style={styles.selectedPhotoBody}>
+                    {selectedPhoto.locationLabel ?? "Location still missing"} ·{" "}
+                    {selectedPhoto.orientation}
+                  </Text>
+                </View>
+              </View>
+            ) : (
+              <View style={styles.inlineInfoCard}>
+                <Text style={styles.inlineInfoTitle}>No photos on this spread</Text>
+                <Text style={styles.inlineInfoBody}>
+                  Move to another spread to review photos, or return to the spread tab and
+                  keep shaping the pacing.
+                </Text>
+              </View>
+            )}
+
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.photoStrip}
+            >
+              {activePhotos.map((photo) => (
+                <Pressable
+                  key={photo.id}
+                  onPress={() => setSelectedPhotoId(photo.id)}
+                  style={[
+                    styles.photoCard,
+                    photo.id === selectedPhoto?.id
+                      ? [styles.photoCardSelected, { borderColor: `${accent}55` }]
+                      : null,
+                  ]}
+                >
+                  {photo.imageUri ? (
+                    <Image source={{ uri: photo.imageUri }} style={styles.photoThumb} />
+                  ) : (
+                    <View style={styles.photoFallback}>
+                      <Text style={styles.photoFallbackText}>{photo.orientation}</Text>
+                    </View>
+                  )}
+                  <Text numberOfLines={2} style={styles.photoTitle}>
+                    {photo.title}
+                  </Text>
+                </Pressable>
+              ))}
+            </ScrollView>
+          </View>
+        ) : null}
       </View>
     </View>
   );
@@ -429,85 +626,73 @@ export function MobileEditorTab({
 
 const styles = StyleSheet.create({
   sectionStack: {
-    gap: 16,
+    gap: 14,
   },
-  surfaceCard: {
-    borderRadius: 28,
+  workspaceCard: {
+    borderRadius: 24,
     borderWidth: 1,
     borderColor: palette.line,
     backgroundColor: palette.card,
-    padding: 18,
+    padding: 16,
+    gap: 14,
+  },
+  workspaceHeader: {
+    gap: 12,
+  },
+  workspaceCopy: {
+    gap: 4,
+  },
+  workspaceTitle: {
+    fontSize: 22,
+    lineHeight: 26,
+    fontWeight: "700",
+    color: palette.ink,
+  },
+  workspaceBody: {
+    fontSize: 13,
+    lineHeight: 20,
+    color: palette.muted,
+  },
+  metricRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 8,
+  },
+  metricPill: {
+    minWidth: 88,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: palette.line,
+    backgroundColor: "rgba(255,255,255,0.78)",
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    gap: 2,
+  },
+  metricValue: {
+    fontSize: 15,
+    fontWeight: "700",
+    color: palette.ink,
+  },
+  metricLabel: {
+    fontSize: 11,
+    lineHeight: 15,
+    color: palette.muted,
+    textTransform: "uppercase",
+    letterSpacing: 0.5,
+  },
+  surfaceCard: {
+    borderRadius: 24,
+    borderWidth: 1,
+    borderColor: palette.line,
+    backgroundColor: palette.card,
+    padding: 16,
     gap: 14,
   },
   cardEyebrow: {
     fontSize: 11,
-    letterSpacing: 1.7,
+    letterSpacing: 1.6,
     textTransform: "uppercase",
     fontWeight: "700",
-    color: palette.muted,
-  },
-  cardTitle: {
-    fontSize: 24,
-    lineHeight: 28,
-    fontWeight: "700",
-    color: palette.ink,
-  },
-  cardBody: {
-    fontSize: 14,
-    lineHeight: 22,
-    color: palette.muted,
-  },
-  summaryRow: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: 10,
-  },
-  summaryCard: {
-    flex: 1,
-    minWidth: 94,
-    borderRadius: 18,
-    borderWidth: 1,
-    borderColor: palette.line,
-    backgroundColor: "rgba(255,255,255,0.76)",
-    paddingVertical: 12,
-    paddingHorizontal: 14,
-    gap: 3,
-  },
-  summaryValue: {
-    fontSize: 24,
-    lineHeight: 27,
-    fontWeight: "700",
-    color: palette.ink,
-  },
-  summaryLabel: {
-    fontSize: 12,
-    lineHeight: 18,
-    color: palette.muted,
-  },
-  themeRow: {
-    gap: 10,
-    paddingRight: 8,
-  },
-  themeChip: {
-    width: 170,
-    borderRadius: 20,
-    borderWidth: 1,
-    borderColor: palette.line,
-    backgroundColor: "rgba(255,255,255,0.72)",
-    padding: 14,
-    gap: 4,
-  },
-  themeChipActive: {
-    backgroundColor: "#fff6ef",
-  },
-  themeChipTitle: {
-    fontSize: 16,
-    fontWeight: "700",
-    color: palette.ink,
-  },
-  themeChipBody: {
-    fontSize: 13,
-    lineHeight: 19,
     color: palette.muted,
   },
   actionButton: {
@@ -544,14 +729,14 @@ const styles = StyleSheet.create({
     gap: 4,
   },
   pageTitle: {
-    fontSize: 22,
-    lineHeight: 26,
+    fontSize: 21,
+    lineHeight: 25,
     fontWeight: "700",
     color: palette.ink,
   },
   pageMeta: {
     fontSize: 13,
-    lineHeight: 20,
+    lineHeight: 19,
     color: palette.muted,
     textTransform: "capitalize",
   },
@@ -593,6 +778,7 @@ const styles = StyleSheet.create({
   pageCounterSubtext: {
     fontSize: 11,
     color: palette.muted,
+    textAlign: "center",
   },
   pagerRow: {
     gap: 8,
@@ -619,6 +805,158 @@ const styles = StyleSheet.create({
   pagerChipTextActive: {
     color: palette.accent,
   },
+  inspectorHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 12,
+  },
+  inspectorHeaderCopy: {
+    flex: 1,
+    gap: 4,
+  },
+  inspectorTitle: {
+    fontSize: 20,
+    lineHeight: 24,
+    fontWeight: "700",
+    color: palette.ink,
+  },
+  statusPill: {
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: palette.line,
+    backgroundColor: "rgba(255,255,255,0.78)",
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+  },
+  statusPillText: {
+    fontSize: 11,
+    textTransform: "uppercase",
+    letterSpacing: 0.8,
+    fontWeight: "700",
+    color: palette.muted,
+  },
+  tabGrid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 8,
+  },
+  tabButton: {
+    flexGrow: 1,
+    minWidth: 74,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: palette.line,
+    backgroundColor: "rgba(255,255,255,0.74)",
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  tabButtonActive: {
+    backgroundColor: palette.accentSoft,
+    borderColor: "rgba(195,109,63,0.24)",
+  },
+  tabButtonText: {
+    fontSize: 12,
+    textTransform: "uppercase",
+    letterSpacing: 0.8,
+    fontWeight: "700",
+    color: palette.muted,
+  },
+  tabButtonTextActive: {
+    color: palette.accent,
+  },
+  tabSection: {
+    gap: 12,
+  },
+  inlineInfoCard: {
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: palette.line,
+    backgroundColor: "rgba(255,255,255,0.76)",
+    padding: 14,
+    gap: 4,
+  },
+  inlineInfoTitle: {
+    fontSize: 13,
+    letterSpacing: 0.4,
+    textTransform: "uppercase",
+    fontWeight: "700",
+    color: palette.muted,
+  },
+  inlineInfoBody: {
+    fontSize: 13,
+    lineHeight: 20,
+    color: palette.ink,
+  },
+  themeRow: {
+    gap: 10,
+    paddingRight: 8,
+  },
+  themeChip: {
+    width: 172,
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: palette.line,
+    backgroundColor: "rgba(255,255,255,0.82)",
+    padding: 12,
+    gap: 10,
+    flexDirection: "row",
+    alignItems: "center",
+  },
+  themeChipActive: {
+    backgroundColor: "#fff6ef",
+  },
+  themeSwatch: {
+    width: 16,
+    height: 48,
+    borderRadius: 999,
+  },
+  themeChipCopy: {
+    flex: 1,
+    gap: 2,
+  },
+  themeChipTitle: {
+    fontSize: 15,
+    fontWeight: "700",
+    color: palette.ink,
+  },
+  themeChipBody: {
+    fontSize: 12,
+    lineHeight: 17,
+    color: palette.muted,
+  },
+  detailGrid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 8,
+  },
+  detailCard: {
+    flexGrow: 1,
+    minWidth: 130,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: palette.line,
+    backgroundColor: "rgba(255,255,255,0.76)",
+    paddingHorizontal: 12,
+    paddingVertical: 12,
+    gap: 3,
+  },
+  detailLabel: {
+    fontSize: 11,
+    textTransform: "uppercase",
+    letterSpacing: 0.8,
+    fontWeight: "700",
+    color: palette.muted,
+  },
+  detailValue: {
+    fontSize: 14,
+    lineHeight: 18,
+    fontWeight: "600",
+    color: palette.ink,
+    textTransform: "capitalize",
+  },
   fieldGroup: {
     gap: 8,
   },
@@ -640,10 +978,9 @@ const styles = StyleSheet.create({
     fontSize: 16,
   },
   fieldInputMultiline: {
-    minHeight: 110,
+    minHeight: 118,
   },
-  copyActionRow: {
-    flexDirection: "row",
+  copyActionStack: {
     gap: 10,
   },
   selectedPhotoCard: {
@@ -651,7 +988,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: palette.line,
     backgroundColor: "rgba(255,255,255,0.76)",
-    padding: 14,
+    padding: 12,
     flexDirection: "row",
     gap: 12,
     alignItems: "center",
@@ -672,10 +1009,15 @@ const styles = StyleSheet.create({
     color: palette.muted,
   },
   selectedPhotoThumb: {
-    width: 84,
-    height: 84,
+    width: 96,
+    height: 96,
     borderRadius: 18,
     backgroundColor: "#e7ddd2",
+  },
+  selectedPhotoThumbFallback: {
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: palette.accentSoft,
   },
   photoStrip: {
     gap: 10,
