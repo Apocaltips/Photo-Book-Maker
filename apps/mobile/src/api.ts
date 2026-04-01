@@ -47,6 +47,30 @@ export function getResolvedApiBaseUrl() {
   return getConfiguredBaseUrl();
 }
 
+export function getResolvedWebBaseUrl() {
+  const baseUrl = getConfiguredBaseUrl();
+  if (!baseUrl) {
+    return null;
+  }
+
+  return baseUrl.replace(/\/api$/, "");
+}
+
+export function getProjectWebUrl(projectId: string) {
+  const webBaseUrl = getResolvedWebBaseUrl();
+  return webBaseUrl ? `${webBaseUrl}/projects/${projectId}` : null;
+}
+
+export function getProjectWebEditorUrl(projectId: string) {
+  const webBaseUrl = getResolvedWebBaseUrl();
+  return webBaseUrl ? `${webBaseUrl}/projects/${projectId}/editor` : null;
+}
+
+export function getProjectWebPreviewUrl(projectId: string) {
+  const webBaseUrl = getResolvedWebBaseUrl();
+  return webBaseUrl ? `${webBaseUrl}/projects/${projectId}/preview` : null;
+}
+
 function getBaseUrl() {
   return getConfiguredBaseUrl();
 }

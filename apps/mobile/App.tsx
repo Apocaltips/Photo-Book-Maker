@@ -77,7 +77,7 @@ const tabOrder: AppTab[] = ["projects", "tasks", "editor", "print"];
 const tabLabels: Record<AppTab, string> = {
   projects: "Books",
   tasks: "Fixes",
-  editor: "Layout",
+  editor: "Web Edit",
   print: "Print",
 };
 const palette = {
@@ -1120,9 +1120,6 @@ export default function App() {
           {activeTab === "editor" ? (
             <MobileEditorTab
               project={selectedProject}
-              onTogglePage={handleTogglePage}
-              onUpdatePageCopy={handleUpdatePageCopy}
-              onThemeSelect={handleThemeSelect}
               onExportProof={handleExportProof}
             />
           ) : null}
@@ -1284,7 +1281,7 @@ function ProjectsTab({
 
             <View style={styles.featuredWorkspaceActions}>
               <PrimaryButton label="Import photos" onPress={onPickPhotos} compact />
-              <PrimaryButton label="Open layout" onPress={onOpenEditor} compact />
+              <PrimaryButton label="Open web editor" onPress={onOpenEditor} compact />
               <PrimaryButton label="Save note" onPress={onAddNote} compact dark />
             </View>
           </View>
@@ -1483,7 +1480,7 @@ function ProjectsTab({
           >
             <View style={styles.inlineActionRow}>
               <PrimaryButton label="Import from library" onPress={onPickPhotos} />
-              <PrimaryButton label="Open draft layout" onPress={onOpenEditor} compact />
+              <PrimaryButton label="Open web editor" onPress={onOpenEditor} compact />
               <PrimaryButton label="Add note" onPress={onAddNote} compact dark />
             </View>
             <Field
