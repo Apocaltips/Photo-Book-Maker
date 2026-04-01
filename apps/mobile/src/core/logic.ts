@@ -1,4 +1,10 @@
-import { createMockProject, createSeedProjects, getProjectSummary } from "./mock-data";
+import {
+  createProjectRecord,
+  createSeedProjects,
+  getProjectSummary,
+  isDemoProject,
+  isDemoProjectId,
+} from "./mock-data";
 import type {
   AddLocalPhotoInput,
   AddProjectNoteInput,
@@ -11,7 +17,13 @@ import type {
   YearbookCycle,
 } from "./types";
 
-export { createMockProject, createSeedProjects, getProjectSummary };
+export {
+  createProjectRecord,
+  createSeedProjects,
+  getProjectSummary,
+  isDemoProject,
+  isDemoProjectId,
+};
 
 function parseDateOnlyForDisplay(dateString: string) {
   const [year, month, day] = dateString.split("-").map(Number);
@@ -645,25 +657,6 @@ export function updateBookPageCopy(
   } satisfies Project;
 }
 
-export function cyclePrintOrder(project: Project): Project {
-  const nextStatus: Project["mockPrintOrder"]["status"] =
-    project.mockPrintOrder.status === "draft"
-      ? "reviewing"
-      : project.mockPrintOrder.status === "reviewing"
-        ? "queued"
-        : project.mockPrintOrder.status === "queued"
-          ? "confirmed"
-          : "confirmed";
-
-  return {
-    ...project,
-    mockPrintOrder: {
-      ...project.mockPrintOrder,
-      status: nextStatus,
-    },
-  } satisfies Project;
-}
-
 export function finalizeProject(project: Project): Project {
   const hasOpenTasks = project.resolutionTasks.some((task) => task.status !== "resolved");
 
@@ -675,7 +668,7 @@ export function finalizeProject(project: Project): Project {
 
 export function seedAndCreateProject(input: CreateProjectInput) {
   const projects = createSeedProjects();
-  return [createMockProject(input), ...projects];
+  return [createProjectRecord(input), ...projects];
 }
 
 export function addNoteToProject(

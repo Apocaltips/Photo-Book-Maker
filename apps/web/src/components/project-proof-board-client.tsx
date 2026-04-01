@@ -4,7 +4,6 @@ import {
   formatProjectRange,
   getProjectSummary,
   getYearbookCycleLabel,
-  type Project,
 } from "@photo-book-maker/core";
 import Link from "next/link";
 import { StatusPill } from "@/components/status-pill";
@@ -14,16 +13,13 @@ import { useProjectWorkspace } from "@/hooks/use-project-workspace";
 export function ProjectProofBoardClient({
   authConfig,
   projectId,
-  seedProject,
 }: {
   authConfig: { supabaseAnonKey: string; supabaseUrl: string };
   projectId: string;
-  seedProject: Project | null;
 }) {
   const workspace = useProjectWorkspace({
     authConfig,
     projectId,
-    seedProject,
   });
 
   if (workspace.isAuthLoading || workspace.isProjectLoading) {
@@ -62,9 +58,7 @@ export function ProjectProofBoardClient({
       <section className="surface-strong rounded-[2.5rem] px-6 py-8 md:px-10 md:py-10">
         <div className="flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">
           <div className="max-w-3xl">
-            <div className="eyebrow">
-              {workspace.mode === "authenticated" ? "Saved project" : "Demo project"}
-            </div>
+            <div className="eyebrow">Saved project</div>
             <h1 className="display mt-3 text-5xl leading-none text-[#1f1814] sm:text-6xl">
               {project.title}
             </h1>
@@ -174,30 +168,30 @@ export function ProjectProofBoardClient({
           </section>
 
           <section className="surface rounded-[2rem] p-6">
-            <div className="eyebrow">Theme + print</div>
+            <div className="eyebrow">Theme + print readiness</div>
             <h2 className="display mt-2 text-3xl text-[#1f1814]">{selectedTheme.name}</h2>
             <p className="mt-3 text-sm leading-7 text-[#5b4f47]">
               {selectedTheme.mood}. Typography: {selectedTheme.typeface}.
             </p>
             <div className="mt-5 rounded-[1.6rem] bg-[#1f1814] p-5 text-[#f6eee7]">
               <div className="text-xs uppercase tracking-[0.18em] text-[#d8bea8]">
-                Mock print flow
+                Print prep
               </div>
               <div className="mt-3 text-2xl font-semibold capitalize">
-                {project.mockPrintOrder.status}
+                {project.status.replaceAll("_", " ")}
               </div>
               <div className="mt-4 grid gap-3 text-sm text-[#eadfd4]">
                 <div className="flex items-center justify-between gap-3">
-                  <span>Order code</span>
-                  <span>{project.mockPrintOrder.orderCode}</span>
+                  <span>Approved pages</span>
+                  <span>{project.bookDraft.pages.filter((page) => page.approved).length}</span>
                 </div>
                 <div className="flex items-center justify-between gap-3">
-                  <span>Estimated ship window</span>
-                  <span>{project.mockPrintOrder.estimatedShipWindow}</span>
+                  <span>Open blockers</span>
+                  <span>{summary.openTasks}</span>
                 </div>
                 <div className="flex items-center justify-between gap-3">
-                  <span>Mock total</span>
-                  <span>${(project.mockPrintOrder.priceCents / 100).toFixed(2)}</span>
+                  <span>Export path</span>
+                  <span>Mobile proof PDF</span>
                 </div>
               </div>
             </div>

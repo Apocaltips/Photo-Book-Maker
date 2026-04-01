@@ -38,13 +38,11 @@ function normalizeConfigValue(value: string | null | undefined) {
 export function useProjectWorkspace({
   authConfig,
   projectId,
-  seedProject,
 }: {
   authConfig: WorkspaceAuthConfig;
   projectId: string;
-  seedProject: Project | null;
 }) {
-  const [project, setProject] = useState<Project | null>(seedProject);
+  const [project, setProject] = useState<Project | null>(null);
   const [session, setSession] = useState<Session | null>(null);
   const [isAuthLoading, setIsAuthLoading] = useState(true);
   const [isProjectLoading, setIsProjectLoading] = useState(false);
@@ -125,14 +123,14 @@ export function useProjectWorkspace({
 
   useEffect(() => {
     if (!session?.access_token) {
-      setProject(seedProject);
+      setProject(null);
       return;
     }
 
     fetchProjectWithToken(session.access_token).catch(() => {
       // Surface the message through hook state and keep the previous project if available.
     });
-  }, [projectId, seedProject, session?.access_token]);
+  }, [projectId, session?.access_token]);
 
   async function requestProjectUpdate(
     path: string,
@@ -232,11 +230,9 @@ export function useProjectWorkspace({
   const mode =
     session?.access_token
       ? "authenticated"
-      : seedProject
-        ? "demo"
-        : supabase
-          ? "auth-required"
-          : "auth-unconfigured";
+      : supabase
+        ? "auth-required"
+        : "auth-unconfigured";
 
   return {
     error,

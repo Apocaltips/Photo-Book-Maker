@@ -75,11 +75,6 @@ export type BookPageStoryBeat =
   | "closing";
 export type BookPageCopyStatus = "prefilled" | "confirmed";
 export type BookPageCopySource = "metadata" | "note" | "hybrid" | "manual";
-export type PrintOrderStatus =
-  | "draft"
-  | "reviewing"
-  | "queued"
-  | "confirmed";
 export type LocationConfidence = "exact" | "inferred" | "missing";
 export type PhotoOrientation = "portrait" | "landscape" | "square";
 
@@ -209,7 +204,7 @@ export interface BookDraftEditorState {
   photoCaptions: Record<string, string>;
   updatedAt?: string;
   lastAiRefreshAt?: string;
-  aiProvider?: "openai" | "fallback" | "manual";
+  aiProvider?: "openai" | "manual";
 }
 
 export interface PublishedBookDraft {
@@ -221,16 +216,6 @@ export interface PublishedBookDraft {
   selectedThemeId: string;
   projectTitle: string;
   projectSubtitle: string;
-}
-
-export interface MockPrintOrder {
-  id: string;
-  status: PrintOrderStatus;
-  priceCents: number;
-  shippingName: string;
-  shippingCity: string;
-  estimatedShipWindow: string;
-  orderCode: string;
 }
 
 export interface Project {
@@ -257,7 +242,6 @@ export interface Project {
   bookDraft: BookDraft;
   draftEditorState?: BookDraftEditorState;
   publishedDrafts?: PublishedBookDraft[];
-  mockPrintOrder: MockPrintOrder;
 }
 
 export interface CreateProjectInput {

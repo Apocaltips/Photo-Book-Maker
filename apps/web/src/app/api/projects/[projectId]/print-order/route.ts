@@ -1,8 +1,5 @@
-import { cyclePrintOrder } from "@photo-book-maker/core";
 import { NextResponse } from "next/server";
 import { authorizeProjectRequest } from "@/lib/server/auth";
-import { updateProject } from "@/lib/server/project-store";
-import { hydrateProjectForClient } from "@/lib/server/project-response";
 
 export async function POST(
   request: Request,
@@ -13,14 +10,9 @@ export async function POST(
   if ("response" in auth) {
     return auth.response;
   }
-  const project = await updateProject(projectId, (current) => cyclePrintOrder(current));
-
-  if (!project) {
-    return NextResponse.json({ message: "Project not found." }, { status: 404 });
-  }
 
   return NextResponse.json({
-    message: "Mock print order advanced.",
-    project: await hydrateProjectForClient(project),
-  });
+    message:
+      "Direct print ordering is not configured in this build. Export the proof PDF and place the order with your print vendor.",
+  }, { status: 501 });
 }

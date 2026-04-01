@@ -1,12 +1,12 @@
 # Photo Book Maker
 
-Mobile-first collaborative trip and yearbook app with an Expo client, Next.js companion app, hosted Supabase-ready project store support, S3-compatible photo upload support, proof PDF export, and mock print flow.
+Mobile-first collaborative trip and yearbook app with an Expo client, Next.js companion app, Supabase-backed shared project storage, S3-compatible photo upload support, live collaborator invites, and proof PDF export.
 
 ## Workspace
 
 - `apps/mobile`: Expo React Native client for iOS and Android.
-- `apps/web`: Next.js companion app plus API routes that now support either local JSON or hosted Supabase storage.
-- `packages/core`: shared domain types, seeded data, and book-generation helpers.
+- `apps/web`: Next.js companion app plus API routes for the live shared workspace, draft editor, preview, and invite acceptance.
+- `packages/core`: shared domain types, development seed data, and book-generation helpers.
 
 ## Local Test Setup
 
@@ -39,8 +39,8 @@ npm run dev:mobile
 6. Open the Expo app on the tester phones.
 
 - The web server is already configured to listen on `0.0.0.0`, so other devices on the same network can reach it.
-- In local mode, the shared project state lives in `apps/web/data/projects.json`.
-- If the phone app cannot reach the shared API, it falls back to local-only mode and shows that in the UI.
+- In local development without Supabase, the shared project state can still live in `apps/web/data/projects.json`.
+- The phone app now depends on the shared API for mutations. If it cannot reach the backend, cached books stay visible but new changes do not save until connectivity returns.
 
 ## Hosted Backend Mode
 
@@ -79,11 +79,11 @@ npx eas-cli build --platform android --profile preview
 - Remote photo upload flow for S3-compatible storage when `PHOTO_STORAGE_*` variables are configured
 - Draft regeneration from imported photos and notes
 - Proof PDF export from the mobile app
-- Mock print order progression and project finalization gates
+- Finalization checks plus proof PDF export for handoff to a real print vendor
 
 ## Not Included Yet
 
-- Real Supabase auth and invite acceptance
+- Direct print-vendor checkout
 - Live AI enhancement, captioning, location inference, face recognition, and real print fulfillment
 - Production-grade permissions and secure multi-tenant access rules
 

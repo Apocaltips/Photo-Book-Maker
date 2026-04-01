@@ -171,7 +171,7 @@ async function requestOpenAiDraftSuggestions(
 ) {
   const apiKey = process.env.OPENAI_API_KEY?.trim();
   if (!apiKey) {
-    return null;
+    throw new Error("AI draft refresh is not configured. Add OPENAI_API_KEY first.");
   }
 
   const response = await fetch(OPENAI_RESPONSES_API_URL, {
@@ -253,22 +253,9 @@ async function requestOpenAiDraftSuggestions(
 
 function applyDraftSuggestions(
   project: Project,
-  suggestions: DraftSuggestionPayload | null,
+  suggestions: DraftSuggestionPayload,
   editorState: BookDraftEditorState,
 ) {
-  if (!suggestions) {
-    return saveWorkingDraft(project, {
-      bookDraft: {
-        ...project.bookDraft,
-      },
-      draftEditorState: {
-        ...editorState,
-        aiProvider: "fallback",
-        lastAiRefreshAt: new Date().toISOString(),
-      },
-    });
-  }
-
   const pageSuggestions = new Map(
     suggestions.pageSuggestions.map((suggestion) => [suggestion.pageId, suggestion]),
   );
@@ -313,11 +300,6 @@ export async function refreshProjectDraftWithAi(
   const savedProject = saveWorkingDraft(normalizeProjectDraftState(project), payload);
   const rebuiltProject = regenerateBookDraft(savedProject);
   const editorState = rebuiltProject.draftEditorState ?? normalizeProjectDraftState(rebuiltProject).draftEditorState!;
-
-  try {
-    const suggestions = await requestOpenAiDraftSuggestions(rebuiltProject, editorState);
-    return applyDraftSuggestions(rebuiltProject, suggestions, editorState);
-  } catch {
-    return applyDraftSuggestions(rebuiltProject, null, editorState);
-  }
+  const suggestions = await requestOpenAiDraftSuggestions(rebuiltProject, editorState);
+  return applyDraftSuggestions(rebuiltProject, suggestions, editorState);
 }

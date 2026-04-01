@@ -1,4 +1,4 @@
-import { createMockProject } from "@photo-book-maker/core";
+import { createProjectRecord } from "@photo-book-maker/core";
 import { NextResponse } from "next/server";
 import {
   filterProjectsForUser,
@@ -39,7 +39,7 @@ export async function POST(request: Request) {
     }
 
     const body = await request.json();
-    const project = createMockProject({
+    const project = createProjectRecord({
       ...body,
       ownerEmail: user.email,
       ownerName: user.name,

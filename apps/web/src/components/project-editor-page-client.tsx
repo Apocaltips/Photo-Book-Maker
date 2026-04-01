@@ -1,6 +1,5 @@
 "use client";
 
-import type { Project } from "@photo-book-maker/core";
 import { formatProjectRange } from "@photo-book-maker/core";
 import { BookDraftEditor } from "@/components/book-draft-editor";
 import { WorkspaceAuthCard } from "@/components/workspace-auth-card";
@@ -9,16 +8,13 @@ import { useProjectWorkspace } from "@/hooks/use-project-workspace";
 export function ProjectEditorPageClient({
   authConfig,
   projectId,
-  seedProject,
 }: {
   authConfig: { supabaseAnonKey: string; supabaseUrl: string };
   projectId: string;
-  seedProject: Project | null;
 }) {
   const workspace = useProjectWorkspace({
     authConfig,
     projectId,
-    seedProject,
   });
 
   if (workspace.isAuthLoading || workspace.isProjectLoading) {
@@ -51,9 +47,7 @@ export function ProjectEditorPageClient({
       <section className="rounded-[2rem] border border-[#00000010] bg-white/60 px-6 py-5">
         <div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
           <div>
-            <div className="eyebrow">
-              {workspace.mode === "authenticated" ? "Draft editor / saved project" : "Draft editor / Yellowstone demo"}
-            </div>
+            <div className="eyebrow">Draft editor / saved project</div>
             <h1 className="display mt-2 text-4xl text-[#1f1814] sm:text-5xl">
               {workspace.project.title}
             </h1>
@@ -78,7 +72,7 @@ export function ProjectEditorPageClient({
 
       <BookDraftEditor
         project={workspace.project}
-        workspaceMode={workspace.mode === "authenticated" ? "authenticated" : "demo"}
+        workspaceMode="authenticated"
         onSaveDraft={workspace.saveDraft}
         onPublishDraft={workspace.publishDraft}
         onRefreshAi={workspace.refreshAiDraft}

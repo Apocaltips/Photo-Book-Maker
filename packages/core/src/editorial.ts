@@ -79,7 +79,7 @@ export function buildDefaultDraftEditorState(project: Project): BookDraftEditorS
     lockedPhotoIds: [],
     photoCaptions: createDefaultPhotoCaptions(project),
     updatedAt: nowIso(),
-    aiProvider: "fallback",
+    aiProvider: "manual",
   };
 }
 

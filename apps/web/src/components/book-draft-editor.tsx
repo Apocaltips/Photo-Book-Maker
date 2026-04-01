@@ -167,14 +167,14 @@ export function BookDraftEditor({
   onSaveDraft,
   previewHref,
   project,
-  workspaceMode = "demo",
+  workspaceMode = "authenticated",
 }: {
   onPublishDraft?: (name: string, payload: DraftMutationPayload) => Promise<Project>;
   onRefreshAi?: (payload: DraftMutationPayload) => Promise<Project>;
   onSaveDraft?: (payload: DraftMutationPayload) => Promise<Project>;
   previewHref?: (draftId?: string) => string;
   project: Project;
-  workspaceMode?: "authenticated" | "demo";
+  workspaceMode?: "authenticated" | "read_only";
 }) {
   const [editorState, setEditorState] = useState<EditorState>(() =>
     createInitialEditorState(project),
@@ -543,7 +543,7 @@ export function BookDraftEditor({
                   ? isSaving
                     ? "Saving..."
                     : "Syncing to your account"
-                  : "Demo mode"}
+                  : "Read-only view"}
               </span>
             </div>
           </div>

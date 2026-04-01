@@ -17,23 +17,35 @@ export async function POST(
   request: Request,
   { params }: { params: Promise<{ projectId: string }> },
 ) {
-  const { projectId } = await params;
-  const auth = await authorizeProjectRequest(request, projectId, "edit");
-  if ("response" in auth) {
-    return auth.response;
+  try {
+    const { projectId } = await params;
+    const auth = await authorizeProjectRequest(request, projectId, "edit");
+    if ("response" in auth) {
+      return auth.response;
+    }
+
+    const body = (await request.json()) as DraftAiBody;
+    const project = await updateProject(projectId, (current) =>
+      refreshProjectDraftWithAi(current, body),
+    );
+
+    if (!project) {
+      return NextResponse.json({ message: "Project not found." }, { status: 404 });
+    }
+
+    return NextResponse.json({
+      message: "AI draft suggestions applied.",
+      project: await hydrateProjectForClient(project),
+    });
+  } catch (error) {
+    const message =
+      error instanceof Error ? error.message : "AI draft refresh failed.";
+
+    return NextResponse.json(
+      { message },
+      {
+        status: /openai|ai draft refresh is not configured/i.test(message) ? 503 : 502,
+      },
+    );
   }
-
-  const body = (await request.json()) as DraftAiBody;
-  const project = await updateProject(projectId, (current) =>
-    refreshProjectDraftWithAi(current, body),
-  );
-
-  if (!project) {
-    return NextResponse.json({ message: "Project not found." }, { status: 404 });
-  }
-
-  return NextResponse.json({
-    message: "AI draft suggestions applied.",
-    project: await hydrateProjectForClient(project),
-  });
 }

@@ -49,11 +49,6 @@ export type BookPageStoryBeat =
   | "closing";
 export type BookPageCopyStatus = "prefilled" | "confirmed";
 export type BookPageCopySource = "metadata" | "note" | "hybrid" | "manual";
-export type PrintOrderStatus =
-  | "draft"
-  | "reviewing"
-  | "queued"
-  | "confirmed";
 export type LocationConfidence = "exact" | "inferred" | "missing";
 export type PhotoOrientation = "portrait" | "landscape" | "square";
 
@@ -164,16 +159,6 @@ export interface BookDraft {
   pages: BookPage[];
 }
 
-export interface MockPrintOrder {
-  id: string;
-  status: PrintOrderStatus;
-  priceCents: number;
-  shippingName: string;
-  shippingCity: string;
-  estimatedShipWindow: string;
-  orderCode: string;
-}
-
 export interface Project {
   id: string;
   type: ProjectType;
@@ -196,7 +181,6 @@ export interface Project {
   bookThemes: BookTheme[];
   selectedThemeId: string;
   bookDraft: BookDraft;
-  mockPrintOrder: MockPrintOrder;
 }
 
 export interface CreateProjectInput {

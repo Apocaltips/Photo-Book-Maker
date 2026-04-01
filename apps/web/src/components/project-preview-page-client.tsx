@@ -1,6 +1,6 @@
 "use client";
 
-import { getPreviewDraft, type Project } from "@photo-book-maker/core";
+import { getPreviewDraft } from "@photo-book-maker/core";
 import Link from "next/link";
 import { useMemo } from "react";
 import { useSearchParams } from "next/navigation";
@@ -11,18 +11,15 @@ import { useProjectWorkspace } from "@/hooks/use-project-workspace";
 export function ProjectPreviewPageClient({
   authConfig,
   projectId,
-  seedProject,
 }: {
   authConfig: { supabaseAnonKey: string; supabaseUrl: string };
   projectId: string;
-  seedProject: Project | null;
 }) {
   const searchParams = useSearchParams();
   const selectedDraftId = searchParams.get("draft") ?? undefined;
   const workspace = useProjectWorkspace({
     authConfig,
     projectId,
-    seedProject,
   });
 
   const previewDraft = useMemo(() => {
@@ -62,14 +59,12 @@ export function ProjectPreviewPageClient({
     <main className="mx-auto flex w-full max-w-7xl flex-1 flex-col gap-8 px-5 py-6 md:px-8 lg:px-10">
       <section className="flex flex-col gap-4 rounded-[2rem] border border-[#00000010] bg-white/60 px-6 py-5 md:flex-row md:items-center md:justify-between">
         <div>
-          <div className="eyebrow">
-            {workspace.mode === "authenticated" ? "Saved book preview" : "Demo book preview"}
-          </div>
+          <div className="eyebrow">Saved book preview</div>
           <h1 className="display mt-2 text-4xl text-[#1f1814] sm:text-5xl">
             {previewDraft.name}
           </h1>
           <p className="mt-3 text-sm leading-7 text-[#5a4e47]">
-            Previewing the exact saved draft object, not a parallel mock layout.
+            Previewing the exact saved draft object, not a separate disconnected layout.
           </p>
         </div>
 
@@ -86,19 +81,13 @@ export function ProjectPreviewPageClient({
           >
             Open draft editor
           </Link>
-          {workspace.mode === "authenticated" ? (
-            <button
-              type="button"
-              onClick={() => workspace.signOut()}
-              className="rounded-full border border-[#1f18141f] bg-[#1f1814] px-4 py-2 text-sm font-medium text-[#f7efe7]"
-            >
-              Sign out
-            </button>
-          ) : (
-            <span className="rounded-full bg-[#1f1814] px-4 py-2 text-sm font-medium text-[#f7efe7]">
-              Demo mode
-            </span>
-          )}
+          <button
+            type="button"
+            onClick={() => workspace.signOut()}
+            className="rounded-full border border-[#1f18141f] bg-[#1f1814] px-4 py-2 text-sm font-medium text-[#f7efe7]"
+          >
+            Sign out
+          </button>
         </div>
       </section>
 

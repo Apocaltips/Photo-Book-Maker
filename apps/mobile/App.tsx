@@ -20,7 +20,6 @@ import {
 import {
   addNoteRemote,
   addPhotosRemote,
-  advancePrintOrderRemote,
   createPhotoUploadTicketRemote,
   createProjectRemote,
   fetchProjectsRemote,
@@ -36,21 +35,13 @@ import {
   uploadFileToRemoteStorage,
 } from "./src/api";
 import {
-  addNoteToProject,
-  addPhotosToProject,
   buildAnniversaryYearEndDate,
   buildCalendarYearRange,
-  createMockProject,
-  createSeedProjects,
-  cyclePrintOrder,
-  finalizeProject,
   formatProjectRange,
   getProjectSummary,
   getYearbookCycleLabel,
-  inviteCollaborator,
+  isDemoProjectId,
   listOpenTasks,
-  resolveProjectTask,
-  toggleMustIncludePhoto,
   togglePageApproval,
   updateBookPageCopy,
   type Project,
@@ -69,7 +60,7 @@ import {
 } from "./src/supabase";
 
 type AppTab = "projects" | "tasks" | "editor" | "print";
-type SyncMode = "checking" | "shared" | "local";
+type SyncMode = "checking" | "shared" | "offline";
 type OpenTask = ReturnType<typeof listOpenTasks>[number];
 
 const STORAGE_KEY = "photo-book-maker-state-v2";
@@ -78,7 +69,7 @@ const tabLabels: Record<AppTab, string> = {
   projects: "Books",
   tasks: "Fixes",
   editor: "Web Edit",
-  print: "Print",
+  print: "Export",
 };
 const palette = {
   bg: "#f4ede5",
@@ -212,8 +203,8 @@ function getPhotoIdForTask(taskId: string) {
 }
 
 export default function App() {
-  const [projects, setProjects] = useState<Project[]>(() => createSeedProjects());
-  const [selectedProjectId, setSelectedProjectId] = useState("yellowstone-weekend");
+  const [projects, setProjects] = useState<Project[]>([]);
+  const [selectedProjectId, setSelectedProjectId] = useState("");
   const [activeTab, setActiveTab] = useState<AppTab>("projects");
   const [hasHydrated, setHasHydrated] = useState(false);
   const [authReady, setAuthReady] = useState(!isSupabaseAuthConfigured);
@@ -275,10 +266,17 @@ export default function App() {
           return;
         }
 
-        if (parsed.projects?.length) {
-          setProjects(parsed.projects);
+        const storedProjects = (parsed.projects ?? []).filter(
+          (project) => !isDemoProjectId(project.id),
+        );
+
+        if (storedProjects.length) {
+          setProjects(storedProjects);
         }
-        if (parsed.selectedProjectId) {
+        if (
+          parsed.selectedProjectId &&
+          storedProjects.some((project) => project.id === parsed.selectedProjectId)
+        ) {
           setSelectedProjectId(parsed.selectedProjectId);
         }
         if (parsed.activeTab) {
@@ -291,7 +289,7 @@ export default function App() {
           setTesterEmail(parsed.testerEmail);
         }
       } catch {
-        // Ignore stale cache and fall back to seeded data.
+        // Ignore stale cache and start from the live workspace state.
       } finally {
         if (isMounted) {
           setHasHydrated(true);
@@ -376,14 +374,15 @@ export default function App() {
       try {
         const remoteProjects = await fetchProjectsRemote();
         if (!remoteProjects) {
-          setSyncMode("local");
+          setSyncMode("offline");
           return;
         }
 
-        applySharedProjects(remoteProjects);
+        applySharedProjects(
+          remoteProjects.filter((project) => !isDemoProjectId(project.id)),
+        );
       } catch {
-        // Stay in local-first mode if the shared API is unavailable.
-        setSyncMode("local");
+        setSyncMode("offline");
       }
     }
 
@@ -404,8 +403,8 @@ export default function App() {
   const syncSummary =
     syncMode === "shared"
       ? `Shared account mode${lastSyncedAt ? ` - synced ${lastSyncedAt}` : ""}`
-      : syncMode === "local"
-        ? "Local-only mode"
+      : syncMode === "offline"
+        ? "Offline cache only"
         : "Checking shared store";
   const featuredPhoto = selectedProject ? getProjectCoverPhoto(selectedProject) : undefined;
   const featuredSummary = selectedProject ? getProjectSummary(selectedProject) : null;
@@ -553,21 +552,6 @@ export default function App() {
   }
 
   async function handleCreateProject() {
-    const newProject = createMockProject({
-      type: draftType,
-      title: draftTitle,
-      subtitle: draftSubtitle,
-      startDate: plannedProjectDates.startDate,
-      endDate: plannedProjectDates.endDate,
-      timezone: "America/Denver",
-      ownerName: testerName,
-      ownerEmail: testerEmail,
-      yearbookCycle: draftType === "yearbook" ? draftYearbookCycle : undefined,
-      anniversaryDate:
-        draftType === "yearbook" && draftYearbookCycle !== "calendar_year"
-          ? draftAnniversaryDate
-          : undefined,
-    });
     const remoteProject = await createProjectRemote({
       type: draftType,
       title: draftTitle,
@@ -582,18 +566,28 @@ export default function App() {
         draftType === "yearbook" && draftYearbookCycle !== "calendar_year"
           ? draftAnniversaryDate
           : undefined,
-    }).catch(() => null);
-    const projectToUse = remoteProject ?? newProject;
+    }).catch((caughtError) => {
+      Alert.alert(
+        "Project could not be created",
+        caughtError instanceof Error
+          ? caughtError.message
+          : "The shared project service did not accept the new book.",
+      );
+      return null;
+    });
 
-    if (remoteProject) {
-      markSharedSync();
-    } else {
-      setSyncMode("local");
+    if (!remoteProject) {
+      return;
     }
 
+    markSharedSync();
+
     startTransition(() => {
-      setProjects((current) => [projectToUse, ...current.filter((item) => item.id !== projectToUse.id)]);
-      setSelectedProjectId(projectToUse.id);
+      setProjects((current) => [
+        remoteProject,
+        ...current.filter((item) => item.id !== remoteProject.id),
+      ]);
+      setSelectedProjectId(remoteProject.id);
       setActiveTab("projects");
     });
   }
@@ -603,10 +597,6 @@ async function handleInviteCollaborator() {
       return;
     }
 
-    const localProject = inviteCollaborator(selectedProject, {
-      name: inviteName,
-      email: inviteEmail,
-    });
     const remoteInvite = await inviteCollaboratorRemote(selectedProject.id, {
       name: inviteName,
       email: inviteEmail,
@@ -624,7 +614,11 @@ async function handleInviteCollaborator() {
       markSharedSync();
     }
 
-    replaceProject(remoteInvite?.project ?? localProject);
+    if (!remoteInvite?.project) {
+      return;
+    }
+
+    replaceProject(remoteInvite.project);
     if (remoteInvite?.message) {
       const shouldShowManualLink =
         Boolean(remoteInvite.inviteUrl) &&
@@ -635,11 +629,6 @@ async function handleInviteCollaborator() {
         shouldShowManualLink
           ? `${remoteInvite.message}\n\nFallback invite link:\n${remoteInvite.inviteUrl}`
           : remoteInvite.message,
-      );
-    } else if (!remoteInvite) {
-      Alert.alert(
-        "Invite saved locally",
-        "This phone is in local-only mode, so the collaborator was only recorded on this device.",
       );
     }
 
@@ -684,16 +673,23 @@ async function handleInviteCollaborator() {
       return;
     }
 
-    const localProject = resolveProjectTask(project, taskId, {
-      locationLabel: trimmedLocation,
-    });
     const remoteProject = await resolveTaskRemote(projectId, taskId, {
       locationLabel: trimmedLocation,
-    }).catch(() => null);
-    if (remoteProject) {
-      markSharedSync();
+    }).catch((caughtError) => {
+      Alert.alert(
+        "Task could not be resolved",
+        caughtError instanceof Error
+          ? caughtError.message
+          : "The shared project service rejected this change.",
+      );
+      return null;
+    });
+    if (!remoteProject) {
+      return;
     }
-    replaceProject(remoteProject ?? localProject);
+
+    markSharedSync();
+    replaceProject(remoteProject);
     if (selectedProjectId === projectId) {
       setSelectedProjectId(projectId);
     }
@@ -739,15 +735,24 @@ async function handleInviteCollaborator() {
       return;
     }
 
-    const localProject = toggleMustIncludePhoto(selectedProject, photoId);
     const remoteProject = await toggleMustIncludeRemote(
       selectedProject.id,
       photoId,
-    ).catch(() => null);
-    if (remoteProject) {
-      markSharedSync();
+    ).catch((caughtError) => {
+      Alert.alert(
+        "Photo update failed",
+        caughtError instanceof Error
+          ? caughtError.message
+          : "The shared project service rejected this update.",
+      );
+      return null;
+    });
+    if (!remoteProject) {
+      return;
     }
-    replaceProject(remoteProject ?? localProject);
+
+    markSharedSync();
+    replaceProject(remoteProject);
   }
 
   async function handleThemeSelect(themeId: string) {
@@ -772,34 +777,28 @@ async function handleInviteCollaborator() {
     replaceProject(remoteProject ?? localProject);
   }
 
-  async function handleAdvancePrintOrder() {
-    if (!selectedProject) {
-      return;
-    }
-
-    const localProject = cyclePrintOrder(selectedProject);
-    const remoteProject = await advancePrintOrderRemote(selectedProject.id).catch(
-      () => null,
-    );
-    if (remoteProject) {
-      markSharedSync();
-    }
-    replaceProject(remoteProject ?? localProject);
-  }
-
   async function handleFinalizeProject() {
     if (!selectedProject) {
       return;
     }
 
-    const localProject = finalizeProject(selectedProject);
     const remoteProject = await finalizeProjectRemote(selectedProject.id).catch(
-      () => null,
+      (caughtError) => {
+        Alert.alert(
+          "Finalize check failed",
+          caughtError instanceof Error
+            ? caughtError.message
+            : "The shared project service could not run the finalize check.",
+        );
+        return null;
+      },
     );
-    if (remoteProject) {
-      markSharedSync();
+    if (!remoteProject) {
+      return;
     }
-    replaceProject(remoteProject ?? localProject);
+
+    markSharedSync();
+    replaceProject(remoteProject);
     setActiveTab("print");
   }
 
@@ -828,8 +827,11 @@ async function handleInviteCollaborator() {
       return;
     }
 
-    const importedPhotos = await Promise.all(
-      result.assets.map(async (asset, index) => {
+    let importedPhotos;
+
+    try {
+      importedPhotos = await Promise.all(
+        result.assets.map(async (asset, index) => {
         const capturedAt =
           parseExifDateTime(asset.exif?.DateTimeOriginal) ??
           parseExifDateTime(asset.exif?.DateTimeDigitized) ??
@@ -866,6 +868,12 @@ async function handleInviteCollaborator() {
                 .catch(() => null)
             : null;
 
+        if (!remoteUpload && !asset.uri.startsWith("http")) {
+          throw new Error(
+            `Photo upload did not complete for ${fileName}. The live app only keeps images that made it to shared storage.`,
+          );
+        }
+
         return {
           title: fileName.replace(/\.[^.]+$/, "") || `Imported photo ${index + 1}`,
           uri: remoteUpload?.downloadUrl ?? asset.uri,
@@ -878,25 +886,42 @@ async function handleInviteCollaborator() {
           locationConfidence,
           qualityNotes: [
             "Imported from device library.",
-            remoteUpload
-              ? "Uploaded to remote photo storage."
-              : "Stored locally in tester mode.",
+            "Uploaded to remote photo storage.",
             hasExactGps
               ? "GPS metadata detected during import."
               : "No GPS metadata found during import.",
           ],
           uploaderId: getCurrentMemberId(selectedProject),
         };
-      }),
-    );
-    const localProject = addPhotosToProject(selectedProject, importedPhotos);
-    const remoteProject = await addPhotosRemote(selectedProject.id, importedPhotos).catch(
-      () => null,
-    );
-    if (remoteProject) {
-      markSharedSync();
+        }),
+      );
+    } catch (caughtError) {
+      Alert.alert(
+        "Photo upload failed",
+        caughtError instanceof Error
+          ? caughtError.message
+          : "The live shared photo upload did not complete.",
+      );
+      return;
     }
-    replaceProject(remoteProject ?? localProject);
+
+    const remoteProject = await addPhotosRemote(selectedProject.id, importedPhotos).catch(
+      (caughtError) => {
+        Alert.alert(
+          "Photo import failed",
+          caughtError instanceof Error
+            ? caughtError.message
+            : "The shared project service could not save these photos.",
+        );
+        return null;
+      },
+    );
+    if (!remoteProject) {
+      return;
+    }
+
+    markSharedSync();
+    replaceProject(remoteProject);
   }
 
   async function handleAddNote() {
@@ -909,14 +934,23 @@ async function handleInviteCollaborator() {
       title: noteTitle.trim(),
       body: noteBody.trim(),
     };
-    const localProject = addNoteToProject(selectedProject, input);
     const remoteProject = await addNoteRemote(selectedProject.id, input).catch(
-      () => null,
+      (caughtError) => {
+        Alert.alert(
+          "Note could not be saved",
+          caughtError instanceof Error
+            ? caughtError.message
+            : "The shared project service rejected this note.",
+        );
+        return null;
+      },
     );
-    if (remoteProject) {
-      markSharedSync();
+    if (!remoteProject) {
+      return;
     }
-    replaceProject(remoteProject ?? localProject);
+
+    markSharedSync();
+    replaceProject(remoteProject);
     setNoteTitle("What this moment felt like");
     setNoteBody("Capture the atmosphere here so the recap page has real memory, not filler.");
   }
@@ -925,14 +959,14 @@ async function handleInviteCollaborator() {
     const remoteProjects = await fetchProjectsRemote().catch(() => null);
 
     if (remoteProjects) {
-      applySharedProjects(remoteProjects);
+      applySharedProjects(remoteProjects.filter((project) => !isDemoProjectId(project.id)));
       return;
     }
 
-    setSyncMode("local");
+    setSyncMode("offline");
     Alert.alert(
       "Shared store unavailable",
-      "The app is still usable locally, but another tester will not see changes until the shared API is reachable.",
+      "This build now depends on the live shared backend. Your cached books are still visible, but new changes will not save until the API is reachable again.",
     );
   }
 
@@ -1153,7 +1187,6 @@ async function handleInviteCollaborator() {
           {activeTab === "print" ? (
             <PrintTab
               project={selectedProject}
-              onAdvancePrintOrder={handleAdvancePrintOrder}
               onFinalizeProject={handleFinalizeProject}
               onExportProof={handleExportProof}
             />
@@ -2100,12 +2133,10 @@ function EditorTab({
 
 function PrintTab({
   project,
-  onAdvancePrintOrder,
   onFinalizeProject,
   onExportProof,
 }: {
   project?: Project;
-  onAdvancePrintOrder: () => void;
   onFinalizeProject: () => void;
   onExportProof: () => void;
 }) {
@@ -2113,12 +2144,17 @@ function PrintTab({
     return null;
   }
 
+  const summary = getProjectSummary(project);
+  const confirmedCopyCount = project.bookDraft.pages.filter(
+    (page) => page.copyStatus === "confirmed",
+  ).length;
+
   return (
     <View style={styles.sectionStack}>
       <SurfaceCard
-        title="Finalize project"
-        subtitle="Gate before export"
-        body="Finalization keeps the print path honest by blocking unresolved metadata instead of pretending the book is ready."
+        title="Export proof package"
+        subtitle="Print prep"
+        body="This is now an honest export workflow. Run the finalize check, clear remaining blockers, and export the proof PDF you will actually review or send to a print vendor."
       >
         <View style={styles.inlineActionRow}>
           <PrimaryButton label="Run finalize check" onPress={onFinalizeProject} compact />
@@ -2128,23 +2164,17 @@ function PrintTab({
       </SurfaceCard>
 
       <View style={styles.printCard}>
-        <Text style={styles.printEyebrow}>Mock print partner</Text>
-        <Text style={styles.printTitle}>{project.mockPrintOrder.orderCode}</Text>
+        <Text style={styles.printEyebrow}>Ready-to-print check</Text>
+        <Text style={styles.printTitle}>{project.title}</Text>
         <Text style={styles.printBody}>
-          {project.mockPrintOrder.shippingName} - {project.mockPrintOrder.shippingCity}
+          {confirmedCopyCount} confirmed spreads - {summary.approvedPhotos} approved photos
         </Text>
         <Text style={styles.printBody}>
-          ${(project.mockPrintOrder.priceCents / 100).toFixed(2)} -{" "}
-          {project.mockPrintOrder.estimatedShipWindow}
+          {summary.openTasks === 0
+            ? "No unresolved metadata blockers remain."
+            : `${summary.openTasks} blockers still need resolution before you treat this as print-ready.`}
         </Text>
-        <Text style={styles.printStatus}>
-          Status: {project.mockPrintOrder.status}
-        </Text>
-        <PrimaryButton
-          label="Advance mock order status"
-          onPress={onAdvancePrintOrder}
-          dark
-        />
+        <Text style={styles.printStatus}>Next step: export and review the proof PDF.</Text>
       </View>
     </View>
   );

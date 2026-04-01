@@ -60,7 +60,7 @@ export function WorkspaceAuthCard({
       </h2>
       <p className="mt-4 max-w-2xl text-sm leading-7 text-[#5b4f47]">
         {body ??
-          "The Yellowstone demo stays public, but your saved editor state and published draft versions live behind your Supabase account."}
+          "Your saved editor state, published drafts, and collaborator workspaces live behind your Supabase account."}
       </p>
 
       <div className="mt-6 flex flex-wrap gap-3">

@@ -52,6 +52,8 @@ const sharedMembers: ProjectMember[] = [
   },
 ];
 
+const demoProjectIds = new Set(["yellowstone-weekend", "yearbook-2026"]);
+
 function commonsImage(fileName: string) {
   return `https://commons.wikimedia.org/wiki/Special:FilePath/${encodeURIComponent(fileName)}?width=1600`;
 }
@@ -893,15 +895,6 @@ export function createSeedProjects(): Project[] {
         },
       ],
     },
-    mockPrintOrder: {
-      id: "order-1",
-      status: "reviewing",
-      priceCents: 6800,
-      shippingName: "Vince Hernandez",
-      shippingCity: "Denver, CO",
-      estimatedShipWindow: "5-7 business days",
-      orderCode: "PBM-YS-2048",
-    },
   };
 
   const yearbook: Project = {
@@ -1049,15 +1042,6 @@ export function createSeedProjects(): Project[] {
         },
       ],
     },
-    mockPrintOrder: {
-      id: "order-2",
-      status: "draft",
-      priceCents: 8200,
-      shippingName: "Emma Walker",
-      shippingCity: "Fort Collins, CO",
-      estimatedShipWindow: "6-8 business days",
-      orderCode: "PBM-YB-2026",
-    },
   };
 
   return [normalizeProjectDraftState(weekendTrip), normalizeProjectDraftState(yearbook)];
@@ -1073,7 +1057,15 @@ export function getProjectSummary(project: Project): ProjectSummary {
   };
 }
 
-export function createMockProject(input: CreateProjectInput): Project {
+export function isDemoProjectId(projectId: string) {
+  return demoProjectIds.has(projectId);
+}
+
+export function isDemoProject(project: Pick<Project, "id">) {
+  return isDemoProjectId(project.id);
+}
+
+export function createProjectRecord(input: CreateProjectInput): Project {
   const owner: ProjectMember = {
     id: "owner-generated",
     name: input.ownerName,
@@ -1133,15 +1125,6 @@ export function createMockProject(input: CreateProjectInput): Project {
       summary:
         "The draft book will appear here once uploads and memory notes give the layout engine enough material to curate a real first proof.",
       pages: [],
-    },
-    mockPrintOrder: {
-      id: `order-${titleSeed || "new"}`,
-      status: "draft",
-      priceCents: 6400,
-      shippingName: input.ownerName,
-      shippingCity: "Not set yet",
-      estimatedShipWindow: "5-7 business days",
-      orderCode: `PBM-${(titleSeed || "NEW").toUpperCase().slice(0, 6)}`,
     },
   });
 }

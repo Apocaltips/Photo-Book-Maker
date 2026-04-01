@@ -7,7 +7,7 @@ export default function NotFound() {
         <div className="eyebrow">Project not found</div>
         <h1 className="display mt-4 text-5xl text-[#1f1814]">This album is still blank.</h1>
         <p className="mx-auto mt-4 max-w-xl text-base leading-8 text-[#5d524b]">
-          The requested project does not exist in the current seeded prototype set.
+          The requested project does not exist or your account does not have access to it yet.
         </p>
         <Link
           href="/"
