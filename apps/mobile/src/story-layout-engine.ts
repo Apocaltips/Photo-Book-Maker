@@ -120,9 +120,18 @@ function getStoryBeatToken(page: Pick<BookPage, "storyBeat" | "style">) {
   );
 }
 
-function buildCopy(page: BookPage) {
-  const title = truncateWords(page.title ?? "", 6);
-  const body = truncateSentence(firstSentence(page.caption ?? page.curationNote ?? ""), 88);
+function buildCopy(
+  page: BookPage,
+  options?: {
+    bodyMax?: number;
+    titleWords?: number;
+  },
+) {
+  const title = truncateWords(page.title ?? "", options?.titleWords ?? 5);
+  const body = truncateSentence(
+    firstSentence(page.caption ?? page.curationNote ?? ""),
+    options?.bodyMax ?? 64,
+  );
   return {
     body,
     eyebrow: sentenceCase(getStoryBeatToken(page).replaceAll("_", " ")),
@@ -268,68 +277,71 @@ function familyStyle(page: BookPage, project: Project, photos: PhotoAsset[]): St
 }
 
 function heroVariations(page: BookPage, photos: PhotoAsset[]) {
-  const copy = buildCopy(page);
+  const copy = buildCopy(page, { bodyMax: 58, titleWords: 4 });
   const hero = photos[0];
-  const support = photos.slice(1, 3);
+  const support = photos.slice(1);
 
   return [
     [
-      imageElement("hero", hero, rect(0, 0, support.length ? 0.7 : 1, 1), 1, "hero"),
-      ...(support[0] ? [imageElement("support-1", support[0], rect(0.72, 0, 0.28, 0.34), 1)] : []),
-      ...(support[1] ? [imageElement("support-2", support[1], rect(0.72, 0.36, 0.28, 0.28), 1)] : []),
-      textElement("text", rect(0.72, support[1] ? 0.66 : 0.72, 0.28, support[1] ? 0.34 : 0.28), copy, "card", 2),
+      imageElement("hero", hero, rect(0, 0, support.length ? 0.76 : 1, 1), 1, "hero"),
+      textElement("text", rect(0.04, 0.76, support.length ? 0.34 : 0.38, 0.15), copy, "overlay", 2),
+      ...(support[0] ? [imageElement("support-1", support[0], rect(0.79, 0.05, 0.21, 0.29), 1)] : []),
+      ...(support[1] ? [imageElement("support-2", support[1], rect(0.79, 0.37, 0.21, 0.23), 1)] : []),
+      ...(support[2] ? [imageElement("support-3", support[2], rect(0.79, 0.63, 0.21, 0.32), 1)] : []),
     ],
     [
-      imageElement("hero", hero, rect(0, 0, 1, support.length ? 0.73 : 1), 1, "hero"),
-      ...(support[0] ? [imageElement("support-1", support[0], rect(0, 0.75, 0.3, 0.25), 1)] : []),
-      ...(support[1] ? [imageElement("support-2", support[1], rect(0.32, 0.75, 0.3, 0.25), 1)] : []),
-      textElement("text", rect(support[1] ? 0.64 : 0.7, 0.75, support[1] ? 0.36 : 0.3, 0.25), copy, "card", 2),
+      imageElement("hero", hero, rect(0, 0, 1, support.length ? 0.77 : 1), 1, "hero"),
+      textElement("text", rect(0.05, 0.07, 0.3, 0.14), copy, "overlay", 2),
+      ...(support[0] ? [imageElement("support-1", support[0], rect(0.05, 0.81, 0.24, 0.19), 1)] : []),
+      ...(support[1] ? [imageElement("support-2", support[1], rect(0.31, 0.81, 0.24, 0.19), 1)] : []),
+      ...(support[2] ? [imageElement("support-3", support[2], rect(0.57, 0.81, 0.38, 0.19), 1)] : []),
     ],
     [
-      imageElement("hero", hero, rect(support.length ? 0.32 : 0, 0, support.length ? 0.68 : 1, 1), 1, "hero"),
-      textElement("text", rect(0, 0, 0.3, 0.34), copy, "card", 2),
-      ...(support[0] ? [imageElement("support-1", support[0], rect(0, 0.36, 0.3, 0.3), 1)] : []),
-      ...(support[1] ? [imageElement("support-2", support[1], rect(0, 0.68, 0.3, 0.32), 1)] : []),
+      imageElement("hero", hero, rect(support.length ? 0.28 : 0, 0, support.length ? 0.72 : 1, 1), 1, "hero"),
+      textElement("text", rect(0.03, 0.05, 0.22, 0.16), copy, "card", 2),
+      ...(support[0] ? [imageElement("support-1", support[0], rect(0.03, 0.25, 0.22, 0.28), 1)] : []),
+      ...(support[1] ? [imageElement("support-2", support[1], rect(0.03, 0.56, 0.22, 0.18), 1)] : []),
+      ...(support[2] ? [imageElement("support-3", support[2], rect(0.03, 0.77, 0.22, 0.18), 1)] : []),
     ],
   ];
 }
 
 function fullBleedVariations(page: BookPage, photos: PhotoAsset[]) {
-  const copy = buildCopy(page);
+  const copy = buildCopy(page, { bodyMax: 52, titleWords: 4 });
   const hero = photos[0];
   const support = photos.slice(1, 3);
 
   return [
     [
       imageElement("hero", hero, rect(0, 0, 1, 1), 1, "hero"),
-      textElement("text", rect(0.05, 0.72, 0.38, 0.2), copy, "overlay", 3),
-      ...(support[0] ? [imageElement("support-1", support[0], rect(0.76, 0.72, 0.19, 0.2), 2)] : []),
+      textElement("text", rect(0.05, 0.78, 0.34, 0.14), copy, "overlay", 3),
+      ...(support[0] ? [imageElement("support-1", support[0], rect(0.82, 0.75, 0.13, 0.18), 2)] : []),
     ],
     [
       imageElement("hero", hero, rect(0, 0, 1, 1), 1, "hero"),
-      textElement("text", rect(0.05, 0.06, 0.34, 0.18), copy, "overlay", 3),
-      ...(support[0] ? [imageElement("support-1", support[0], rect(0.7, 0.72, 0.12, 0.18), 2)] : []),
-      ...(support[1] ? [imageElement("support-2", support[1], rect(0.84, 0.72, 0.11, 0.18), 2)] : []),
+      textElement("text", rect(0.05, 0.07, 0.3, 0.14), copy, "overlay", 3),
+      ...(support[0] ? [imageElement("support-1", support[0], rect(0.74, 0.78, 0.1, 0.14), 2)] : []),
+      ...(support[1] ? [imageElement("support-2", support[1], rect(0.86, 0.78, 0.1, 0.14), 2)] : []),
     ],
     [
-      imageElement("hero", hero, rect(0, 0, 1, 0.8), 1, "hero"),
-      ...(support[0] ? [imageElement("support-1", support[0], rect(0, 0.82, 0.3, 0.18), 2)] : []),
-      ...(support[1] ? [imageElement("support-2", support[1], rect(0.32, 0.82, 0.3, 0.18), 2)] : []),
-      textElement("text", rect(support[1] ? 0.64 : 0.7, 0.82, support[1] ? 0.36 : 0.3, 0.18), copy, "card", 3),
+      imageElement("hero", hero, rect(0, 0, 1, 1), 1, "hero"),
+      ...(support[0] ? [imageElement("support-1", support[0], rect(0.05, 0.8, 0.14, 0.15), 2)] : []),
+      ...(support[1] ? [imageElement("support-2", support[1], rect(0.81, 0.8, 0.14, 0.15), 2)] : []),
+      textElement("text", rect(0.35, 0.79, 0.3, 0.13), copy, "overlay", 3),
     ],
   ];
 }
 
 function minimalGridVariations(page: BookPage, photos: PhotoAsset[]) {
-  const copy = buildCopy(page);
+  const copy = buildCopy(page, { bodyMax: 46, titleWords: 4 });
   const visible = photos.slice(0, 4);
   const count = visible.length;
 
   const first =
     count === 1
       ? [
-          imageElement("image-0", visible[0], rect(0, 0, 1, 0.82), 1, "hero"),
-          textElement("text", rect(0, 0.84, 1, 0.16), copy, "strip", 2),
+          imageElement("image-0", visible[0], rect(0, 0, 1, 1), 1, "hero"),
+          textElement("text", rect(0.05, 0.8, 0.32, 0.12), copy, "overlay", 2),
         ]
       : count <= 2
         ? [
@@ -352,139 +364,143 @@ function minimalGridVariations(page: BookPage, photos: PhotoAsset[]) {
   const second =
     count === 1
       ? [
-          imageElement("image-0", visible[0], rect(0, 0, 0.72, 1), 1, "hero"),
-          textElement("text", rect(0.74, 0.08, 0.26, 0.84), copy, "card", 2),
+          imageElement("image-0", visible[0], rect(0, 0, 0.78, 1), 1, "hero"),
+          textElement("text", rect(0.81, 0.08, 0.16, 0.18), copy, "card", 2),
         ]
       : count <= 2
         ? [
-            imageElement("image-0", visible[0], rect(0, 0, 1, 0.58), 1, "hero"),
-            imageElement("image-1", visible[1], rect(0, 0.62, 1, 0.38), 1),
+            imageElement("image-0", visible[0], rect(0, 0, 1, 0.63), 1, "hero"),
+            imageElement("image-1", visible[1], rect(0, 0.67, 1, 0.33), 1),
           ]
         : [
-            imageElement("image-0", visible[0], rect(0, 0, 0.66, 1), 1, "hero"),
-            imageElement("image-1", visible[1], rect(0.68, 0, 0.32, 0.32), 1),
-            imageElement("image-2", visible[2], rect(0.68, 0.34, 0.32, 0.32), 1),
+            imageElement("image-0", visible[0], rect(0, 0, 0.69, 1), 1, "hero"),
+            imageElement("image-1", visible[1], rect(0.72, 0, 0.28, 0.31), 1),
+            imageElement("image-2", visible[2], rect(0.72, 0.34, 0.28, 0.31), 1),
             ...(visible[3]
-              ? [imageElement("image-3", visible[3], rect(0.68, 0.68, 0.32, 0.32), 1)]
-              : [textElement("text", rect(0.68, 0.68, 0.32, 0.32), copy, "card", 2)]),
+              ? [imageElement("image-3", visible[3], rect(0.72, 0.68, 0.28, 0.32), 1)]
+              : [textElement("text", rect(0.75, 0.71, 0.22, 0.18), copy, "card", 2)]),
           ];
 
   const third =
     count <= 1
       ? [
-          imageElement("image-0", visible[0], rect(0, 0, 1, 0.82), 1, "hero"),
-          textElement("text", rect(0, 0.84, 1, 0.16), copy, "strip", 2),
+          imageElement("image-0", visible[0], rect(0, 0, 1, 1), 1, "hero"),
+          textElement("text", rect(0.05, 0.07, 0.28, 0.12), copy, "overlay", 2),
         ]
       : [
-          imageElement("image-0", visible[0], rect(0, 0, 0.58, 0.58), 1, "hero"),
-          imageElement("image-1", visible[1], rect(0.6, 0, 0.4, 0.58), 1),
-          ...(visible[2] ? [imageElement("image-2", visible[2], rect(0, 0.62, 0.48, 0.38), 1)] : []),
+          imageElement("image-0", visible[0], rect(0, 0, 0.56, 0.6), 1, "hero"),
+          imageElement("image-1", visible[1], rect(0.59, 0, 0.41, 0.6), 1),
+          ...(visible[2] ? [imageElement("image-2", visible[2], rect(0, 0.64, 0.46, 0.36), 1)] : []),
           ...(visible[3]
-            ? [imageElement("image-3", visible[3], rect(0.52, 0.62, 0.48, 0.38), 1)]
-            : [textElement("text", rect(0.52, 0.62, 0.48, 0.38), copy, "card", 2)]),
+            ? [imageElement("image-3", visible[3], rect(0.5, 0.64, 0.5, 0.36), 1)]
+            : [textElement("text", rect(0.55, 0.69, 0.24, 0.16), copy, "card", 2)]),
         ];
 
   return [first, second, third];
 }
 
 function collageVariations(page: BookPage, photos: PhotoAsset[]) {
-  const copy = buildCopy(page);
+  const copy = buildCopy(page, { bodyMax: 42, titleWords: 4 });
   const visible = photos.slice(0, 8);
 
   return [
     [
       ...visible.slice(0, 6).map((photo, index) => {
         const positions = [
-          rect(0, 0, 0.42, 0.56),
-          rect(0.44, 0, 0.26, 0.27),
-          rect(0.72, 0, 0.28, 0.27),
-          rect(0.44, 0.29, 0.56, 0.27),
-          rect(0, 0.6, 0.28, 0.4),
-          rect(0.3, 0.6, 0.34, 0.4),
+          rect(0, 0, 0.5, 0.62),
+          rect(0.52, 0, 0.22, 0.26),
+          rect(0.76, 0, 0.24, 0.26),
+          rect(0.52, 0.29, 0.48, 0.33),
+          rect(0, 0.66, 0.23, 0.34),
+          rect(0.25, 0.66, 0.25, 0.34),
         ];
         return imageElement(`image-${index}`, photo, positions[index]!, 1, index === 0 ? "hero" : "support");
       }),
-      ...(visible[6]
-        ? [imageElement("image-6", visible[6], rect(0.66, 0.6, 0.34, 0.4), 1)]
-        : [textElement("text", rect(0.66, 0.6, 0.34, 0.4), copy, "card", 2)]),
+      textElement("text", rect(0.53, 0.69, 0.2, 0.14), copy, "overlay", 2),
+      ...(visible[6] ? [imageElement("image-6", visible[6], rect(0.75, 0.66, 0.25, 0.34), 1)] : []),
     ],
     [
       ...visible.slice(0, 7).map((photo, index) => {
         const positions = [
-          rect(0, 0, 0.3, 0.34),
-          rect(0.32, 0, 0.36, 0.34),
-          rect(0.7, 0, 0.3, 0.52),
-          rect(0, 0.36, 0.32, 0.3),
-          rect(0.34, 0.36, 0.34, 0.3),
-          rect(0, 0.68, 0.48, 0.32),
-          rect(0.5, 0.54, 0.18, 0.46),
+          rect(0, 0, 0.28, 0.32),
+          rect(0.3, 0, 0.28, 0.32),
+          rect(0.6, 0, 0.4, 0.56),
+          rect(0, 0.35, 0.28, 0.31),
+          rect(0.3, 0.35, 0.28, 0.31),
+          rect(0, 0.69, 0.46, 0.31),
+          rect(0.49, 0.59, 0.19, 0.41),
         ];
         return imageElement(`image-${index}`, photo, positions[index]!, 1, index === 2 ? "hero" : "support");
       }),
-      textElement("text", rect(0.7, 0.54, 0.3, 0.46), copy, "card", 2),
+      textElement("text", rect(0.72, 0.63, 0.23, 0.14), copy, "overlay", 2),
     ],
     [
       ...visible.slice(0, 5).map((photo, index) => {
         const positions = [
-          rect(0, 0, 0.62, 0.62),
-          rect(0.64, 0, 0.36, 0.3),
-          rect(0.64, 0.32, 0.36, 0.3),
-          rect(0, 0.66, 0.3, 0.34),
-          rect(0.32, 0.66, 0.3, 0.34),
+          rect(0, 0, 0.64, 0.64),
+          rect(0.67, 0, 0.33, 0.31),
+          rect(0.67, 0.33, 0.33, 0.31),
+          rect(0, 0.68, 0.31, 0.32),
+          rect(0.33, 0.68, 0.31, 0.32),
         ];
         return imageElement(`image-${index}`, photo, positions[index]!, 1, index === 0 ? "hero" : "support");
       }),
-      ...(visible[5]
-        ? [imageElement("image-5", visible[5], rect(0.64, 0.66, 0.36, 0.34), 1)]
-        : [textElement("text", rect(0.64, 0.66, 0.36, 0.34), copy, "card", 2)]),
+      textElement("text", rect(0.69, 0.7, 0.22, 0.14), copy, "overlay", 2),
+      ...(visible[5] ? [imageElement("image-5", visible[5], rect(0.84, 0.68, 0.16, 0.32), 1)] : []),
     ],
   ];
 }
 
 function coupleStoryVariations(page: BookPage, photos: PhotoAsset[]) {
-  const copy = buildCopy(page);
+  const copy = buildCopy(page, { bodyMax: 72, titleWords: 5 });
   const hero = photos[0];
-  const support = photos[1];
+  const support = photos.slice(1, 3);
 
   return [
     [
-      imageElement("hero", hero, rect(0, 0, 0.62, 1), 1, "hero"),
-      ...(support ? [imageElement("support", support, rect(0.64, 0, 0.36, 0.46), 1)] : []),
-      textElement("text", rect(0.64, support ? 0.5 : 0, 0.36, support ? 0.5 : 1), copy, "card", 2),
+      imageElement("hero", hero, rect(0, 0, 0.7, 1), 1, "hero"),
+      ...(support[0] ? [imageElement("support-1", support[0], rect(0.73, 0.06, 0.27, 0.28), 1)] : []),
+      ...(support[1] ? [imageElement("support-2", support[1], rect(0.73, 0.38, 0.27, 0.2), 1)] : []),
+      textElement("text", rect(0.73, support[1] ? 0.63 : 0.42, 0.24, support[1] ? 0.18 : 0.2), copy, "card", 2),
     ],
     [
-      imageElement("hero", hero, rect(0, 0, 1, 0.64), 1, "hero"),
-      textElement("text", rect(0, 0.68, support ? 0.42 : 1, 0.32), copy, "card", 2),
-      ...(support ? [imageElement("support", support, rect(0.46, 0.68, 0.54, 0.32), 1)] : []),
+      imageElement("hero", hero, rect(0, 0, 1, 0.72), 1, "hero"),
+      textElement("text", rect(0.05, 0.77, 0.31, 0.15), copy, "card", 2),
+      ...(support[0] ? [imageElement("support-1", support[0], rect(0.41, 0.77, 0.26, 0.23), 1)] : []),
+      ...(support[1] ? [imageElement("support-2", support[1], rect(0.71, 0.77, 0.24, 0.23), 1)] : []),
     ],
     [
-      imageElement("hero", hero, rect(0.38, 0, 0.62, 1), 1, "hero"),
-      textElement("text", rect(0, 0, 0.34, support ? 0.46 : 1), copy, "card", 2),
-      ...(support ? [imageElement("support", support, rect(0, 0.5, 0.34, 0.5), 1)] : []),
+      imageElement("hero", hero, rect(0.34, 0, 0.66, 1), 1, "hero"),
+      textElement("text", rect(0.03, 0.06, 0.24, 0.18), copy, "card", 2),
+      ...(support[0] ? [imageElement("support-1", support[0], rect(0.03, 0.29, 0.24, 0.28), 1)] : []),
+      ...(support[1] ? [imageElement("support-2", support[1], rect(0.03, 0.62, 0.24, 0.22), 1)] : []),
     ],
   ];
 }
 
 function familyRecapVariations(page: BookPage, photos: PhotoAsset[]) {
-  const copy = buildCopy(page);
+  const copy = buildCopy(page, { bodyMax: 50, titleWords: 4 });
   const visible = photos.slice(0, 6);
 
   return [
     [
-      imageElement("hero", visible[0], rect(0, 0, 1, 0.52), 1, "hero"),
-      ...visible.slice(1, 4).map((photo, index) =>
-        imageElement(`image-${index + 1}`, photo, rect(index * 0.34, 0.56, 0.32, 0.44), 1),
+      imageElement("hero", visible[0], rect(0, 0, 1, 0.58), 1, "hero"),
+      textElement("text", rect(0.05, 0.44, 0.28, 0.12), copy, "overlay", 2),
+      ...visible.slice(1, 5).map((photo, index) =>
+        imageElement(`image-${index + 1}`, photo, rect(index * 0.25, 0.64, 0.22, 0.36), 1),
       ),
-      ...(visible[4]
-        ? [imageElement("image-4", visible[4], rect(0.68, 0.56, 0.32, 0.44), 1)]
-        : [textElement("text", rect(0.68, 0.56, 0.32, 0.44), copy, "card", 2)]),
     ],
     [
-      imageElement("hero", visible[0], rect(0, 0, 0.56, 1), 1, "hero"),
+      imageElement("hero", visible[0], rect(0, 0, 0.62, 1), 1, "hero"),
+      textElement("text", rect(0.05, 0.78, 0.26, 0.13), copy, "overlay", 2),
       ...visible.slice(1, 5).map((photo, index) =>
-        imageElement(`image-${index + 1}`, photo, rect(0.6 + (index % 2) * 0.2, Math.floor(index / 2) * 0.25, 0.18, 0.23), 1),
+        imageElement(
+          `image-${index + 1}`,
+          photo,
+          rect(0.66 + (index % 2) * 0.17, 0.04 + Math.floor(index / 2) * 0.25, 0.16, 0.21),
+          1,
+        ),
       ),
-      textElement("text", rect(0.6, 0.76, 0.4, 0.24), copy, "card", 2),
     ],
     [
       ...visible.slice(0, 4).map((photo, index) =>
@@ -492,85 +508,88 @@ function familyRecapVariations(page: BookPage, photos: PhotoAsset[]) {
           `image-${index}`,
           photo,
           [
-            rect(0, 0, 0.49, 0.58),
-            rect(0.51, 0, 0.49, 0.58),
-            rect(0, 0.62, 0.32, 0.38),
-            rect(0.34, 0.62, 0.32, 0.38),
+            rect(0, 0, 0.49, 0.62),
+            rect(0.51, 0, 0.49, 0.62),
+            rect(0, 0.66, 0.31, 0.34),
+            rect(0.33, 0.66, 0.31, 0.34),
           ][index]!,
           1,
           index <= 1 ? "hero" : "support",
         ),
       ),
-      ...(visible[4]
-        ? [imageElement("image-4", visible[4], rect(0.68, 0.62, 0.32, 0.38), 1)]
-        : [textElement("text", rect(0.68, 0.62, 0.32, 0.38), copy, "card", 2)]),
+      ...(visible[4] ? [imageElement("image-4", visible[4], rect(0.67, 0.66, 0.33, 0.34), 1)] : []),
+      textElement("text", rect(0.7, 0.06, 0.22, 0.12), copy, "overlay", 2),
     ],
   ];
 }
 
 function timelineVariations(page: BookPage, photos: PhotoAsset[]) {
-  const copy = buildCopy(page);
+  const copy = buildCopy(page, { bodyMax: 54, titleWords: 4 });
   const visible = photos.slice(0, 4);
 
   return [
     [
-      textElement("text-0", rect(0, 0, 0.18, 0.28), copy, "card", 2),
-      imageElement("image-0", visible[0], rect(0.22, 0, 0.78, 0.28), 1, "hero"),
+      textElement("text-0", rect(0.02, 0.04, 0.16, 0.14), copy, "card", 2),
+      imageElement("image-0", visible[0], rect(0.22, 0, 0.78, 0.34), 1, "hero"),
       ...(visible[1]
-        ? [imageElement("image-1", visible[1], rect(0, 0.36, 0.48, 0.28), 1)]
-        : [textElement("text-1", rect(0, 0.36, 0.48, 0.28), copy, "card", 2)]),
-      textElement("text-2", rect(0.52, 0.36, 0.48, 0.18), copy, "strip", 2),
+        ? [imageElement("image-1", visible[1], rect(0, 0.4, 0.46, 0.26), 1)]
+        : []),
+      textElement("text-2", rect(0.52, 0.42, 0.42, 0.1), copy, "strip", 2),
       ...(visible[2]
         ? [imageElement("image-2", visible[2], rect(0.52, 0.58, 0.48, 0.42), 1)]
-        : [textElement("text-3", rect(0.52, 0.58, 0.48, 0.42), copy, "card", 2)]),
+        : []),
       ...(visible[3]
         ? [imageElement("image-3", visible[3], rect(0, 0.68, 0.48, 0.32), 1)]
         : []),
     ],
     [
-      imageElement("image-0", visible[0], rect(0, 0, 1, 0.42), 1, "hero"),
-      textElement("text-0", rect(0, 0.46, 1, 0.12), copy, "strip", 2),
+      imageElement("image-0", visible[0], rect(0, 0, 1, 0.46), 1, "hero"),
+      textElement("text-0", rect(0.06, 0.5, 0.36, 0.1), copy, "strip", 2),
       ...(visible[1]
-        ? [imageElement("image-1", visible[1], rect(0, 0.62, 0.49, 0.38), 1)]
-        : [textElement("text-1", rect(0, 0.62, 0.49, 0.38), copy, "card", 2)]),
+        ? [imageElement("image-1", visible[1], rect(0, 0.64, 0.49, 0.36), 1)]
+        : []),
       ...(visible[2]
-        ? [imageElement("image-2", visible[2], rect(0.51, 0.62, 0.49, 0.38), 1)]
-        : [textElement("text-2", rect(0.51, 0.62, 0.49, 0.38), copy, "card", 2)]),
+        ? [imageElement("image-2", visible[2], rect(0.51, 0.64, 0.49, 0.36), 1)]
+        : []),
+      ...(visible[3] ? [imageElement("image-3", visible[3], rect(0.78, 0.5, 0.17, 0.1), 1)] : []),
     ],
     [
-      textElement("text-0", rect(0, 0, 0.32, 0.22), copy, "card", 2),
-      imageElement("image-0", visible[0], rect(0.36, 0, 0.64, 0.48), 1, "hero"),
+      textElement("text-0", rect(0.02, 0.03, 0.22, 0.13), copy, "card", 2),
+      imageElement("image-0", visible[0], rect(0.28, 0, 0.72, 0.52), 1, "hero"),
       ...(visible[1]
-        ? [imageElement("image-1", visible[1], rect(0, 0.28, 0.32, 0.72), 1)]
-        : [textElement("text-1", rect(0, 0.28, 0.32, 0.72), copy, "card", 2)]),
+        ? [imageElement("image-1", visible[1], rect(0.02, 0.21, 0.22, 0.33), 1)]
+        : []),
       ...(visible[2]
-        ? [imageElement("image-2", visible[2], rect(0.36, 0.52, 0.3, 0.48), 1)]
-        : [textElement("text-2", rect(0.36, 0.52, 0.3, 0.48), copy, "card", 2)]),
+        ? [imageElement("image-2", visible[2], rect(0.28, 0.58, 0.34, 0.42), 1)]
+        : []),
       ...(visible[3]
-        ? [imageElement("image-3", visible[3], rect(0.7, 0.52, 0.3, 0.48), 1)]
-        : [textElement("text-3", rect(0.7, 0.52, 0.3, 0.48), copy, "card", 2)]),
+        ? [imageElement("image-3", visible[3], rect(0.66, 0.58, 0.34, 0.42), 1)]
+        : []),
+      textElement("text-3", rect(0.7, 0.08, 0.22, 0.1), copy, "overlay", 2),
     ],
   ];
 }
 
 function captionVariations(page: BookPage, photos: PhotoAsset[]) {
-  const copy = buildCopy(page);
+  const copy = buildCopy(page, { bodyMax: 70, titleWords: 5 });
   const hero = photos[0];
   const support = photos[1];
 
   return [
     [
-      imageElement("hero", hero, rect(0, 0, 0.72, 1), 1, "hero"),
-      textElement("text", rect(0.75, 0.08, 0.25, 0.84), copy, "card", 2),
+      imageElement("hero", hero, rect(0, 0, 0.78, 1), 1, "hero"),
+      textElement("text", rect(0.81, 0.08, 0.16, 0.2), copy, "card", 2),
+      ...(support ? [imageElement("support", support, rect(0.81, 0.34, 0.16, 0.25), 1)] : []),
     ],
     [
-      imageElement("hero", hero, rect(0, 0, 1, 0.72), 1, "hero"),
-      textElement("text", rect(0, 0.76, support ? 0.48 : 1, 0.24), copy, "card", 2),
+      imageElement("hero", hero, rect(0, 0, 1, 0.76), 1, "hero"),
+      textElement("text", rect(0.05, 0.8, support ? 0.34 : 0.42, 0.14), copy, "card", 2),
       ...(support ? [imageElement("support", support, rect(0.52, 0.76, 0.48, 0.24), 1)] : []),
     ],
     [
-      imageElement("hero", hero, rect(0.28, 0, 0.72, 1), 1, "hero"),
-      textElement("text", rect(0, 0, 0.24, 1), copy, "card", 2),
+      imageElement("hero", hero, rect(0.22, 0, 0.78, 1), 1, "hero"),
+      textElement("text", rect(0.03, 0.08, 0.15, 0.18), copy, "card", 2),
+      ...(support ? [imageElement("support", support, rect(0.03, 0.32, 0.15, 0.24), 1)] : []),
     ],
   ];
 }
@@ -607,7 +626,7 @@ function buildVariationSet(
     layoutType: system,
     style: {
       backgroundColor: familyBackground(system),
-      padding: system === "full_bleed" ? 8 : system === "collage" ? 14 : 18,
+      padding: system === "full_bleed" ? 8 : system === "collage" ? 12 : 16,
       spacing: 16,
     },
     variationIndex,

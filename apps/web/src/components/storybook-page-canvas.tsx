@@ -142,6 +142,12 @@ export function StorybookPageCanvas({
               : element.variant === "strip"
                 ? "rounded-[1.1rem] border border-black/5 bg-white/84"
                 : "rounded-[1.35rem] border border-black/5 bg-[linear-gradient(180deg,rgba(255,251,247,0.98),rgba(243,233,223,0.96))] shadow-[0_10px_22px_rgba(31,23,18,0.06)]";
+          const textSpacingClass =
+            element.variant === "overlay"
+              ? "gap-1.5 px-3 py-3"
+              : element.variant === "strip"
+                ? "gap-1.5 px-3 py-2.5"
+                : "gap-2 px-3.5 py-3";
 
           const eyebrowColor =
             element.variant === "overlay" ? "#f4ddca" : themePresentation.textMuted;
@@ -153,7 +159,7 @@ export function StorybookPageCanvas({
           return (
             <div
               key={element.id}
-              className={`absolute flex h-full flex-col justify-between px-4 py-4 ${textClass}`}
+              className={`absolute flex h-full flex-col justify-start ${textSpacingClass} ${textClass}`}
               style={elementStyle}
             >
               <div>
@@ -164,7 +170,7 @@ export function StorybookPageCanvas({
                 ) : null}
                 {element.title ? (
                   <div
-                    className={`mt-2 ${element.variant === "strip" ? "text-sm" : "text-[1rem]"} font-semibold leading-tight`}
+                    className={`mt-1.5 ${element.variant === "strip" ? "text-[13px]" : "text-[15px]"} font-semibold leading-tight`}
                     style={{ color: titleColor }}
                   >
                     {element.title}
@@ -173,7 +179,7 @@ export function StorybookPageCanvas({
               </div>
               {element.body ? (
                 <p
-                  className={`${element.variant === "strip" ? "mt-2 text-[11px]" : "mt-3 text-[11px]"} leading-[1.45]`}
+                  className={`${element.variant === "strip" ? "mt-1 text-[10px]" : "mt-1.5 text-[10px]"} max-w-[28ch] leading-[1.4]`}
                   style={{ color: bodyColor }}
                 >
                   {element.body}
@@ -211,4 +217,3 @@ function PrintGuides({
     </div>
   );
 }
-

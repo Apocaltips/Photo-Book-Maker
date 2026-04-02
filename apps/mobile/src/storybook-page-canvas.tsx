@@ -140,9 +140,15 @@ function TextLayer({
       : isOverlay
         ? styles.textOverlay
         : [styles.textCard, { backgroundColor: surfaceColor }];
+  const contentStyle =
+    variant === "overlay"
+      ? styles.textLayerOverlay
+      : variant === "strip"
+        ? styles.textLayerStrip
+        : styles.textLayerCard;
 
   return (
-    <View style={[styles.textLayer, style, backgroundStyle]}>
+    <View style={[styles.textLayer, contentStyle, style, backgroundStyle]}>
       {eyebrow ? (
         <Text style={[styles.textEyebrow, { color: isOverlay ? canvasPalette.overlayMuted : textMuted }]}>
           {eyebrow}
@@ -297,11 +303,23 @@ const styles = StyleSheet.create({
   },
   textLayer: {
     borderRadius: 18,
+    justifyContent: "flex-start",
+    borderWidth: 1,
+  },
+  textLayerCard: {
     paddingHorizontal: 12,
     paddingVertical: 12,
-    justifyContent: "space-between",
     gap: 8,
-    borderWidth: 1,
+  },
+  textLayerOverlay: {
+    paddingHorizontal: 11,
+    paddingVertical: 10,
+    gap: 6,
+  },
+  textLayerStrip: {
+    paddingHorizontal: 11,
+    paddingVertical: 9,
+    gap: 5,
   },
   textCard: {
     borderColor: "rgba(31,24,20,0.08)",
@@ -326,12 +344,13 @@ const styles = StyleSheet.create({
     fontWeight: "700",
   },
   textTitle: {
-    fontSize: 16,
-    lineHeight: 19,
+    fontSize: 15,
+    lineHeight: 18,
     fontWeight: "700",
   },
   textBody: {
-    fontSize: 12,
-    lineHeight: 17,
+    fontSize: 10,
+    lineHeight: 14,
+    maxWidth: "92%",
   },
 });
