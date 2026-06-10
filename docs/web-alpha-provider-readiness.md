@@ -68,12 +68,19 @@ Worker bridge v1:
 - Private PC worker: set `LOCAL_AI_WORKER_HOSTED_BASE_URL` to the hosted app,
   `LOCAL_AI_WORKER_PROCESSOR_BASE_URL` to the local app, and run
   `npm run worker:ai:local`.
+- Run the worker once with `LOCAL_AI_WORKER_PREFLIGHT_ONLY=1` before polling.
+  Preflight verifies the processor URL is loopback/LAN/private and checks the
+  local processor's `/api/ai/local/health` route so a hosted job is not claimed
+  before Ollama and the required models are reachable.
 - The worker calls `/api/ai/worker/generation/claim`, processes the payload
   through `/api/ai/worker/generation/process` on the private PC, then posts to
   `/api/ai/worker/generation/complete` or `/api/ai/worker/generation/fail`.
 - The worker heartbeats during long local model calls with
   `LOCAL_AI_WORKER_HEARTBEAT_MS` so slow 60-photo and 174-photo test runs are
   not reclaimed as abandoned.
+- Worker route calls use `LOCAL_AI_WORKER_REQUEST_TIMEOUT_MS`; local generation
+  processing uses `LOCAL_AI_WORKER_PROCESS_TIMEOUT_MS` so hung local requests
+  become visible failures instead of leaving the operator guessing.
 - Expired leases can be reclaimed by another worker, but
   `LOCAL_AI_WORKER_MAX_ATTEMPTS` limits retry loops. The default alpha ceiling
   is 3 attempts; after that the run is marked failed and `/ai-health` surfaces
@@ -86,9 +93,10 @@ Worker bridge v1:
   The processor endpoint is disabled in production unless
   `LOCAL_AI_PROCESSOR_IN_PRODUCTION=1`, because Ollama should run on the private
   worker machine, not inside the hosted app.
-- The worker refuses to use a remote hosted URL as its processor unless
+- The worker refuses to use a public processor URL unless
   `LOCAL_AI_WORKER_ALLOW_HOSTED_PROCESSOR=1` is set intentionally. In normal
-  alpha testing, hosted base URL is public and processor base URL is local.
+  alpha testing, hosted base URL is public and processor base URL is loopback,
+  LAN, or `.local`.
 
 ## Validation Commands
 

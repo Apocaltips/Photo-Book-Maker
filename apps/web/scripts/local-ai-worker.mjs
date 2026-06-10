@@ -1,4 +1,4 @@
-/* global URL, clearInterval, console, fetch, process, setInterval, setTimeout */
+/* global AbortSignal, URL, clearInterval, console, fetch, process, setInterval, setTimeout */
 
 const hostedBaseUrl = (
   process.env.LOCAL_AI_WORKER_HOSTED_BASE_URL ??
@@ -19,7 +19,17 @@ const heartbeatMs = Math.max(
   10000,
   Number.parseInt(process.env.LOCAL_AI_WORKER_HEARTBEAT_MS ?? "60000", 10),
 );
+const requestTimeoutMs = Math.max(
+  5000,
+  Number.parseInt(process.env.LOCAL_AI_WORKER_REQUEST_TIMEOUT_MS ?? "30000", 10),
+);
+const processorTimeoutMs = Math.max(
+  requestTimeoutMs,
+  Number.parseInt(process.env.LOCAL_AI_WORKER_PROCESS_TIMEOUT_MS ?? "3600000", 10),
+);
 const loop = process.env.LOCAL_AI_WORKER_LOOP === "1";
+const preflightOnly = process.env.LOCAL_AI_WORKER_PREFLIGHT_ONLY === "1";
+const skipProcessorHealth = process.env.LOCAL_AI_WORKER_SKIP_PROCESSOR_HEALTH === "1";
 
 if (!secret) {
   throw new Error("LOCAL_AI_WORKER_SECRET or AI_WORKER_SECRET is required.");
@@ -34,17 +44,36 @@ function isLoopbackUrl(value) {
   }
 }
 
-if (
-  hostedBaseUrl === processorBaseUrl &&
-  !isLoopbackUrl(processorBaseUrl) &&
-  process.env.LOCAL_AI_WORKER_ALLOW_HOSTED_PROCESSOR !== "1"
-) {
+function isPrivateProcessorUrl(value) {
+  try {
+    const host = new URL(value).hostname.toLowerCase();
+    if (isLoopbackUrl(value) || host.endsWith(".local")) {
+      return true;
+    }
+
+    const parts = host.split(".").map((part) => Number.parseInt(part, 10));
+    if (parts.length !== 4 || parts.some((part) => !Number.isFinite(part))) {
+      return false;
+    }
+
+    const [first, second] = parts;
+    return (
+      first === 10 ||
+      (first === 172 && second >= 16 && second <= 31) ||
+      (first === 192 && second === 168)
+    );
+  } catch {
+    return false;
+  }
+}
+
+if (!isPrivateProcessorUrl(processorBaseUrl) && process.env.LOCAL_AI_WORKER_ALLOW_HOSTED_PROCESSOR !== "1") {
   throw new Error(
-    "LOCAL_AI_WORKER_PROCESSOR_BASE_URL must point to the private local processor when the hosted base URL is remote.",
+    "LOCAL_AI_WORKER_PROCESSOR_BASE_URL must point to a loopback, LAN, or .local private processor unless LOCAL_AI_WORKER_ALLOW_HOSTED_PROCESSOR=1 is set intentionally.",
   );
 }
 
-async function apiJson(baseUrl, path, init = {}) {
+async function apiJson(baseUrl, path, init = {}, timeoutMs = requestTimeoutMs) {
   const response = await fetch(`${baseUrl}${path}`, {
     ...init,
     headers: {
@@ -52,6 +81,7 @@ async function apiJson(baseUrl, path, init = {}) {
       "Content-Type": "application/json",
       ...(init.headers ?? {}),
     },
+    signal: AbortSignal.timeout(timeoutMs),
   });
   const body = await response.json().catch(() => ({}));
 
@@ -60,6 +90,46 @@ async function apiJson(baseUrl, path, init = {}) {
   }
 
   return body;
+}
+
+async function assertProcessorHealth() {
+  if (skipProcessorHealth) {
+    console.log("Skipping local processor health check by request.");
+    return;
+  }
+
+  const body = await apiJson(processorBaseUrl, "/api/ai/local/health");
+  const missingModels = body.ai?.missingModels ?? [];
+
+  if (!body.ai?.ollamaReachable) {
+    throw new Error("Local AI processor preflight failed: Ollama is not reachable.");
+  }
+
+  if (missingModels.length) {
+    throw new Error(
+      `Local AI processor preflight failed: missing model(s): ${missingModels.join(", ")}.`,
+    );
+  }
+
+  console.log(
+    JSON.stringify(
+      {
+        localAiStatus: body.ai?.status,
+        missingModels,
+        ollamaReachable: Boolean(body.ai?.ollamaReachable),
+        processorBaseUrl,
+      },
+      null,
+      2,
+    ),
+  );
+}
+
+async function preflightWorker() {
+  await assertProcessorHealth();
+  if (preflightOnly) {
+    console.log("Local AI worker preflight passed.");
+  }
 }
 
 async function claimJob() {
@@ -113,7 +183,7 @@ async function processJob(job) {
         project: job.project,
         runId: job.runId,
       }),
-    });
+    }, processorTimeoutMs);
   } finally {
     clearInterval(heartbeatTimer);
   }
@@ -159,8 +229,11 @@ async function runOnce() {
 }
 
 do {
-  await runOnce();
+  await preflightWorker();
+  if (!preflightOnly) {
+    await runOnce();
+  }
   if (loop) {
     await new Promise((resolve) => setTimeout(resolve, pollMs));
   }
-} while (loop);
+} while (loop && !preflightOnly);

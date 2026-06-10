@@ -73,19 +73,29 @@ the hosted app, then run the private worker from this checkout:
 $env:LOCAL_AI_WORKER_SECRET="same-secret-as-hosted"
 $env:LOCAL_AI_WORKER_HOSTED_BASE_URL="https://YOUR-WEB-APP"
 $env:LOCAL_AI_WORKER_PROCESSOR_BASE_URL="http://127.0.0.1:3000"
+$env:LOCAL_AI_WORKER_PREFLIGHT_ONLY="1"
+npm run worker:ai:local
+Remove-Item Env:LOCAL_AI_WORKER_PREFLIGHT_ONLY
+$env:LOCAL_AI_WORKER_LOOP="1"
 npm run worker:ai:local
 ```
 
-Use `LOCAL_AI_WORKER_LOOP=1` for continuous polling. The hosted app queues the
-job; the private worker claims it, runs local Ollama through the local processor
-app, heartbeats while the local models are running, and posts the saved draft
-back to the hosted app. Keep `LOCAL_AI_WORKER_PROCESSOR_BASE_URL` pointed at a
-private local URL. The worker refuses to use a remote hosted URL as its processor
-unless `LOCAL_AI_WORKER_ALLOW_HOSTED_PROCESSOR=1` is set intentionally. Keep
+Use `LOCAL_AI_WORKER_PREFLIGHT_ONLY=1` first. It verifies the processor URL is
+loopback/LAN/private and checks `/api/ai/local/health` so the worker does not
+claim a hosted job before local Ollama and the required models are reachable.
+Use `LOCAL_AI_WORKER_LOOP=1` for continuous polling after preflight passes. The
+hosted app queues the job; the private worker claims it, runs local Ollama
+through the local processor app, heartbeats while the local models are running,
+and posts the saved draft back to the hosted app. Keep
+`LOCAL_AI_WORKER_PROCESSOR_BASE_URL` pointed at a private local URL. The worker
+refuses to use a public processor URL unless
+`LOCAL_AI_WORKER_ALLOW_HOSTED_PROCESSOR=1` is set intentionally. Keep
+`LOCAL_AI_WORKER_REQUEST_TIMEOUT_MS=30000`,
+`LOCAL_AI_WORKER_PROCESS_TIMEOUT_MS=3600000`, and
 `LOCAL_AI_WORKER_MAX_ATTEMPTS=3` for family/friend alpha unless a test session
-proves the worker needs a different retry ceiling; expired leases are reclaimed,
-but a run that exceeds the attempt ceiling is marked failed and shown on
-`/ai-health` instead of being retried forever.
+proves the worker needs different limits; expired leases are reclaimed, but a
+run that exceeds the attempt ceiling is marked failed and shown on `/ai-health`
+instead of being retried forever.
 Web and mobile clients poll the generation run status after a queued response,
 then refresh the project automatically when the private worker saves or fails
 the draft.
