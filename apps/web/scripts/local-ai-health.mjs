@@ -70,6 +70,10 @@ async function main() {
     throw new Error("A local AI generation run is still active. Wait for it before starting another smoke.");
   }
 
+  if (body.queue?.staleRuns) {
+    throw new Error("A local AI generation run has a stale worker lease. Reclaim or fail it before tester sessions.");
+  }
+
   if (requireSavedRun) {
     if (!body.lastSavedRun) {
       throw new Error("No saved AI generation run exists. Run npm run test:ai:local before tester sessions.");

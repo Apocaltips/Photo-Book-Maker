@@ -90,11 +90,20 @@ npm run test
 npm run typecheck
 npm run lint
 npm run build
+npm run test:alpha:readiness
 npm run test:e2e:web
 npm run test:ai:health
 ```
 
-`npm run test:ai:health` expects the web app to be running and Ollama to have the required models installed. `npm run test:ai:local` expects a reachable Cap Cana-style test project unless `AI_GENERATION_PROJECT_ID` points at another test project.
+`npm run test:alpha:readiness` is read-only. It expects the web app to be
+running and checks the home page, auth gate, template catalog, local AI health,
+stale queue state, worker bridge config, and provider env requirements for the
+selected mode. Use `ALPHA_READINESS_MODE=local` for local testing and
+`ALPHA_READINESS_MODE=hosted` plus `ALPHA_READINESS_BASE_URL=https://...` for
+the hosted family/friend alpha gate. `npm run test:ai:health` expects the web
+app to be running and Ollama to have the required models installed.
+`npm run test:ai:local` expects a reachable Cap Cana-style test project unless
+`AI_GENERATION_PROJECT_ID` points at another test project.
 `npm run test:ai:benchmark` is isolated by default: it copies the current local
 project store and local uploads into a temp directory, starts a private Next
 server, runs generation, writes the report, and deletes the temp store. Stop any

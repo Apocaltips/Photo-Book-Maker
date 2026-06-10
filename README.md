@@ -87,6 +87,22 @@ proves the worker needs a different retry ceiling; expired leases are reclaimed,
 but a run that exceeds the attempt ceiling is marked failed and shown on
 `/ai-health` instead of being retried forever.
 
+Before inviting outside testers, run the read-only readiness gate against the
+running app:
+
+```powershell
+$env:ALPHA_READINESS_MODE="local"
+npm run test:alpha:readiness
+```
+
+For a hosted alpha URL, require real auth/provider/worker gates:
+
+```powershell
+$env:ALPHA_READINESS_MODE="hosted"
+$env:ALPHA_READINESS_BASE_URL="https://YOUR-WEB-APP"
+npm run test:alpha:readiness
+```
+
 6. In a second terminal, start Expo:
 
 ```bash
