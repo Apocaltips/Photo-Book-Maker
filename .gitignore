@@ -12,3 +12,6 @@ npm-debug.log*
 .vercel
 .codex-logs
 tmp/
+.playwright-mcp/
+photo-book-*.png
+photo-book-*-snapshot.md

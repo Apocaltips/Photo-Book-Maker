@@ -197,10 +197,26 @@ async function runProjectE2E() {
   );
 
   const generationQuestions = await apiJson(`/api/projects/${project.id}/generation/questions`);
+  const expectedQuestionIds = [
+    "tripPurpose",
+    "audience",
+    "bookSize",
+    "mustIncludeMoments",
+    "coverPreference",
+    "namesPrivacy",
+    "mapMemorabiliaPreference",
+    "captionDepth",
+    "density",
+    "tone",
+  ];
+  const questionIds = new Set(
+    generationQuestions.questionnaire?.questions?.map((question) => question.id) ?? [],
+  );
   if (
     generationQuestions.revision !== project.revision ||
     !generationQuestions.questionnaire?.questions?.length ||
-    !generationQuestions.questionnaire?.answers?.tripPurpose
+    !generationQuestions.questionnaire?.answers?.tripPurpose ||
+    expectedQuestionIds.some((questionId) => !questionIds.has(questionId))
   ) {
     throw new Error("Generation questionnaire route did not return usable defaults.");
   }
@@ -331,6 +347,12 @@ async function runProjectE2E() {
 
   if (!proof.html?.includes("Travel photo book") || !proof.html?.includes("Safe text area")) {
     throw new Error("Proof export did not include expected customer-facing proof HTML.");
+  }
+  const proofSheetCount = proof.html.match(/class="sheet/g)?.length ?? 0;
+  if (proofSheetCount < project.bookDraft.pages.length + 1) {
+    throw new Error(
+      `Proof export rendered ${proofSheetCount} sheets for ${project.bookDraft.pages.length} spreads.`,
+    );
   }
 
   await assertRoute(

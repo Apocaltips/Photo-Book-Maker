@@ -11,9 +11,11 @@ import {
 } from "react-native";
 import {
   BOOK_TEMPLATE_PACKS,
+  buildBookGenerationQuestionnaire,
   ensureDraftEditorState,
   getBookMakingGuide,
   getBookTemplatePack,
+  type BookGenerationQuestionnaireAnswers,
   type BookMakingGuide,
   type BookPage,
   type BookTemplatePack,
@@ -41,7 +43,7 @@ const palette = {
 
 type Props = {
   isAiGenerating?: boolean;
-  onGenerateAiBook: () => void;
+  onGenerateAiBook: (questionnaire?: Partial<BookGenerationQuestionnaireAnswers>) => void;
   onExportProof: () => void;
   onLoadPublishedDraft: (snapshot: PublishedBookDraft) => void;
   onPublishDraft: (name: string) => void;
@@ -54,6 +56,44 @@ type Props = {
   ) => void;
   project?: Project;
 };
+
+const captionDepthOptions: Array<{
+  label: string;
+  value: BookGenerationQuestionnaireAnswers["captionDepth"];
+}> = [
+  { label: "Short", value: "short" },
+  { label: "Balanced", value: "balanced" },
+  { label: "Story", value: "story" },
+];
+
+const densityOptions: Array<{
+  label: string;
+  value: BookGenerationQuestionnaireAnswers["density"];
+}> = [
+  { label: "Airy", value: "airy" },
+  { label: "Balanced", value: "balanced" },
+  { label: "Full", value: "full" },
+];
+
+const toneOptions: Array<{
+  label: string;
+  value: BookGenerationQuestionnaireAnswers["tone"];
+}> = [
+  { label: "Warm", value: "warm" },
+  { label: "Reflective", value: "reflective" },
+  { label: "Playful", value: "playful" },
+  { label: "Simple", value: "factual" },
+];
+
+const bookSizeOptions: Array<{
+  label: string;
+  value: BookGenerationQuestionnaireAnswers["bookSize"];
+}> = [
+  { label: "Large square", value: "12x12-square" },
+  { label: "Classic square", value: "10x10-square" },
+  { label: "Small square", value: "8x8-square" },
+  { label: "Landscape", value: "11x8.5-landscape" },
+];
 
 function getProjectAccent(project: Project) {
   return (
@@ -104,6 +144,73 @@ function ActionButton({
         {label}
       </Text>
     </Pressable>
+  );
+}
+
+function DesignerTextField({
+  label,
+  multiline,
+  onChangeText,
+  placeholder,
+  value,
+}: {
+  label: string;
+  multiline?: boolean;
+  onChangeText: (value: string) => void;
+  placeholder?: string;
+  value: string;
+}) {
+  return (
+    <View style={styles.questionField}>
+      <Text style={styles.questionLabel}>{label}</Text>
+      <TextInput
+        value={value}
+        onChangeText={onChangeText}
+        placeholder={placeholder}
+        placeholderTextColor="#9a8c80"
+        multiline={multiline}
+        style={[styles.input, multiline ? styles.textarea : null]}
+      />
+    </View>
+  );
+}
+
+function DesignerChoiceRow<Value extends string>({
+  label,
+  onChange,
+  options,
+  value,
+}: {
+  label: string;
+  onChange: (value: Value) => void;
+  options: Array<{ label: string; value: Value }>;
+  value: Value;
+}) {
+  return (
+    <View style={styles.questionField}>
+      <Text style={styles.questionLabel}>{label}</Text>
+      <View style={styles.choiceRow}>
+        {options.map((option) => (
+          <Pressable
+            key={option.value}
+            onPress={() => onChange(option.value)}
+            style={[
+              styles.choiceChip,
+              option.value === value ? styles.choiceChipActive : null,
+            ]}
+          >
+            <Text
+              style={[
+                styles.choiceChipText,
+                option.value === value ? styles.choiceChipTextActive : null,
+              ]}
+            >
+              {option.label}
+            </Text>
+          </Pressable>
+        ))}
+      </View>
+    </View>
   );
 }
 
@@ -265,6 +372,7 @@ export function MobileEditorTab({
   const [titleDraft, setTitleDraft] = useState("");
   const [captionDraft, setCaptionDraft] = useState("");
   const [publishName, setPublishName] = useState("");
+  const [aiAnswers, setAiAnswers] = useState<Partial<BookGenerationQuestionnaireAnswers>>({});
 
   const selectedPage =
     project?.bookDraft.pages.find((page) => page.id === selectedPageId) ??
@@ -300,6 +408,18 @@ export function MobileEditorTab({
     () => (project && selectedPage ? getPagePhotos(project, selectedPage) : []),
     [project, selectedPage],
   );
+  const defaultAiAnswers = useMemo(
+    () => (project ? buildBookGenerationQuestionnaire(project).answers : null),
+    [project],
+  );
+  const designerAnswers = useMemo(
+    () => (defaultAiAnswers ? { ...defaultAiAnswers, ...aiAnswers } : null),
+    [aiAnswers, defaultAiAnswers],
+  );
+
+  useEffect(() => {
+    setAiAnswers({});
+  }, [project?.id]);
 
   if (!project) {
     return null;
@@ -343,6 +463,16 @@ export function MobileEditorTab({
     });
   }
 
+  function updateAiAnswer<Key extends keyof BookGenerationQuestionnaireAnswers>(
+    key: Key,
+    value: BookGenerationQuestionnaireAnswers[Key],
+  ) {
+    setAiAnswers((current) => ({
+      ...current,
+      [key]: value,
+    }));
+  }
+
   return (
     <View style={styles.sectionStack}>
       <View style={styles.surfaceCard}>
@@ -380,6 +510,70 @@ export function MobileEditorTab({
           />
         </View>
 
+        {designerAnswers ? (
+          <View style={styles.questionStack}>
+            <DesignerTextField
+              label="What is this book for?"
+              value={designerAnswers.tripPurpose}
+              onChangeText={(value) => updateAiAnswer("tripPurpose", value)}
+              multiline
+            />
+            <DesignerTextField
+              label="Who is it for?"
+              value={designerAnswers.audience}
+              onChangeText={(value) => updateAiAnswer("audience", value)}
+              placeholder="Us, our kids someday, grandparents, the trip group..."
+            />
+            <DesignerTextField
+              label="Moments that must appear"
+              value={designerAnswers.mustIncludeMoments}
+              onChangeText={(value) => updateAiAnswer("mustIncludeMoments", value)}
+              placeholder="Pool, beach, dinner, favorite couple photo..."
+              multiline
+            />
+            <DesignerTextField
+              label="Cover photo preference"
+              value={designerAnswers.coverPreference}
+              onChangeText={(value) => updateAiAnswer("coverPreference", value)}
+            />
+            <DesignerTextField
+              label="Names and privacy"
+              value={designerAnswers.namesPrivacy}
+              onChangeText={(value) => updateAiAnswer("namesPrivacy", value)}
+            />
+            <DesignerTextField
+              label="Maps, food, tickets, and little details"
+              value={designerAnswers.mapMemorabiliaPreference}
+              onChangeText={(value) => updateAiAnswer("mapMemorabiliaPreference", value)}
+              multiline
+            />
+            <DesignerChoiceRow
+              label="Caption style"
+              options={captionDepthOptions}
+              value={designerAnswers.captionDepth}
+              onChange={(value) => updateAiAnswer("captionDepth", value)}
+            />
+            <DesignerChoiceRow
+              label="Writing tone"
+              options={toneOptions}
+              value={designerAnswers.tone}
+              onChange={(value) => updateAiAnswer("tone", value)}
+            />
+            <DesignerChoiceRow
+              label="Page fullness"
+              options={densityOptions}
+              value={designerAnswers.density}
+              onChange={(value) => updateAiAnswer("density", value)}
+            />
+            <DesignerChoiceRow
+              label="Book size"
+              options={bookSizeOptions}
+              value={designerAnswers.bookSize}
+              onChange={(value) => updateAiAnswer("bookSize", value)}
+            />
+          </View>
+        ) : null}
+
         {latestGenerationRun ? (
           <View style={styles.aiRunPanel}>
             <Text style={styles.aiRunTitle}>
@@ -397,7 +591,7 @@ export function MobileEditorTab({
         <ActionButton
           disabled={isAiGenerating || !canRunAiDesigner}
           label={isAiGenerating ? "Making the book..." : "Make my book"}
-          onPress={onGenerateAiBook}
+          onPress={() => onGenerateAiBook(designerAnswers ?? undefined)}
           tone="dark"
         />
         {!canRunAiDesigner ? (
@@ -711,6 +905,47 @@ const styles = StyleSheet.create({
     color: palette.muted,
     textTransform: "uppercase",
     letterSpacing: 0.5,
+  },
+  questionStack: {
+    gap: 12,
+  },
+  questionField: {
+    gap: 7,
+  },
+  questionLabel: {
+    fontSize: 11,
+    letterSpacing: 1.1,
+    textTransform: "uppercase",
+    fontWeight: "700",
+    color: palette.muted,
+  },
+  choiceRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 8,
+  },
+  choiceChip: {
+    minHeight: 38,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: palette.line,
+    backgroundColor: "rgba(255,255,255,0.78)",
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 13,
+    paddingVertical: 8,
+  },
+  choiceChipActive: {
+    borderColor: "rgba(46,92,77,0.36)",
+    backgroundColor: palette.forestSoft,
+  },
+  choiceChipText: {
+    color: palette.ink,
+    fontSize: 12,
+    fontWeight: "700",
+  },
+  choiceChipTextActive: {
+    color: palette.forest,
   },
   workflowStepStack: {
     gap: 10,

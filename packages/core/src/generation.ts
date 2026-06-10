@@ -1,4 +1,5 @@
 import {
+  getBookDraftFormatLabel,
   normalizeProjectDraftState,
   saveWorkingDraft,
 } from "./editorial";
@@ -363,6 +364,34 @@ function getDefaultQuestionnaireAnswers(project: Project): BookGenerationQuestio
   };
 }
 
+function getEditorDensityFromGenerationDensity(
+  density?: BookGenerationQuestionnaireAnswers["density"],
+) {
+  switch (density) {
+    case "airy":
+      return 42;
+    case "full":
+      return 76;
+    case "balanced":
+      return 58;
+    default:
+      return undefined;
+  }
+}
+
+function getQuestionnaireDetailPreferences(
+  preference?: BookGenerationQuestionnaireAnswers["mapMemorabiliaPreference"],
+) {
+  const normalized = preference?.toLowerCase() ?? "";
+  const explicitlySkipped = /\b(no|skip|without|none|don't|do not)\b/.test(normalized);
+
+  return {
+    showMaps: !explicitlySkipped && /\b(map|route|itinerary|location|where)\b/.test(normalized),
+    showMemorabilia:
+      !explicitlySkipped && /\b(food|menu|ticket|receipt|detail|details|memorabilia|small)\b/.test(normalized),
+  };
+}
+
 function buildQuestion(
   id: BookGenerationQuestion["id"],
   label: string,
@@ -402,6 +431,12 @@ export function buildBookGenerationQuestionnaire(project: Project): BookGenerati
         defaults.audience,
       ),
       buildQuestion(
+        "bookSize",
+        "Book size",
+        "What print format should the AI design around?",
+        defaults.bookSize,
+      ),
+      buildQuestion(
         "mustIncludeMoments",
         "Must-include moments",
         "Which moments or photos must make it into the book?",
@@ -431,6 +466,18 @@ export function buildBookGenerationQuestionnaire(project: Project): BookGenerati
         "Caption depth",
         "How much writing should the book include?",
         defaults.captionDepth,
+      ),
+      buildQuestion(
+        "density",
+        "Page fullness",
+        "How full should each page feel?",
+        defaults.density,
+      ),
+      buildQuestion(
+        "tone",
+        "Writing tone",
+        "What should the captions sound like?",
+        defaults.tone,
       ),
     ],
   };
@@ -1389,6 +1436,14 @@ export function materializeAiBookPlan(
     .replace(/\b\d+\s+spreads?\b/gi, `${repairedPages.length} spreads`)
     .replace(/\b\d+\s+approved photos?\b/gi, `${repairedUsedPhotoIds.size} approved photos`);
   const summary = `${summaryBase} Validator saved ${repairedPages.length} spreads using ${repairedUsedPhotoIds.size} approved photos. Design score ${Math.round(plan.designScore)}.`;
+  const questionnaire = input?.questionnaire;
+  const nextFormatId = questionnaire?.bookSize ?? normalizedProject.draftEditorState!.formatId;
+  const detailPreferences = getQuestionnaireDetailPreferences(
+    questionnaire?.mapMemorabiliaPreference,
+  );
+  const nextDensity =
+    getEditorDensityFromGenerationDensity(questionnaire?.density) ??
+    normalizedProject.draftEditorState!.density;
   const run = input?.run
     ? {
         ...input.run,
@@ -1416,6 +1471,7 @@ export function materializeAiBookPlan(
     {
       bookDraft: {
         ...normalizedProject.bookDraft,
+        format: getBookDraftFormatLabel(nextFormatId),
         id: normalizedProject.bookDraft.id,
         pages: repairedPages,
         status: "reviewing",
@@ -1424,7 +1480,13 @@ export function materializeAiBookPlan(
       draftEditorState: {
         ...normalizedProject.draftEditorState!,
         aiProvider: "ollama",
+        captionTone: questionnaire?.tone ?? normalizedProject.draftEditorState!.captionTone,
+        density: nextDensity,
+        formatId: nextFormatId,
         lastAiRefreshAt: nowIso(),
+        showMaps: detailPreferences.showMaps || normalizedProject.draftEditorState!.showMaps,
+        showMemorabilia:
+          detailPreferences.showMemorabilia || normalizedProject.draftEditorState!.showMemorabilia,
       },
     },
   );

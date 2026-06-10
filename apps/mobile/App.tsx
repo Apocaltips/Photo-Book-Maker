@@ -50,6 +50,7 @@ import {
   togglePageApproval,
   updateBookPageCopy,
   type Project,
+  type BookGenerationQuestionnaireAnswers,
   type BookMakingGuide,
   type ProjectType,
   type PublishedBookDraft,
@@ -1028,7 +1029,9 @@ async function handleInviteCollaborator() {
     replaceProject(remoteProject);
   }
 
-  async function handleGenerateAiBook() {
+  async function handleGenerateAiBook(
+    questionnaire?: Partial<BookGenerationQuestionnaireAnswers>,
+  ) {
     if (!selectedProject || isAiGenerating) {
       return;
     }
@@ -1036,6 +1039,7 @@ async function handleInviteCollaborator() {
     setIsAiGenerating(true);
     const result = await generateAiBookRemote(selectedProject.id, {
       expectedRevision: selectedProject.revision,
+      questionnaire,
     }).catch((caughtError) => {
       Alert.alert(
         "AI Designer failed",

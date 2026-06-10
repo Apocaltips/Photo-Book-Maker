@@ -1059,6 +1059,18 @@ function AiDesignerPanel({
         </label>
         <label className="grid gap-2">
           <span className="text-xs font-semibold uppercase tracking-[0.16em] text-[#7b6f67]">
+            Who is this book for?
+          </span>
+          <input
+            type="text"
+            value={answers.audience}
+            onChange={(event) => onAnswerChange("audience", event.target.value)}
+            placeholder="Us, our kids someday, grandparents, the whole trip group..."
+            className="w-full rounded-[1.1rem] border border-[#00000014] bg-[#fffaf5] px-4 py-3 text-sm text-[#1f1814] outline-none transition-colors focus:border-[#8f4f2e44]"
+          />
+        </label>
+        <label className="grid gap-2">
+          <span className="text-xs font-semibold uppercase tracking-[0.16em] text-[#7b6f67]">
             Moments that must appear
           </span>
           <textarea
@@ -1078,6 +1090,30 @@ function AiDesignerPanel({
             value={answers.coverPreference}
             onChange={(event) => onAnswerChange("coverPreference", event.target.value)}
             className="w-full rounded-[1.1rem] border border-[#00000014] bg-[#fffaf5] px-4 py-3 text-sm text-[#1f1814] outline-none transition-colors focus:border-[#8f4f2e44]"
+          />
+        </label>
+        <label className="grid gap-2">
+          <span className="text-xs font-semibold uppercase tracking-[0.16em] text-[#7b6f67]">
+            Names and privacy
+          </span>
+          <input
+            type="text"
+            value={answers.namesPrivacy}
+            onChange={(event) => onAnswerChange("namesPrivacy", event.target.value)}
+            placeholder="Use first names, avoid kids names, keep captions private..."
+            className="w-full rounded-[1.1rem] border border-[#00000014] bg-[#fffaf5] px-4 py-3 text-sm text-[#1f1814] outline-none transition-colors focus:border-[#8f4f2e44]"
+          />
+        </label>
+        <label className="grid gap-2">
+          <span className="text-xs font-semibold uppercase tracking-[0.16em] text-[#7b6f67]">
+            Maps, food, tickets, and little details
+          </span>
+          <textarea
+            rows={2}
+            value={answers.mapMemorabiliaPreference}
+            onChange={(event) => onAnswerChange("mapMemorabiliaPreference", event.target.value)}
+            placeholder="Include menus and food details, skip maps, use little details between big moments..."
+            className="w-full rounded-[1.1rem] border border-[#00000014] bg-[#fffaf5] px-4 py-3 text-sm leading-6 text-[#1f1814] outline-none transition-colors focus:border-[#8f4f2e44]"
           />
         </label>
 
@@ -1103,6 +1139,26 @@ function AiDesignerPanel({
           </label>
           <label className="grid gap-2">
             <span className="text-xs font-semibold uppercase tracking-[0.16em] text-[#7b6f67]">
+              Writing tone
+            </span>
+            <select
+              value={answers.tone}
+              onChange={(event) =>
+                onAnswerChange(
+                  "tone",
+                  event.target.value as BookGenerationQuestionnaireAnswers["tone"],
+                )
+              }
+              className="w-full rounded-[1.1rem] border border-[#00000014] bg-[#fffaf5] px-4 py-3 text-sm text-[#1f1814] outline-none transition-colors focus:border-[#8f4f2e44]"
+            >
+              <option value="warm">Warm</option>
+              <option value="reflective">Reflective</option>
+              <option value="playful">Playful</option>
+              <option value="factual">Simple and factual</option>
+            </select>
+          </label>
+          <label className="grid gap-2">
+            <span className="text-xs font-semibold uppercase tracking-[0.16em] text-[#7b6f67]">
               Page fullness
             </span>
             <select
@@ -1118,6 +1174,26 @@ function AiDesignerPanel({
               <option value="airy">Airy</option>
               <option value="balanced">Balanced</option>
               <option value="full">Full</option>
+            </select>
+          </label>
+          <label className="grid gap-2">
+            <span className="text-xs font-semibold uppercase tracking-[0.16em] text-[#7b6f67]">
+              Book size
+            </span>
+            <select
+              value={answers.bookSize}
+              onChange={(event) =>
+                onAnswerChange(
+                  "bookSize",
+                  event.target.value as BookGenerationQuestionnaireAnswers["bookSize"],
+                )
+              }
+              className="w-full rounded-[1.1rem] border border-[#00000014] bg-[#fffaf5] px-4 py-3 text-sm text-[#1f1814] outline-none transition-colors focus:border-[#8f4f2e44]"
+            >
+              <option value="12x12-square">Large square</option>
+              <option value="10x10-square">Classic square</option>
+              <option value="8x8-square">Small square</option>
+              <option value="11x8.5-landscape">Landscape</option>
             </select>
           </label>
         </div>

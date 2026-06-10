@@ -285,11 +285,14 @@ export interface BookTemplatePack {
 export type BookGenerationQuestionId =
   | "tripPurpose"
   | "audience"
+  | "bookSize"
   | "mustIncludeMoments"
   | "coverPreference"
   | "namesPrivacy"
   | "mapMemorabiliaPreference"
-  | "captionDepth";
+  | "captionDepth"
+  | "density"
+  | "tone";
 
 export type BookGenerationCaptionDepth = "short" | "balanced" | "story";
 export type BookGenerationDensity = "airy" | "balanced" | "full";

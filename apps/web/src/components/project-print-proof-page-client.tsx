@@ -1,10 +1,13 @@
 "use client";
 
-import { getPreviewDraft, type BookPrintPreviewMode } from "@photo-book-maker/core";
+import {
+  buildProofHtml,
+  getPreviewDraft,
+  type BookPrintPreviewMode,
+} from "@photo-book-maker/core";
 import Link from "next/link";
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
-import { BookPreview } from "@/components/book-preview";
 import { WorkspaceAuthCard } from "@/components/workspace-auth-card";
 import { useProjectWorkspace } from "@/hooks/use-project-workspace";
 
@@ -19,6 +22,7 @@ export function ProjectPrintProofPageClient({
   const selectedDraftId = searchParams.get("draft") ?? undefined;
   const [printPreviewMode, setPrintPreviewMode] =
     useState<BookPrintPreviewMode>("print_safe");
+  const proofFrameRef = useRef<HTMLIFrameElement>(null);
   const workspace = useProjectWorkspace({
     authConfig,
     projectId,
@@ -38,6 +42,31 @@ export function ProjectPrintProofPageClient({
       },
     };
   }, [printPreviewMode, selectedDraftId, workspace.project]);
+
+  const proofHtml = useMemo(() => {
+    if (!workspace.project) {
+      return "";
+    }
+
+    return buildProofHtml(workspace.project, {
+      draftId: selectedDraftId,
+      includeBleedGuides: printPreviewMode === "bleed",
+      includePrintSafeGuides: printPreviewMode === "bleed" || printPreviewMode === "print_safe",
+      projectId: workspace.project.id,
+    });
+  }, [printPreviewMode, selectedDraftId, workspace.project]);
+
+  function printProof() {
+    const proofWindow = proofFrameRef.current?.contentWindow;
+
+    if (proofWindow) {
+      proofWindow.focus();
+      proofWindow.print();
+      return;
+    }
+
+    window.print();
+  }
 
   if (workspace.isAuthLoading || workspace.isProjectLoading) {
     return (
@@ -128,7 +157,7 @@ export function ProjectPrintProofPageClient({
           ))}
           <button
             type="button"
-            onClick={() => window.print()}
+            onClick={printProof}
             className="rounded-full border border-[#1f18141f] bg-[#1f1814] px-4 py-2 text-sm font-medium text-[#f7efe7]"
           >
             Print or save PDF
@@ -148,16 +177,20 @@ export function ProjectPrintProofPageClient({
         </div>
       </section>
 
-      <BookPreview
-        project={workspace.project}
-        draft={previewDraft.draft}
-        draftName={previewDraft.name}
-        draftSavedAt={previewDraft.savedAt}
-        editorState={previewDraft.editorState}
-        selectedThemeId={previewDraft.selectedThemeId}
-        subtitle={previewDraft.subtitle}
-        title={previewDraft.title}
-      />
+      <section className="overflow-hidden rounded-[2rem] border border-[#00000010] bg-white/80 shadow-[0_24px_80px_rgba(31,24,20,0.12)]">
+        <div className="no-print border-b border-[#00000010] bg-[#fffaf5] px-5 py-4 text-sm leading-6 text-[#5a4e47]">
+          Showing the full print proof for {previewDraft.title}. It includes the cover
+          and all {previewDraft.draft.pages.length} spread
+          {previewDraft.draft.pages.length === 1 ? "" : "s"}.
+        </div>
+        <iframe
+          ref={proofFrameRef}
+          title={`${previewDraft.title} full print proof`}
+          srcDoc={proofHtml}
+          className="h-[78vh] w-full bg-[#ece7df] print:h-screen"
+          sandbox="allow-same-origin allow-modals"
+        />
+      </section>
     </main>
   );
 }
