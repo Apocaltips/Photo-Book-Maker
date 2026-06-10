@@ -651,6 +651,27 @@ async function runProjectE2E() {
   }
   project = (await apiJson(`/api/projects/${project.id}`)).project;
 
+  const invalidUploadTicket = await fetchWithTimeout(`${baseUrl}/api/projects/${project.id}/uploads`, {
+    method: "POST",
+    headers: {
+      ...devAuthHeaders,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      contentType: "text/html",
+      fileName: `android-e2e-${stamp}.html`,
+    }),
+  });
+  const invalidUploadBody = await invalidUploadTicket.json().catch(() => ({}));
+  if (
+    invalidUploadTicket.status !== 400 ||
+    !/unsupported photo type/i.test(invalidUploadBody.message ?? "")
+  ) {
+    throw new Error(
+      `Upload ticket route did not reject non-photo content: ${invalidUploadTicket.status}`,
+    );
+  }
+
   const upload = (
     await apiJson(`/api/projects/${project.id}/uploads`, {
       method: "POST",

@@ -13,6 +13,7 @@ import {
 } from "@/lib/alpha-readiness-contract";
 import { getAiWorkerQueueConfig } from "@/lib/server/ai-worker-auth";
 import {
+  createPhotoUploadTicket,
   isLocalObjectStorageEnabled,
   isObjectStorageConfigured,
 } from "@/lib/server/object-storage";
@@ -344,7 +345,7 @@ async function addSupabaseDirectAccessChecks(
   );
 }
 
-function addStorageChecks(checks: ReadinessCheck[], requireProviders: boolean) {
+async function addStorageChecks(checks: ReadinessCheck[], requireProviders: boolean) {
   const objectStorageConfigured = isObjectStorageConfigured();
   const localStorageEnabled = isLocalObjectStorageEnabled();
 
@@ -380,6 +381,58 @@ function addStorageChecks(checks: ReadinessCheck[], requireProviders: boolean) {
       "local upload fallback",
       "Local upload fallback is enabled in this runtime; hosted production should rely on object storage.",
       { localStorageEnabled },
+    );
+  }
+
+  if (!objectStorageConfigured) {
+    addCheck(
+      checks,
+      requireProviders ? "fail" : "skip",
+      "photo upload ticket signing",
+      requireProviders
+        ? "Hosted alpha requires object storage before upload tickets can be signed."
+        : "Upload ticket signing is skipped without object storage in local PDF-first mode.",
+      {
+        localStorageEnabled,
+        objectStorageConfigured,
+      },
+    );
+    return;
+  }
+
+  try {
+    const upload = await createPhotoUploadTicket({
+      contentType: "image/jpeg",
+      fileName: "alpha-readiness-photo.jpg",
+      projectId: "alpha-readiness-probe",
+    });
+    const isRemoteProjectPath = upload.storagePath.startsWith("projects/alpha-readiness-probe/");
+    const hasSignedUrls = upload.uploadUrl.startsWith("http") && upload.downloadUrl.startsWith("http");
+
+    addCheck(
+      checks,
+      isRemoteProjectPath && hasSignedUrls ? "pass" : "fail",
+      "photo upload ticket signing",
+      isRemoteProjectPath && hasSignedUrls
+        ? "Object storage can mint a signed photo upload ticket without writing data."
+        : "Object storage upload ticket shape is invalid.",
+      {
+        contentType: upload.contentType,
+        expiresInSeconds: upload.expiresInSeconds,
+        hasDownloadUrl: Boolean(upload.downloadUrl),
+        hasUploadUrl: Boolean(upload.uploadUrl),
+        storagePathPrefix: upload.storagePath.split("/").slice(0, 2).join("/"),
+      },
+    );
+  } catch (error) {
+    addCheck(
+      checks,
+      "fail",
+      "photo upload ticket signing",
+      error instanceof Error ? error.message : "Unable to create an object-storage upload ticket.",
+      {
+        objectStorageConfigured,
+      },
     );
   }
 }
@@ -586,7 +639,7 @@ export async function GET(request: Request) {
   addTemplateCatalogChecks(checks);
   addAuthChecks(checks, requireProviders);
   await addSupabaseDirectAccessChecks(checks, requireProviders);
-  addStorageChecks(checks, requireProviders);
+  await addStorageChecks(checks, requireProviders);
   addWorkerChecks(checks, mode, requireWorker);
   addPhaseTwoProviderChecks(checks, mode);
   const projects = await addProjectStoreChecks(

@@ -111,6 +111,10 @@ assert(
   alphaReadinessRoute.includes("isDirectAccessDenied"),
   "Alpha readiness route must fail closed unless the anon direct-access probe is denied.",
 );
+assert(
+  alphaReadinessRoute.includes("photo upload ticket signing"),
+  "Alpha readiness route must prove object storage can mint a photo upload ticket.",
+);
 
 assert(!shouldRequireProviderInfrastructure("local", {}), "local mode must not require providers");
 assert(shouldRequireProviderInfrastructure("hosted", {}), "hosted mode must require providers");

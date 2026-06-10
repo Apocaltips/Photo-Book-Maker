@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { authorizeProjectRequest } from "@/lib/server/auth";
 import {
   createPhotoUploadTicket,
+  getPhotoUploadInputError,
   isLocalObjectStorageEnabled,
   isObjectStorageConfigured,
 } from "@/lib/server/object-storage";
@@ -31,17 +32,20 @@ export async function POST(
     );
   }
 
-  if (!body.fileName || !body.contentType) {
+  const inputError = getPhotoUploadInputError(body);
+  if (inputError) {
     return NextResponse.json(
-      { message: "fileName and contentType are required." },
+      { message: inputError },
       { status: 400 },
     );
   }
+  const fileName = body.fileName ?? "";
+  const contentType = body.contentType ?? "";
 
   const upload = await createPhotoUploadTicket({
     projectId,
-    fileName: body.fileName,
-    contentType: body.contentType,
+    fileName,
+    contentType,
     origin: getRequestOrigin(request),
   });
 

@@ -14,10 +14,47 @@ type UploadTicket = {
   uploadUrl: string;
 };
 
+export const SUPPORTED_PHOTO_UPLOAD_CONTENT_TYPES = [
+  "image/jpeg",
+  "image/png",
+  "image/webp",
+  "image/heic",
+  "image/heif",
+] as const;
+
 const uploadExpirySeconds = 60 * 15;
 const downloadExpirySeconds = 60 * 60 * 24 * 7;
+const maxUploadFileNameLength = 180;
 
 let cachedClient: S3Client | null | undefined;
+
+function normalizeContentType(contentType: string) {
+  return contentType.split(";")[0]?.trim().toLowerCase() ?? "";
+}
+
+export function getPhotoUploadInputError(input: {
+  contentType?: string;
+  fileName?: string;
+}) {
+  const fileName = input.fileName?.trim() ?? "";
+  const contentType = normalizeContentType(input.contentType ?? "");
+
+  if (!fileName || !contentType) {
+    return "fileName and contentType are required.";
+  }
+
+  if (fileName.length > maxUploadFileNameLength) {
+    return `fileName must be ${maxUploadFileNameLength} characters or fewer.`;
+  }
+
+  if (!SUPPORTED_PHOTO_UPLOAD_CONTENT_TYPES.includes(
+    contentType as (typeof SUPPORTED_PHOTO_UPLOAD_CONTENT_TYPES)[number],
+  )) {
+    return `Unsupported photo type. Upload JPEG, PNG, WebP, HEIC, or HEIF photos.`;
+  }
+
+  return null;
+}
 
 function sanitizeFileName(fileName: string) {
   const normalized = fileName
@@ -205,6 +242,12 @@ export async function createPhotoUploadTicket(input: {
   origin?: string;
   projectId: string;
 }) {
+  const validationError = getPhotoUploadInputError(input);
+  if (validationError) {
+    throw new Error(validationError);
+  }
+
+  const contentType = normalizeContentType(input.contentType);
   const bucket = getBucketName();
   const client = getS3Client();
 
@@ -230,7 +273,7 @@ export async function createPhotoUploadTicket(input: {
       uploadUrl: localUrl,
       downloadUrl: localUrl,
       storagePath,
-      contentType: input.contentType,
+      contentType,
       expiresInSeconds: uploadExpirySeconds,
     } satisfies UploadTicket;
   }
@@ -246,7 +289,7 @@ export async function createPhotoUploadTicket(input: {
     new PutObjectCommand({
       Bucket: bucket,
       Key: storagePath,
-      ContentType: input.contentType,
+      ContentType: contentType,
       CacheControl: "public, max-age=31536000, immutable",
     }),
     { expiresIn: uploadExpirySeconds },
@@ -261,7 +304,7 @@ export async function createPhotoUploadTicket(input: {
     uploadUrl,
     downloadUrl,
     storagePath,
-    contentType: input.contentType,
+    contentType,
     expiresInSeconds: uploadExpirySeconds,
   } satisfies UploadTicket;
 }

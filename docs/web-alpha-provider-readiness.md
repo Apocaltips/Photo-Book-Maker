@@ -48,7 +48,7 @@ Phase 2 fails until real provider accounts are configured.
 | Mode | Command | Fails On | Notes |
 | --- | --- | --- | --- |
 | Local AI alpha | `npm run test:alpha:readiness` with `ALPHA_READINESS_MODE=local` | broken app shell, template catalog, local AI health, stale queue, required local checks | Used before internal device testing and Cap Cana/60-photo proof validation. |
-| Hosted web alpha | `npm run test:alpha:readiness` with `ALPHA_READINESS_MODE=hosted` | missing hosted Supabase/R2/private-worker config, bad auth gate, direct Supabase project-table exposure, stale queue, missing saved quality score | Commerce, email, monitoring, and direct print provider gaps are warnings unless explicitly required. |
+| Hosted web alpha | `npm run test:alpha:readiness` with `ALPHA_READINESS_MODE=hosted` | missing hosted Supabase/R2/private-worker config, bad auth gate, direct Supabase project-table exposure, failed photo upload-ticket signing, stale queue, missing saved quality score | Commerce, email, monitoring, and direct print provider gaps are warnings unless explicitly required. |
 | Hosted proof alpha | `npm run test:hosted:alpha` | failed hosted readiness, missing tester bearer token, missing hosted project id/title, proof-quality failures | Final gate before family/friend testers because it proves a real hosted generated proof can render with authenticated project access. |
 | Provider alpha | `npm run test:provider:readiness` | missing Stripe, email, Sentry/PostHog, direct print provider adapter, or sample-order confirmation | Used only after PDF quality is proven and the first print-provider sandbox/sample path is being wired. |
 
@@ -195,6 +195,10 @@ generation to include a quality score at or above
 It also probes the `photo_book_projects` table with the public anon key and
 fails hosted readiness unless direct table access is denied, because project
 payloads must stay behind the Next API service-role path.
+For uploads, hosted readiness mints a synthetic JPEG upload ticket without
+writing an object; that catches missing or malformed R2/S3 signing config
+before a tester tries to upload a trip batch. The upload-ticket route only
+accepts JPEG, PNG, WebP, HEIC, and HEIF files.
 `npm run test:provider:readiness` is also read-only. It defaults
 `ALPHA_READINESS_MODE=provider` and requires the protected readiness route, so
 it should fail until hosted auth/storage/private-worker, Stripe, email,

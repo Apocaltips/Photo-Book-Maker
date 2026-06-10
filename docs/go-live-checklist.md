@@ -142,8 +142,9 @@ The authoritative API for v1 is the Next.js app in `apps/web`.
     `ALPHA_READINESS_SECRET` set in the local shell. Hosted mode calls the
     protected `/api/alpha/readiness` route so the deployed app proves its own
     Supabase, R2, project-store, template-catalog, private-worker setup,
-    direct Supabase project-table access denial, clean generation queue state,
-    and latest saved AI generation quality score.
+    direct Supabase project-table access denial, synthetic photo upload-ticket
+    signing, clean generation queue state, and latest saved AI generation
+    quality score.
     Treat any failed check as a no-go for family/friend testers.
 11. After one hosted tester project has a saved AI generation, run
     `npm run test:hosted:alpha` with `HOSTED_ALPHA_BASE_URL`,
