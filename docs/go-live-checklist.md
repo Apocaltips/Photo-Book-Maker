@@ -9,6 +9,9 @@ This repo can run in two backend modes:
 
 1. Create a new Supabase project.
 2. In the SQL editor, run [`docs/supabase-photo-book-schema.sql`](supabase-photo-book-schema.sql).
+   The schema enables RLS, revokes `anon` and `authenticated` direct table
+   access, and keeps project payload reads/writes behind the Next API service
+   role path.
 3. Copy:
    - `Project URL`
    - `anon` key
@@ -283,6 +286,7 @@ and `PRINT_PROVIDER_SAMPLE_ORDER_CONFIRMED=1`.
 ```bash
 npm ci
 npm run test
+npm run test:readiness:contract
 npm run test:alpha:readiness
 npm run test:e2e:web
 npm run test:ai:health

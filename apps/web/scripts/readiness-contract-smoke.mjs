@@ -10,6 +10,7 @@ import {
 } from "../src/lib/alpha-readiness-contract.js";
 
 const envExampleUrl = new URL("../../../.env.example", import.meta.url);
+const supabaseSchemaUrl = new URL("../../../docs/supabase-photo-book-schema.sql", import.meta.url);
 
 function assert(condition, message) {
   if (!condition) {
@@ -46,7 +47,20 @@ function assertStatus(checks, name, status) {
   );
 }
 
+function normalizeSql(source) {
+  return source.toLowerCase().replace(/\s+/g, " ").trim();
+}
+
+function assertSqlContains(sql, expected) {
+  const normalizedExpected = normalizeSql(expected);
+  assert(
+    sql.includes(normalizedExpected),
+    `Supabase schema must include: ${normalizedExpected}`,
+  );
+}
+
 const envExample = await readFile(envExampleUrl, "utf8");
+const supabaseSchema = normalizeSql(await readFile(supabaseSchemaUrl, "utf8"));
 const envKeys = getEnvExampleKeys(envExample);
 const missingEnvExampleKeys = getReadinessContractEnvNames().filter((key) => !envKeys.has(key));
 
@@ -58,6 +72,31 @@ assert(
 assert(
   ALLOWED_PRINT_PROVIDERS.includes("manual_pdf") && ALLOWED_PRINT_PROVIDERS.includes("peecho"),
   "Allowed print providers must include Phase 1 manual_pdf and a direct print candidate.",
+);
+assertSqlContains(
+  supabaseSchema,
+  "alter table public.photo_book_projects enable row level security",
+);
+assertSqlContains(
+  supabaseSchema,
+  "alter table public.photo_book_projects force row level security",
+);
+assertSqlContains(supabaseSchema, "revoke all on table public.photo_book_projects from anon");
+assertSqlContains(
+  supabaseSchema,
+  "revoke all on table public.photo_book_projects from authenticated",
+);
+assertSqlContains(
+  supabaseSchema,
+  "grant select, insert, update, delete on table public.photo_book_projects to service_role",
+);
+assertSqlContains(
+  supabaseSchema,
+  "revoke execute on function public.touch_photo_book_project_updated_at() from anon",
+);
+assertSqlContains(
+  supabaseSchema,
+  "revoke execute on function public.touch_photo_book_project_updated_at() from authenticated",
 );
 
 assert(!shouldRequireProviderInfrastructure("local", {}), "local mode must not require providers");
