@@ -49,6 +49,10 @@ EXPO_PUBLIC_API_BASE_URL=http://192.168.1.50:3000/api
 npm run dev:web
 ```
 
+Open `http://127.0.0.1:3000/ai-health` before tester sessions to confirm
+Ollama, required local models, project storage mode, and the latest generation
+quality score.
+
 6. In a second terminal, start Expo:
 
 ```bash
@@ -74,12 +78,14 @@ See:
 
 - [`docs/supabase-photo-book-schema.sql`](docs/supabase-photo-book-schema.sql)
 - [`docs/go-live-checklist.md`](docs/go-live-checklist.md)
+- [`docs/web-alpha-provider-readiness.md`](docs/web-alpha-provider-readiness.md)
 
 ## Validation
 
 ```bash
 npm run test
 npm run test:e2e:web
+npm run test:ai:health
 npm run test:ai:local
 npm run typecheck
 npm run lint

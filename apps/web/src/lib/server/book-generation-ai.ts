@@ -76,7 +76,9 @@ function parsePlannerContent(content: string) {
 }
 
 type GenerationRunInput = {
+  onRunUpdate?: (run: GenerationRun) => Promise<void> | void;
   questionnaire?: Partial<BookGenerationQuestionnaireAnswers>;
+  runId?: string;
 };
 
 type OllamaChatMessage = {
@@ -97,6 +99,105 @@ type PhotoAesthetic = {
   colorfulness: number;
   saturation: number;
 };
+
+type OllamaTagsResponse = {
+  models?: Array<{
+    digest?: string;
+    modified_at?: string;
+    name?: string;
+    size?: number;
+  }>;
+};
+
+export function getLocalAiRuntimeConfig() {
+  return {
+    baseUrl: LOCAL_AI_BASE_URL,
+    fallbackPlannerModel: LOCAL_AI_FALLBACK_PLANNER_MODEL,
+    plannerModel: LOCAL_AI_PLANNER_MODEL,
+    plannerTimeoutMs: PLANNER_TIMEOUT_MS,
+    provider: process.env.AI_DRAFT_PROVIDER ?? "ollama",
+    visionImageMaxEdge: VISION_IMAGE_MAX_EDGE,
+    visionMaxPhotos: VISION_MAX_PHOTOS,
+    visionModel: LOCAL_AI_VISION_MODEL,
+    visionTimeoutMs: VISION_TIMEOUT_MS,
+    visionTimeBudgetMs: VISION_TIME_BUDGET_MS,
+  };
+}
+
+export async function checkLocalAiHealth() {
+  const config = getLocalAiRuntimeConfig();
+  const expectedModels = [
+    { name: config.plannerModel, role: "planner" },
+    { name: config.fallbackPlannerModel, role: "fallback-planner" },
+    { name: config.visionModel, role: "vision" },
+  ];
+
+  try {
+    const startedAt = Date.now();
+    const response = await fetch(`${LOCAL_AI_BASE_URL}/api/tags`, {
+      signal: AbortSignal.timeout(2500),
+    });
+    const elapsedMs = Date.now() - startedAt;
+
+    if (!response.ok) {
+      return {
+        config,
+        elapsedMs,
+        expectedModels: expectedModels.map((model) => ({
+          ...model,
+          installed: false,
+        })),
+        missingModels: expectedModels.map((model) => model.name),
+        ollamaReachable: false,
+        status: "unhealthy" as const,
+        warning: `Ollama returned ${response.status} from /api/tags.`,
+      };
+    }
+
+    const body = (await response.json()) as OllamaTagsResponse;
+    const installedNames = new Set(
+      (body.models ?? [])
+        .map((model) => model.name)
+        .filter((name): name is string => Boolean(name)),
+    );
+    const modelStatus = expectedModels.map((model) => ({
+      ...model,
+      installed: installedNames.has(model.name),
+    }));
+    const missingModels = modelStatus
+      .filter((model) => !model.installed)
+      .map((model) => model.name);
+
+    return {
+      config,
+      elapsedMs,
+      expectedModels: modelStatus,
+      installedModelCount: installedNames.size,
+      missingModels,
+      ollamaReachable: true,
+      status: missingModels.length ? "degraded" as const : "healthy" as const,
+      warning: missingModels.length
+        ? `Missing local model(s): ${missingModels.join(", ")}.`
+        : null,
+    };
+  } catch (error) {
+    return {
+      config,
+      elapsedMs: null,
+      expectedModels: expectedModels.map((model) => ({
+        ...model,
+        installed: false,
+      })),
+      missingModels: expectedModels.map((model) => model.name),
+      ollamaReachable: false,
+      status: "unhealthy" as const,
+      warning:
+        error instanceof Error
+          ? `Ollama is not reachable: ${error.message}`
+          : "Ollama is not reachable.",
+    };
+  }
+}
 
 function normalizeJsonResponse(responseBody: OllamaChatResponse) {
   return (responseBody.message?.content ?? responseBody.response ?? "").trim();
@@ -142,6 +243,17 @@ async function postOllamaJson(input: {
   }
 
   return content;
+}
+
+async function notifyGenerationRun(
+  input: GenerationRunInput,
+  run: GenerationRun,
+) {
+  try {
+    await input.onRunUpdate?.(run);
+  } catch {
+    // Generation should continue even when progress persistence is temporarily unavailable.
+  }
 }
 
 async function readPhotoImageBase64(photo: PhotoAsset) {
@@ -489,7 +601,7 @@ function buildPlannerPrompt(input: {
       orientation: photo.orientation,
       title: photo.title,
     })),
-    templateCatalog: getAiTemplateCatalogForPrompt(),
+    templateCatalog: getAiTemplateCatalogForPrompt(input.project.draftEditorState?.templatePackId),
   };
 }
 
@@ -863,15 +975,24 @@ export async function generateProjectBookWithLocalAi(
   };
   let run = createGenerationRun({
     fallbackPlanner: LOCAL_AI_FALLBACK_PLANNER_MODEL,
+    id: input.runId,
     planner: LOCAL_AI_PLANNER_MODEL,
     progress: ["generation requested"],
     status: "analyzing_photos",
     vision: LOCAL_AI_VISION_MODEL,
   });
+  await notifyGenerationRun(input, run);
 
   const analyzed = await analyzeProjectPhotos(project, run);
   const aesthetics = await analyzeProjectPhotoAesthetics(project);
-  run = analyzed.run;
+  run = {
+    ...analyzed.run,
+    progress: [
+      ...analyzed.run.progress,
+      "measured photo brightness, saturation, and color balance",
+    ],
+  };
+  await notifyGenerationRun(input, run);
 
   const planner = await requestPlannerPlan({
     aesthetics,
@@ -890,6 +1011,7 @@ export async function generateProjectBookWithLocalAi(
     status: "validating",
     validationWarnings: [...run.validationWarnings, ...planner.warnings, ...planner.plan.warnings],
   };
+  await notifyGenerationRun(input, run);
 
   const nextProject = materializeAiBookPlan(
     {

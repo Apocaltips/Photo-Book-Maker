@@ -143,8 +143,20 @@ function assertAcceptance(project, templateIds) {
       `approved photo usage ${Math.round(usagePercent * 100)}% is below the 85% small-batch target`,
     );
   }
-  if (pages.length < 6 || pages.length > 8) {
-    failures.push(`spread count ${pages.length} is outside the 6-8 target`);
+  if (approvedPhotos.length > 25 && usagePercent < 0.35) {
+    failures.push(
+      `approved photo usage ${Math.round(usagePercent * 100)}% is below the 35% large-batch curation target`,
+    );
+  }
+  if (approvedPhotos.length <= 25 && (pages.length < 6 || pages.length > 8)) {
+    failures.push(`spread count ${pages.length} is outside the 6-8 small-batch target`);
+  }
+  if (
+    approvedPhotos.length >= 26 &&
+    approvedPhotos.length <= 60 &&
+    (pages.length < 10 || pages.length > 14)
+  ) {
+    failures.push(`spread count ${pages.length} is outside the 10-14 large-batch target`);
   }
   if (unsupportedTemplates.length) {
     failures.push(`unsupported template id(s): ${unsupportedTemplates.join(", ")}`);
@@ -226,6 +238,15 @@ const runResponse = await apiJson(`/api/projects/${initialProject.id}/generation
 const project = runResponse.project;
 const run = runResponse.run ?? project.generationRuns?.[0];
 const acceptance = assertAcceptance(project, templateIds);
+const qualityReport = run?.qualityReport;
+if (qualityReport?.warnings?.length) {
+  acceptance.failures.push(
+    ...qualityReport.warnings.map((warning) => `quality report warning: ${warning}`),
+  );
+}
+if (qualityReport && qualityReport.score < 75) {
+  acceptance.failures.push(`quality score ${qualityReport.score}/100 is below the 75 alpha gate`);
+}
 const elapsedMs = Date.now() - startedAt;
 const approxPromptPressureTokens = Math.round(
   JSON.stringify({
@@ -249,6 +270,7 @@ const summary = {
   modelNames: run?.modelNames,
   projectId: project.id,
   projectRevision: project.revision,
+  qualityReport,
   runId: run?.id,
   runStatus: run?.status,
   validationWarnings: run?.validationWarnings ?? [],

@@ -1141,10 +1141,18 @@ export function addPhotosToProject(
   photos: AddLocalPhotoInput[],
 ): Project {
   const knownPhotoKeys = new Set(
-    project.photos.map((photo) => getImportedPhotoDuplicateKey(photo.title)),
+    project.photos.map((photo) =>
+      getImportedPhotoDuplicateKey({
+        contentHash: photo.contentHash,
+        title: photo.title,
+      }),
+    ),
   );
   const nextPhotos = photos.flatMap<PhotoAsset>((asset, index) => {
-    const duplicateKey = getImportedPhotoDuplicateKey(asset.title);
+    const duplicateKey = getImportedPhotoDuplicateKey({
+      contentHash: asset.contentHash,
+      title: asset.title,
+    });
     if (knownPhotoKeys.has(duplicateKey)) {
       return [];
     }
@@ -1162,6 +1170,7 @@ export function addPhotosToProject(
       id: `photo-local-${Date.now()}-${index}`,
       title: asset.title,
       uploaderId: asset.uploaderId,
+      contentHash: asset.contentHash,
       imageUri: asset.uri,
       storagePath: asset.storagePath,
       mimeType: asset.mimeType,
@@ -1296,8 +1305,13 @@ export function regenerateBookDraft(project: Project): Project {
   };
 }
 
-function getImportedPhotoDuplicateKey(title: string) {
-  return title.trim().toLowerCase().replace(/[^a-z0-9]+/g, "-");
+function getImportedPhotoDuplicateKey(input: { contentHash?: string; title: string }) {
+  const normalizedHash = input.contentHash?.trim().toLowerCase();
+  if (normalizedHash) {
+    return `hash:${normalizedHash}`;
+  }
+
+  return `title:${input.title.trim().toLowerCase().replace(/[^a-z0-9]+/g, "-")}`;
 }
 
 function chooseTemplateForPage(

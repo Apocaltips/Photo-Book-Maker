@@ -1,4 +1,10 @@
-import type { BookGenerationQuestionnaireAnswers } from "@photo-book-maker/core";
+import {
+  createGenerationRun,
+  markGenerationRunFailed,
+  upsertGenerationRun,
+  type BookGenerationQuestionnaireAnswers,
+  type GenerationRun,
+} from "@photo-book-maker/core";
 import { NextResponse } from "next/server";
 import { authorizeProjectRequest } from "@/lib/server/auth";
 import { generateProjectBookWithLocalAi } from "@/lib/server/book-generation-ai";
@@ -16,26 +22,72 @@ export async function POST(
   request: Request,
   { params }: { params: Promise<{ projectId: string }> },
 ) {
+  let failureProjectId: string | undefined;
+  let failureRunId: string | undefined;
+
   try {
     const { projectId } = await params;
+    failureProjectId = projectId;
     const auth = await authorizeProjectRequest(request, projectId, "edit");
     if ("response" in auth) {
       return auth.response;
     }
 
     const body = (await request.json().catch(() => ({}))) as GenerationRunBody;
-    let latestRunId: string | undefined;
-    const project = await updateProject(
+    const queuedRun = createGenerationRun({
+      progress: ["generation queued"],
+      status: "queued",
+    });
+    failureRunId = queuedRun.id;
+    const startedProject = await updateProject(
       projectId,
-      async (current) => {
-        const result = await generateProjectBookWithLocalAi(current, {
-          questionnaire: body.questionnaire,
-        });
-        latestRunId = result.run.id;
-        return result.project;
+      (current) => {
+        return upsertGenerationRun(
+          {
+            ...current,
+            generationQuestionnaire: {
+              ...(current.generationQuestionnaire ?? {}),
+              ...(body.questionnaire ?? {}),
+            },
+          },
+          queuedRun,
+        );
       },
       {
         expectedRevision: body.expectedRevision,
+      },
+    );
+
+    if (!startedProject) {
+      return NextResponse.json({ message: "Project not found." }, { status: 404 });
+    }
+
+    const persistRun = async (run: GenerationRun) => {
+      await updateProject(
+        projectId,
+        (current) => upsertGenerationRun(current, run),
+        {
+          skipRevisionAdvance: true,
+        },
+      );
+    };
+
+    let latestRun = queuedRun;
+    const result = await generateProjectBookWithLocalAi(startedProject, {
+      onRunUpdate: async (run) => {
+        latestRun = run;
+        await persistRun(run);
+      },
+      questionnaire: body.questionnaire,
+      runId: queuedRun.id,
+    });
+    latestRun = result.run;
+
+    const project = await updateProject(
+      projectId,
+      () => result.project,
+      {
+        expectedRevision: startedProject.revision,
         activity: {
           actorEmail: auth.user.email,
           actorId: auth.user.id,
@@ -49,9 +101,8 @@ export async function POST(
       return NextResponse.json({ message: "Project not found." }, { status: 404 });
     }
 
-    const run = latestRunId
-      ? project.generationRuns?.find((entry) => entry.id === latestRunId)
-      : project.generationRuns?.[0];
+    const run = project.generationRuns?.find((entry) => entry.id === latestRun.id) ??
+      project.generationRuns?.[0];
 
     return NextResponse.json({
       message: "AI book draft generated.",
@@ -59,12 +110,25 @@ export async function POST(
       run,
     });
   } catch (error) {
+    const message =
+      error instanceof Error ? error.message : "AI book generation failed.";
+
+    if (failureProjectId && failureRunId) {
+      await updateProject(
+        failureProjectId,
+        (current) => markGenerationRunFailed(current, failureRunId!, message),
+        {
+          skipRevisionAdvance: true,
+        },
+      ).catch(() => {
+        // The original error is more useful to return than a secondary failure-write error.
+      });
+    }
+
     if (isRevisionConflictError(error)) {
       return mutationErrorResponse(error, "Unable to generate this AI draft.");
     }
 
-    const message =
-      error instanceof Error ? error.message : "AI book generation failed.";
     return NextResponse.json(
       { message },
       {

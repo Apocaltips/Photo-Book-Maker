@@ -20,6 +20,11 @@ const devAuthHeaders = {
   "X-Photo-Book-Dev-Id": "android-tester",
   "X-Photo-Book-Dev-Name": "Android Tester",
 };
+const otherDevAuthHeaders = {
+  "X-Photo-Book-Dev-Email": "family-friend@example.com",
+  "X-Photo-Book-Dev-Id": "family-friend",
+  "X-Photo-Book-Dev-Name": "Family Friend",
+};
 
 async function detectExistingBaseUrl() {
   if (process.env.E2E_WEB_BASE_URL) {
@@ -188,6 +193,26 @@ async function runProjectE2E() {
 
   if (!project?.id || project.revision !== 1) {
     throw new Error("Project creation did not return a revisioned project.");
+  }
+
+  const forbiddenProjectResponse = await fetchWithTimeout(`${baseUrl}/api/projects/${project.id}`, {
+    headers: otherDevAuthHeaders,
+  });
+  if (forbiddenProjectResponse.status !== 403) {
+    throw new Error(
+      `Cross-account project access was not blocked: ${forbiddenProjectResponse.status}`,
+    );
+  }
+
+  const otherProjectList = await fetchWithTimeout(`${baseUrl}/api/projects`, {
+    headers: otherDevAuthHeaders,
+  });
+  const otherProjectListBody = await otherProjectList.json();
+  if (
+    !otherProjectList.ok ||
+    otherProjectListBody.projects?.some((entry) => entry.id === project.id)
+  ) {
+    throw new Error("Cross-account project list leaked another user's project.");
   }
 
   await assertRoute(
@@ -382,6 +407,19 @@ try {
       body.catalog?.spreadTemplates?.length >= 64
     );
   }, "template catalog smoke");
+
+  await assertRoute("/api/ai/local/health", (response, text) => {
+    if (!response.ok) {
+      return false;
+    }
+
+    const body = JSON.parse(text);
+    return (
+      Boolean(body.ai?.config?.plannerModel) &&
+      Array.isArray(body.ai?.expectedModels) &&
+      body.store?.mode
+    );
+  }, "local AI health route smoke");
 
   await assertRoute(
     "/api/projects/nonexistent/proof",

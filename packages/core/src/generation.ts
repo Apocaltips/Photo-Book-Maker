@@ -18,6 +18,7 @@ import type {
   AiBookPlanSpread,
   AiCropRegion,
   AiPhotoRole,
+  BookGenerationQualityReport,
   BookGenerationQuestion,
   BookGenerationQuestionnaire,
   BookGenerationQuestionnaireAnswers,
@@ -486,6 +487,7 @@ export function buildBookGenerationQuestionnaire(project: Project): BookGenerati
 export function getPhotoInsightCacheKey(photo: PhotoAsset) {
   return [
     photo.id,
+    photo.contentHash ?? "",
     photo.storagePath ?? photo.imageUri ?? "local",
     photo.capturedAt,
     photo.versions
@@ -1444,7 +1446,7 @@ export function materializeAiBookPlan(
   const nextDensity =
     getEditorDensityFromGenerationDensity(questionnaire?.density) ??
     normalizedProject.draftEditorState!.density;
-  const run = input?.run
+  const baseRun = input?.run
     ? {
         ...input.run,
         completedAt: input.run.completedAt ?? nowIso(),
@@ -1457,16 +1459,13 @@ export function materializeAiBookPlan(
       }
     : undefined;
 
-  return saveWorkingDraft(
+  const savedProject = saveWorkingDraft(
     {
       ...normalizedProject,
       generationQuestionnaire: {
         ...(normalizedProject.generationQuestionnaire ?? {}),
         ...(input?.questionnaire ?? {}),
       },
-      generationRuns: run
-        ? [run, ...(normalizedProject.generationRuns ?? [])].slice(0, 20)
-        : normalizedProject.generationRuns,
     },
     {
       bookDraft: {
@@ -1490,6 +1489,22 @@ export function materializeAiBookPlan(
       },
     },
   );
+
+  if (!baseRun) {
+    return savedProject;
+  }
+
+  const qualityReport = scoreGeneratedBook(savedProject);
+  const run: GenerationRun = {
+    ...baseRun,
+    qualityReport,
+    validationWarnings: uniqueStrings([
+      ...baseRun.validationWarnings,
+      ...qualityReport.warnings,
+    ]),
+  };
+
+  return upsertGenerationRun(savedProject, run);
 }
 
 export function createGenerationRun(input?: {
@@ -1515,7 +1530,150 @@ export function createGenerationRun(input?: {
   };
 }
 
-export function getAiTemplateCatalogForPrompt() {
+export function upsertGenerationRun(project: Project, run: GenerationRun): Project {
+  const existingRuns = project.generationRuns ?? [];
+  const withoutRun = existingRuns.filter((entry) => entry.id !== run.id);
+
+  return {
+    ...project,
+    generationRuns: [run, ...withoutRun].slice(0, 20),
+  };
+}
+
+export function markGenerationRunFailed(
+  project: Project,
+  runId: string,
+  errorMessage: string,
+): Project {
+  const generationRuns = project.generationRuns ?? [];
+  const existingRun = generationRuns.find((entry) => entry.id === runId);
+  const failedRun: GenerationRun = {
+    ...(existingRun ??
+      createGenerationRun({
+        id: runId,
+        progress: ["generation failed before it could be saved"],
+      })),
+    completedAt: existingRun?.completedAt ?? nowIso(),
+    errorMessage,
+    progress: uniqueStrings([
+      ...(existingRun?.progress ?? []),
+      "generation failed safely",
+    ]),
+    status: "failed",
+    validationWarnings: uniqueStrings([
+      ...(existingRun?.validationWarnings ?? []),
+      errorMessage,
+    ]),
+  };
+
+  return upsertGenerationRun(project, failedRun);
+}
+
+export function scoreGeneratedBook(project: Project): BookGenerationQualityReport {
+  const normalizedProject = normalizeProjectDraftState(project);
+  const approvedPhotos = normalizedProject.photos.filter((photo) => photo.approved);
+  const pages = normalizedProject.bookDraft.pages;
+  const knownTemplateIds = new Set(SPREAD_TEMPLATES.map((template) => template.id));
+  const usedPhotoIds = pages.flatMap((page) =>
+    page.photoIds.filter((photoId) =>
+      approvedPhotos.some((photo) => photo.id === photoId),
+    ),
+  );
+  const duplicatePhotoIds = usedPhotoIds.filter(
+    (photoId, index) => usedPhotoIds.indexOf(photoId) !== index,
+  );
+  const uniqueUsedPhotoIds = new Set(usedPhotoIds);
+  const captions = pages
+    .map((page) => `${page.title ?? ""} ${page.caption ?? ""}`)
+    .join(" ");
+  const unsupportedTemplateIds = uniqueStrings(
+    pages
+      .map((page) => page.templateId)
+      .filter(
+        (templateId): templateId is string =>
+          typeof templateId === "string" && !knownTemplateIds.has(templateId),
+      ),
+  );
+  const usedPhotoPercent = approvedPhotos.length
+    ? uniqueUsedPhotoIds.size / approvedPhotos.length
+    : 0;
+  const hasHeroSpread = pages.some((page) =>
+    /opener|highlight/.test(page.storyBeat) ||
+    /hero|full-bleed|cinematic/.test(page.templateId ?? ""),
+  );
+  const hasDetailGridSpread = pages.some((page) =>
+    /details/.test(page.storyBeat) ||
+    /grid|collage|family-recap|mosaic/.test(page.templateId ?? ""),
+  );
+  const hasQuietCaptionSpread = pages.some((page) =>
+    /reflection|closing/.test(page.storyBeat) ||
+    /caption|quiet/.test(page.templateId ?? ""),
+  );
+  const hasTripContext = /cap cana|dominican republic|dominican|trip|yearbook|vacation|family/i.test(
+    `${normalizedProject.title} ${normalizedProject.subtitle} ${normalizedProject.bookDraft.summary} ${captions}`,
+  );
+  const hasPlaceholderCopy = /caption text|placeholder|lorem ipsum|spread title|photo-id/i.test(
+    captions,
+  );
+  const warnings: string[] = [];
+
+  if (!pages.length) {
+    warnings.push("No book spreads were generated.");
+  }
+  if (duplicatePhotoIds.length) {
+    warnings.push("A generated draft reused at least one approved photo.");
+  }
+  if (unsupportedTemplateIds.length) {
+    warnings.push("A generated draft referenced unsupported template IDs.");
+  }
+  if (approvedPhotos.length <= 25 && usedPhotoPercent < 0.85) {
+    warnings.push("Small-batch generation used fewer than 85% of approved photos.");
+  }
+  if (approvedPhotos.length >= 26 && usedPhotoPercent < 0.35) {
+    warnings.push("Large-batch generation used fewer than 35% of approved photos.");
+  }
+  if (!hasHeroSpread) {
+    warnings.push("The book needs at least one hero or opener spread.");
+  }
+  if (!hasDetailGridSpread) {
+    warnings.push("The book needs at least one detail or grid spread.");
+  }
+  if (!hasQuietCaptionSpread) {
+    warnings.push("The book needs at least one quiet caption, reflection, or closing spread.");
+  }
+  if (!hasTripContext) {
+    warnings.push("Generated captions should include specific trip or family context.");
+  }
+  if (hasPlaceholderCopy) {
+    warnings.push("Generated captions contain placeholder language.");
+  }
+
+  const score =
+    100 -
+    warnings.length * 9 -
+    duplicatePhotoIds.length * 8 -
+    unsupportedTemplateIds.length * 10 -
+    (hasPlaceholderCopy ? 24 : 0);
+
+  return {
+    approvedPhotoCount: approvedPhotos.length,
+    duplicatePhotoIds: uniqueStrings(duplicatePhotoIds),
+    hasDetailGridSpread,
+    hasHeroSpread,
+    hasPlaceholderCopy,
+    hasQuietCaptionSpread,
+    hasTripContext,
+    pageCount: pages.length,
+    score: Math.max(0, Math.min(100, Math.round(score))),
+    unsupportedTemplateIds,
+    usedPhotoCount: uniqueUsedPhotoIds.size,
+    usedPhotoPercent,
+    warnings,
+  };
+}
+
+export function getAiTemplateCatalogForPrompt(templatePackId?: string | null) {
+  const selectedPack = getBookTemplatePack(templatePackId);
   const preferredTemplateIds = new Set([
     "full-bleed-1",
     "full-bleed-2",
@@ -1534,18 +1692,22 @@ export function getAiTemplateCatalogForPrompt() {
     "couple-story-1",
     "couple-story-2",
   ]);
+  const allowedTemplateIds = selectedPack
+    ? new Set(selectedPack.spreadTemplateIds)
+    : preferredTemplateIds;
   const spreadTemplates = SPREAD_TEMPLATES.filter((template) =>
-    preferredTemplateIds.has(template.id),
+    allowedTemplateIds.has(template.id),
   );
+  const packs = selectedPack ? [selectedPack] : BOOK_TEMPLATE_PACKS;
 
   return {
-    bookTemplatePacks: BOOK_TEMPLATE_PACKS.map((packEntry) => ({
+    bookTemplatePacks: packs.map((packEntry) => ({
       category: packEntry.category,
       description: packEntry.description,
       id: packEntry.id,
       name: packEntry.name,
       spreadTemplateIds: packEntry.spreadTemplateIds.filter((templateId) =>
-        preferredTemplateIds.has(templateId),
+        allowedTemplateIds.has(templateId),
       ),
       tags: packEntry.tags,
     })),

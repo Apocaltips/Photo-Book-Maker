@@ -1,11 +1,13 @@
 "use client";
 
 import {
+  BOOK_TEMPLATE_PACKS,
   type AddLocalPhotoInput,
   type BookMakingGuide,
   type BookGenerationQuestionnaireAnswers,
   type GenerationRun,
   type Project,
+  applyBookTemplatePack,
   buildBookGenerationQuestionnaire,
   formatProjectRange,
   getBookMakingGuide,
@@ -103,6 +105,21 @@ export function ProjectProofBoardClient({
     }
   }
 
+  async function getFileContentHash(file: File) {
+    if (!globalThis.crypto?.subtle) {
+      return undefined;
+    }
+
+    const digest = await globalThis.crypto.subtle.digest(
+      "SHA-256",
+      await file.arrayBuffer(),
+    );
+
+    return Array.from(new Uint8Array(digest))
+      .map((byte) => byte.toString(16).padStart(2, "0"))
+      .join("");
+  }
+
   async function handlePhotoUpload(event: ChangeEvent<HTMLInputElement>) {
     const files = Array.from(event.target.files ?? []);
     event.target.value = "";
@@ -169,9 +186,13 @@ export function ProjectProofBoardClient({
             throw new Error(`Remote upload failed for ${file.name}.`);
           }
 
-          const dimensions = await getImageDimensions(file);
+          const [dimensions, contentHash] = await Promise.all([
+            getImageDimensions(file),
+            getFileContentHash(file),
+          ]);
           photos.push({
             capturedAt: new Date(file.lastModified || Date.now()).toISOString(),
+            contentHash,
             height: dimensions.height,
             locationConfidence: "missing",
             mimeType: file.type || "image/jpeg",
@@ -366,6 +387,31 @@ export function ProjectProofBoardClient({
       );
     } finally {
       setIsAiGenerating(false);
+    }
+  }
+
+  async function handleTemplatePackSelect(templatePackId: string) {
+    if (!workspace.project) {
+      return;
+    }
+
+    try {
+      const templatedProject = applyBookTemplatePack(workspace.project, templatePackId);
+      await workspace.saveDraft({
+        bookDraft: templatedProject.bookDraft,
+        draftEditorState: templatedProject.draftEditorState,
+        selectedThemeId: templatedProject.selectedThemeId,
+      });
+      const packName =
+        BOOK_TEMPLATE_PACKS.find((pack) => pack.id === templatePackId)?.name ??
+        "book style";
+      setBoardMessage(`${packName} saved. AI Designer will use that style for the next draft.`);
+    } catch (caughtError) {
+      setBoardMessage(
+        caughtError instanceof Error
+          ? caughtError.message
+          : "The book style could not be saved.",
+      );
     }
   }
 
@@ -599,6 +645,9 @@ export function ProjectProofBoardClient({
               }))
             }
             onGenerate={() => void handleGenerateAiBook()}
+            onTemplatePackSelect={(templatePackId) =>
+              void handleTemplatePackSelect(templatePackId)
+            }
             project={project}
           />
 
@@ -1002,6 +1051,7 @@ function AiDesignerPanel({
   lastRun,
   onAnswerChange,
   onGenerate,
+  onTemplatePackSelect,
   project,
 }: {
   answers: BookGenerationQuestionnaireAnswers;
@@ -1012,6 +1062,7 @@ function AiDesignerPanel({
     value: BookGenerationQuestionnaireAnswers[Key],
   ) => void;
   onGenerate: () => void;
+  onTemplatePackSelect: (templatePackId: string) => void;
   project: Project;
 }) {
   const canGenerate =
@@ -1026,6 +1077,8 @@ function AiDesignerPanel({
     : openBlockerCount
       ? "Clear the open fixes before making the book."
       : null;
+  const selectedTemplatePackId =
+    project.draftEditorState?.templatePackId ?? BOOK_TEMPLATE_PACKS[0]?.id ?? "";
 
   return (
     <section
@@ -1033,8 +1086,18 @@ function AiDesignerPanel({
       className="surface min-w-0 rounded-[2rem] p-6"
       aria-busy={isGenerating}
     >
-      <div className="eyebrow">Step 2</div>
-      <h2 className="display mt-2 text-3xl text-[#1f1814]">Make my photo book</h2>
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+        <div>
+          <div className="eyebrow">Step 2</div>
+          <h2 className="display mt-2 text-3xl text-[#1f1814]">Make my photo book</h2>
+        </div>
+        <Link
+          href="/ai-health"
+          className="rounded-full border border-[#1f18141f] bg-white/75 px-4 py-2 text-xs font-semibold uppercase tracking-[0.14em] text-[#1f1814] transition-colors hover:bg-white"
+        >
+          Local AI health
+        </Link>
+      </div>
       <p className="mt-3 text-sm leading-7 text-[#5b4f47]">
         Defaults are fine. The local AI picks templates, writes captions, and saves
         a draft you can edit.
@@ -1044,6 +1107,27 @@ function AiDesignerPanel({
         <Metric label="Photos ready" value={approvedPhotoCount} />
         <Metric label="Open fixes" value={openBlockerCount} />
       </div>
+
+      <label className="mt-5 grid gap-2">
+        <span className="text-xs font-semibold uppercase tracking-[0.16em] text-[#7b6f67]">
+          Book style
+        </span>
+        <select
+          value={selectedTemplatePackId}
+          onChange={(event) => onTemplatePackSelect(event.target.value)}
+          className="w-full rounded-[1.1rem] border border-[#00000014] bg-[#fffaf5] px-4 py-3 text-sm text-[#1f1814] outline-none transition-colors focus:border-[#8f4f2e44]"
+        >
+          {BOOK_TEMPLATE_PACKS.map((pack) => (
+            <option key={pack.id} value={pack.id}>
+              {pack.name} - {pack.category}
+            </option>
+          ))}
+        </select>
+        <span className="text-xs leading-5 text-[#7b6f67]">
+          {BOOK_TEMPLATE_PACKS.length} controlled styles are available. AI can choose
+          layouts only from the selected style library.
+        </span>
+      </label>
 
       <div className="mt-5 grid gap-3">
         <label className="grid gap-2">
@@ -1205,7 +1289,7 @@ function AiDesignerPanel({
         onClick={onGenerate}
         className="mt-5 w-full rounded-full border border-[#1f18141f] bg-[#1f1814] px-4 py-3 text-sm font-semibold text-[#f8efe7] transition-colors hover:bg-[#302721] disabled:cursor-not-allowed disabled:bg-[#b9aca1]"
       >
-        {isGenerating ? "Making the book..." : "Make my book"}
+        {isGenerating ? "Making the book..." : "Make my book with local AI"}
       </button>
       {disabledMessage ? (
         <p className="mt-3 text-xs leading-6 text-[#8d4f33]">
@@ -1217,7 +1301,30 @@ function AiDesignerPanel({
           <div className="text-xs font-semibold uppercase tracking-[0.16em] text-[#7b6f67]">
             Last book build: {formatGenerationStatus(lastRun.status)}
           </div>
-          <div className="mt-2">Your editable book draft is ready to review.</div>
+          <div className="mt-2">
+            {lastRun.status === "failed"
+              ? "The last build failed safely and did not overwrite the draft."
+              : "Your editable book draft is ready to review."}
+          </div>
+          <div className="mt-3 grid gap-2 sm:grid-cols-3">
+            <MiniStat
+              label="Quality"
+              value={
+                lastRun.qualityReport
+                  ? `${lastRun.qualityReport.score}/100`
+                  : "Pending"
+              }
+            />
+            <MiniStat
+              label="Photos used"
+              value={
+                lastRun.qualityReport
+                  ? `${lastRun.qualityReport.usedPhotoCount}/${lastRun.qualityReport.approvedPhotoCount}`
+                  : "Pending"
+              }
+            />
+            <MiniStat label="Planner" value={lastRun.modelNames.planner} />
+          </div>
           {lastRun.progress.length ? (
             <div className="mt-2">Finished: {formatGenerationProgress(lastRun.progress)}</div>
           ) : null}
@@ -1226,22 +1333,39 @@ function AiDesignerPanel({
               {lastRun.validationWarnings.slice(0, 2).map(formatGenerationWarning).join(" ")}
             </div>
           ) : null}
-          <Link
-            href={`/projects/${project.id}/editor`}
-            className="mt-4 inline-flex rounded-full border border-[#1f18141f] bg-white px-4 py-2 text-xs font-semibold uppercase tracking-[0.14em] text-[#1f1814] transition-colors hover:bg-[#fff8f2]"
-          >
-            Review and edit draft
-          </Link>
-          <Link
-            href={`/projects/${project.id}/proof`}
-            className="ml-2 mt-4 inline-flex rounded-full border border-[#1f18141f] bg-[#2e5c4d] px-4 py-2 text-xs font-semibold uppercase tracking-[0.14em] text-[#f8efe7] transition-colors hover:bg-[#23483d]"
-            style={{ color: "#f8efe7" }}
-          >
-            Save/print PDF
-          </Link>
+          {lastRun.status !== "failed" ? (
+            <>
+              <Link
+                href={`/projects/${project.id}/editor`}
+                className="mt-4 inline-flex rounded-full border border-[#1f18141f] bg-white px-4 py-2 text-xs font-semibold uppercase tracking-[0.14em] text-[#1f1814] transition-colors hover:bg-[#fff8f2]"
+              >
+                Review and edit draft
+              </Link>
+              <Link
+                href={`/projects/${project.id}/proof`}
+                className="ml-2 mt-4 inline-flex rounded-full border border-[#1f18141f] bg-[#2e5c4d] px-4 py-2 text-xs font-semibold uppercase tracking-[0.14em] text-[#f8efe7] transition-colors hover:bg-[#23483d]"
+                style={{ color: "#f8efe7" }}
+              >
+                Save/print PDF
+              </Link>
+            </>
+          ) : null}
         </div>
       ) : null}
     </section>
+  );
+}
+
+function MiniStat({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="rounded-[1.1rem] border border-[#00000012] bg-[#fffaf5] px-3 py-3">
+      <div className="text-[10px] font-semibold uppercase tracking-[0.14em] text-[#7b6f67]">
+        {label}
+      </div>
+      <div className="mt-1 break-words text-xs font-semibold text-[#1f1814]">
+        {value}
+      </div>
+    </div>
   );
 }
 

@@ -12,7 +12,15 @@ export async function POST(
   }
 
   return NextResponse.json({
+    candidates: [
+      { role: "primary", vendor: "Peecho" },
+      { role: "backup", vendor: "Prodigi" },
+      { role: "redundancy", vendor: "Cloudprinter" },
+      { role: "reserve", vendor: "RPI/Blurb, Lulu, Gelato" },
+    ],
     message:
-      "Direct print ordering is not configured in this build. Export the proof PDF and place the order with your print vendor.",
+      "Direct print ordering is not configured in this build. Phase 1 uses proof PDF export. Phase 2 starts with a print-vendor bake-off before enabling checkout.",
+    nextStep:
+      "Export the proof PDF, order samples manually, then enable a vendor adapter after SKU, bleed, shipping, tax, and reprint workflows pass testing.",
   }, { status: 501 });
 }

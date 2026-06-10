@@ -152,6 +152,7 @@ export interface PhotoAsset {
   id: string;
   title: string;
   uploaderId: string;
+  contentHash?: string;
   imageUri?: string;
   storagePath?: string;
   mimeType?: string;
@@ -385,6 +386,22 @@ export interface AiBookPlan {
   warnings: string[];
 }
 
+export interface BookGenerationQualityReport {
+  approvedPhotoCount: number;
+  duplicatePhotoIds: string[];
+  hasDetailGridSpread: boolean;
+  hasHeroSpread: boolean;
+  hasPlaceholderCopy: boolean;
+  hasQuietCaptionSpread: boolean;
+  hasTripContext: boolean;
+  pageCount: number;
+  score: number;
+  unsupportedTemplateIds: string[];
+  usedPhotoCount: number;
+  usedPhotoPercent: number;
+  warnings: string[];
+}
+
 export interface GenerationRun {
   completedAt?: string;
   errorMessage?: string;
@@ -395,6 +412,7 @@ export interface GenerationRun {
     fallbackPlanner?: string;
   };
   progress: string[];
+  qualityReport?: BookGenerationQualityReport;
   savedDraftVersionId?: string;
   startedAt: string;
   status: "queued" | "analyzing_photos" | "planning" | "validating" | "saved" | "failed";
@@ -515,6 +533,7 @@ export interface BookMakingGuide {
 }
 
 export interface AddLocalPhotoInput {
+  contentHash?: string;
   title: string;
   uri: string;
   storagePath?: string;

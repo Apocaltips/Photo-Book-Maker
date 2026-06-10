@@ -7,6 +7,7 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
+    "test:ai:health": "node scripts/local-ai-health.mjs",
     "test:ai:local": "node scripts/ai-generation-smoke.mjs",
     "test:e2e": "node scripts/e2e-web-smoke.mjs",
     "typecheck": "tsc -p tsconfig.json --noEmit"

@@ -79,6 +79,7 @@ The authoritative API for v1 is the Next.js app in `apps/web`.
 2. Add the same environment variables to the hosted project.
 3. Confirm `https://YOUR-WEB-APP/api/projects` returns an auth-required JSON response.
 4. Confirm `https://YOUR-WEB-APP/api/templates` returns at least 12 book template packs and 64 spread templates.
+5. In local/staging, confirm `/ai-health` shows the local AI models are ready before using AI Designer with testers.
 
 ## 5. Point Mobile At The Hosted API
 
@@ -171,12 +172,30 @@ npx eas build --platform android --profile preview
    - iOS proof PDF export works
    - web `/projects/:projectId/proof` can be saved as PDF
 
+## 10. Provider Alpha Accounts
+
+Phase 1 uses PDF proof export only. Before direct print checkout, create and
+test accounts for:
+
+- Vercel for hosted web/API
+- Supabase for Auth and project metadata
+- Cloudflare R2 for S3-compatible original photo storage
+- Stripe Checkout, then Stripe Tax/Billing for paid print and yearbook plans
+- Resend or Postmark for branded invites and order emails
+- Sentry and PostHog for errors, performance, and funnel analytics
+- Peecho as the primary print candidate, Prodigi as backup, Cloudprinter as redundancy, with RPI/Blurb, Lulu, and Gelato kept in reserve
+
+Do not expose every book size in checkout first. Start with one trip SKU and
+one family/yearbook SKU until bleed, spine, shipping, reprint, support, and
+unit economics are proven by sample orders.
+
 ## Required Validation
 
 ```bash
 npm ci
 npm run test
 npm run test:e2e:web
+npm run test:ai:health
 npm run test:ai:local
 npm run typecheck
 npm run lint

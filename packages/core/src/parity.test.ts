@@ -9,13 +9,17 @@ import {
   createProjectRecord,
   finalizeProject,
   getBookMakingGuide,
+  getAiTemplateCatalogForPrompt,
   getPhotoInsightCacheKey,
   listOpenTasks,
+  markGenerationRunFailed,
   materializeAiBookPlan,
   parseAiBookPlanJson,
   publishCurrentDraft,
   resolveProjectTask,
   saveWorkingDraft,
+  scoreGeneratedBook,
+  upsertGenerationRun,
 } from "./index";
 
 function createProjectWithPhotos() {
@@ -61,6 +65,24 @@ describe("template catalog", () => {
     expect(updatedProject.selectedThemeId).toBe(pack!.themeId);
     expect(updatedProject.bookDraft.pages[0]?.templateId).toBe(pack!.spreadTemplateIds[0]);
     expect(updatedProject.bookDraft.pages[0]?.layoutVariation).toBeTypeOf("number");
+  });
+
+  it("narrows the AI prompt catalog to the selected book style", () => {
+    const pack = BOOK_TEMPLATE_PACKS.find((entry) => entry.id === "coastal-lookbook")!;
+    const catalog = getAiTemplateCatalogForPrompt(pack.id);
+    const catalogTemplateIds = new Set(
+      catalog.spreadTemplates.map((template) => template.id),
+    );
+
+    expect(catalog.bookTemplatePacks).toHaveLength(1);
+    expect(catalog.bookTemplatePacks[0]?.id).toBe(pack.id);
+    expect(catalog.spreadTemplates.length).toBeGreaterThan(0);
+    expect(
+      catalog.spreadTemplates.every((template) =>
+        pack.spreadTemplateIds.includes(template.id),
+      ),
+    ).toBe(true);
+    expect(catalogTemplateIds.has("collage-1")).toBe(false);
   });
 });
 
@@ -167,6 +189,47 @@ describe("project collaboration model", () => {
       "IMG 1001",
       "IMG 1002",
     ]);
+  });
+
+  it("skips duplicate imported photos by content hash even when names differ", () => {
+    const project = createProjectRecord({
+      endDate: "2026-07-14",
+      ownerEmail: "owner@example.com",
+      ownerName: "Owner",
+      startDate: "2026-07-11",
+      subtitle: "A test trip",
+      timezone: "America/Denver",
+      title: "Coastal Weekend",
+      type: "trip",
+    });
+
+    const importedProject = addPhotosToProject(project, [
+      {
+        capturedAt: "2026-07-11T12:00:00.000Z",
+        contentHash: "same-file-hash",
+        height: 1200,
+        locationConfidence: "exact",
+        locationLabel: "Cannon Beach",
+        title: "IMG 1001",
+        uploaderId: "owner",
+        uri: "https://example.com/img-1001.jpg",
+        width: 1600,
+      },
+      {
+        capturedAt: "2026-07-11T12:00:00.000Z",
+        contentHash: "same-file-hash",
+        height: 1200,
+        locationConfidence: "exact",
+        locationLabel: "Cannon Beach",
+        title: "Vacation favorite copy",
+        uploaderId: "owner",
+        uri: "https://example.com/img-1001-copy.jpg",
+        width: 1600,
+      },
+    ]);
+
+    expect(importedProject.photos).toHaveLength(1);
+    expect(importedProject.photos[0]?.contentHash).toBe("same-file-hash");
   });
 
   it("guides non-technical users through upload, design, review, and print", () => {
@@ -642,5 +705,83 @@ describe("AI book generation engine", () => {
     expect(generated.bookDraft.pages[0]?.title).toBe("Manual title");
     expect(generated.bookDraft.pages[0]?.caption).toBe("Manual confirmed caption.");
     expect(generated.bookDraft.pages[0]?.approved).toBe(true);
+  });
+
+  it("scores generated drafts and attaches the quality report to saved runs", () => {
+    const project = createProjectWithPhotos();
+    const firstPhoto = project.photos[0]!;
+    const generated = materializeAiBookPlan(
+      project,
+      {
+        chapters: [{ id: "chapter-1", title: "Cap Cana", spreadIds: ["spread-1"] }],
+        designScore: 82,
+        spreadPlans: [
+          {
+            caption: "Cap Cana gives the book a bright trip opener.",
+            cropIntents: [{ photoId: firstPhoto.id, region: "center" }],
+            id: "spread-1",
+            photoIds: [firstPhoto.id],
+            photoRoles: [{ photoId: firstPhoto.id, role: "hero" }],
+            rationale: "A clean opener.",
+            storyBeat: "opener",
+            templateId: "full-bleed-1",
+            title: "Cap Cana arrival",
+          },
+        ],
+        summary: "Cap Cana draft.",
+        warnings: [],
+      },
+      {
+        run: {
+          id: "run-quality",
+          modelNames: {
+            planner: "qwen3:14b",
+            vision: "qwen2.5vl:7b",
+          },
+          progress: ["generation requested"],
+          startedAt: "2026-07-11T12:00:00.000Z",
+          status: "validating",
+          validationWarnings: [],
+        },
+      },
+    );
+    const qualityReport = scoreGeneratedBook(generated);
+
+    expect(generated.generationRuns?.[0]?.id).toBe("run-quality");
+    expect(generated.generationRuns?.[0]?.qualityReport?.score).toBe(qualityReport.score);
+    expect(generated.generationRuns?.[0]?.status).toBe("saved");
+    expect(qualityReport.unsupportedTemplateIds).toEqual([]);
+  });
+
+  it("upserts and fails generation runs without duplicating run history", () => {
+    const project = createProjectWithPhotos();
+    const queuedProject = upsertGenerationRun(project, {
+      id: "run-1",
+      modelNames: {
+        planner: "qwen3:14b",
+        vision: "qwen2.5vl:7b",
+      },
+      progress: ["queued"],
+      startedAt: "2026-07-11T12:00:00.000Z",
+      status: "queued",
+      validationWarnings: [],
+    });
+    const planningProject = upsertGenerationRun(queuedProject, {
+      ...queuedProject.generationRuns![0]!,
+      progress: ["queued", "planning"],
+      status: "planning",
+    });
+    const failedProject = markGenerationRunFailed(
+      planningProject,
+      "run-1",
+      "The project changed while local AI was running.",
+    );
+
+    expect(planningProject.generationRuns).toHaveLength(1);
+    expect(failedProject.generationRuns?.[0]?.status).toBe("failed");
+    expect(failedProject.generationRuns?.[0]?.errorMessage).toContain("project changed");
+    expect(failedProject.generationRuns?.[0]?.validationWarnings).toContain(
+      "The project changed while local AI was running.",
+    );
   });
 });
