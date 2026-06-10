@@ -3,6 +3,7 @@ import { spawn } from "node:child_process";
 import { fileURLToPath } from "node:url";
 
 const workerScriptPath = fileURLToPath(new URL("./local-ai-worker.mjs", import.meta.url));
+const STRONG_WORKER_SECRET = "photo-book-worker-smoke-secret-2026-random";
 const workerEnvKeys = [
   "AI_WORKER_SECRET",
   "LOCAL_AI_WORKER_ALLOW_HOSTED_PROCESSOR",
@@ -88,7 +89,7 @@ const loopbackPreflight = await runWorkerPreflight("loopback preflight", {
   LOCAL_AI_WORKER_HOSTED_BASE_URL: "https://hosted-alpha.example",
   LOCAL_AI_WORKER_PREFLIGHT_ONLY: "1",
   LOCAL_AI_WORKER_PROCESSOR_BASE_URL: "http://127.0.0.1:3000",
-  LOCAL_AI_WORKER_SECRET: "worker-smoke-secret",
+  LOCAL_AI_WORKER_SECRET: STRONG_WORKER_SECRET,
   LOCAL_AI_WORKER_SKIP_PROCESSOR_HEALTH: "1",
 });
 assertExit(loopbackPreflight, 0, "loopback preflight");
@@ -102,11 +103,25 @@ const lanPreflight = await runWorkerPreflight("lan preflight", {
   LOCAL_AI_WORKER_HOSTED_BASE_URL: "https://hosted-alpha.example",
   LOCAL_AI_WORKER_PREFLIGHT_ONLY: "1",
   LOCAL_AI_WORKER_PROCESSOR_BASE_URL: "http://192.168.1.50:3000",
-  LOCAL_AI_WORKER_SECRET: "worker-smoke-secret",
+  LOCAL_AI_WORKER_SECRET: STRONG_WORKER_SECRET,
   LOCAL_AI_WORKER_SKIP_PROCESSOR_HEALTH: "1",
 });
 assertExit(lanPreflight, 0, "lan preflight");
 assertIncludes(lanPreflight.stdout, "Local AI worker preflight passed.", "lan preflight stdout");
+
+const legacySecretPreflight = await runWorkerPreflight("legacy secret preflight", {
+  AI_WORKER_SECRET: STRONG_WORKER_SECRET,
+  LOCAL_AI_WORKER_HOSTED_BASE_URL: "https://hosted-alpha.example",
+  LOCAL_AI_WORKER_PREFLIGHT_ONLY: "1",
+  LOCAL_AI_WORKER_PROCESSOR_BASE_URL: "http://127.0.0.1:3000",
+  LOCAL_AI_WORKER_SKIP_PROCESSOR_HEALTH: "1",
+});
+assertExit(legacySecretPreflight, 0, "legacy secret preflight");
+assertIncludes(
+  legacySecretPreflight.stdout,
+  "Local AI worker preflight passed.",
+  "legacy secret preflight stdout",
+);
 
 const missingSecret = await runWorkerPreflight("missing secret preflight", {
   LOCAL_AI_WORKER_HOSTED_BASE_URL: "https://hosted-alpha.example",
@@ -121,11 +136,25 @@ assertIncludes(
   "missing secret preflight output",
 );
 
+const weakSecret = await runWorkerPreflight("weak secret preflight", {
+  LOCAL_AI_WORKER_HOSTED_BASE_URL: "https://hosted-alpha.example",
+  LOCAL_AI_WORKER_PREFLIGHT_ONLY: "1",
+  LOCAL_AI_WORKER_PROCESSOR_BASE_URL: "http://127.0.0.1:3000",
+  LOCAL_AI_WORKER_SECRET: "short-secret",
+  LOCAL_AI_WORKER_SKIP_PROCESSOR_HEALTH: "1",
+});
+assertExit(weakSecret, 1, "weak secret preflight");
+assertIncludes(
+  `${weakSecret.stdout}\n${weakSecret.stderr}`,
+  "Private AI worker secret must be at least 24 characters.",
+  "weak secret preflight output",
+);
+
 const publicProcessor = await runWorkerPreflight("public processor preflight", {
   LOCAL_AI_WORKER_HOSTED_BASE_URL: "https://hosted-alpha.example",
   LOCAL_AI_WORKER_PREFLIGHT_ONLY: "1",
   LOCAL_AI_WORKER_PROCESSOR_BASE_URL: "https://hosted-alpha.example",
-  LOCAL_AI_WORKER_SECRET: "worker-smoke-secret",
+  LOCAL_AI_WORKER_SECRET: STRONG_WORKER_SECRET,
   LOCAL_AI_WORKER_SKIP_PROCESSOR_HEALTH: "1",
 });
 assertExit(publicProcessor, 1, "public processor preflight");
@@ -140,7 +169,7 @@ const explicitPublicProcessor = await runWorkerPreflight("explicit public proces
   LOCAL_AI_WORKER_HOSTED_BASE_URL: "https://hosted-alpha.example",
   LOCAL_AI_WORKER_PREFLIGHT_ONLY: "1",
   LOCAL_AI_WORKER_PROCESSOR_BASE_URL: "https://hosted-alpha.example",
-  LOCAL_AI_WORKER_SECRET: "worker-smoke-secret",
+  LOCAL_AI_WORKER_SECRET: STRONG_WORKER_SECRET,
   LOCAL_AI_WORKER_SKIP_PROCESSOR_HEALTH: "1",
 });
 assertExit(explicitPublicProcessor, 0, "explicit public processor preflight");
@@ -158,7 +187,7 @@ const loopRetryBackoff = await runWorkerPreflight("loop retry backoff", {
   LOCAL_AI_WORKER_MAX_CONSECUTIVE_FAILURES: "1",
   LOCAL_AI_WORKER_POLL_MS: "250",
   LOCAL_AI_WORKER_PROCESSOR_BASE_URL: "http://127.0.0.1:3000",
-  LOCAL_AI_WORKER_SECRET: "worker-smoke-secret",
+  LOCAL_AI_WORKER_SECRET: STRONG_WORKER_SECRET,
   LOCAL_AI_WORKER_SKIP_PROCESSOR_HEALTH: "1",
 });
 assertExit(loopRetryBackoff, 1, "loop retry backoff");

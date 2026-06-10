@@ -1,6 +1,7 @@
 /* global AbortSignal, URL, clearInterval, console, fetch, process, setInterval, setTimeout */
 import { Buffer } from "node:buffer";
 import { createHash, createHmac, timingSafeEqual } from "node:crypto";
+import { makeSharedSecretStrengthCheck } from "../src/lib/alpha-readiness-contract.js";
 
 function parseWorkerIntegerEnv(name, fallback, min = 0) {
   const parsed = Number.parseInt(process.env[name] ?? "", 10);
@@ -22,7 +23,8 @@ const processorBaseUrl = (
   process.env.LOCAL_AI_WORKER_BASE_URL ??
   hostedBaseUrl
 ).replace(/\/$/, "");
-const secret = process.env.LOCAL_AI_WORKER_SECRET ?? process.env.AI_WORKER_SECRET;
+const workerSecretConfig = getWorkerSecretConfig();
+const secret = workerSecretConfig.value;
 const workerId =
   process.env.LOCAL_AI_WORKER_ID ??
   `local-worker-${process.env.COMPUTERNAME ?? process.env.HOSTNAME ?? "pc"}`;
@@ -55,6 +57,41 @@ const skipProcessorHealth = process.env.LOCAL_AI_WORKER_SKIP_PROCESSOR_HEALTH ==
 
 if (!secret) {
   throw new Error("LOCAL_AI_WORKER_SECRET or AI_WORKER_SECRET is required.");
+}
+
+function getWorkerSecretConfig() {
+  const localSecret = process.env.LOCAL_AI_WORKER_SECRET;
+  if (localSecret?.trim()) {
+    return {
+      value: localSecret,
+      variable: "LOCAL_AI_WORKER_SECRET",
+    };
+  }
+
+  const legacySecret = process.env.AI_WORKER_SECRET;
+  if (legacySecret?.trim()) {
+    return {
+      value: legacySecret,
+      variable: "AI_WORKER_SECRET",
+    };
+  }
+
+  return {
+    value: "",
+    variable: "LOCAL_AI_WORKER_SECRET",
+  };
+}
+
+const workerSecretCheck = makeSharedSecretStrengthCheck({
+  label: "Private AI worker secret",
+  name: "private AI worker secret strength",
+  required: true,
+  value: secret,
+  variable: workerSecretConfig.variable,
+});
+
+if (workerSecretCheck.status === "fail") {
+  throw new Error(workerSecretCheck.detail);
 }
 
 function isLoopbackUrl(value) {
