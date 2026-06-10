@@ -28,8 +28,28 @@ const LOCAL_AI_FALLBACK_PLANNER_MODEL =
   process.env.LOCAL_AI_FALLBACK_PLANNER_MODEL ?? "qwen3:8b";
 const LOCAL_AI_VISION_MODEL =
   process.env.LOCAL_AI_VISION_MODEL ?? "qwen2.5vl:7b";
-const PLANNER_TIMEOUT_MS = Number.parseInt(
-  process.env.LOCAL_AI_PLANNER_TIMEOUT_MS ?? "45000",
+const PRIMARY_PLANNER_TIMEOUT_MS = Number.parseInt(
+  process.env.LOCAL_AI_PRIMARY_PLANNER_TIMEOUT_MS ??
+    process.env.LOCAL_AI_PLANNER_TIMEOUT_MS ??
+    "120000",
+  10,
+);
+const FALLBACK_PLANNER_TIMEOUT_MS = Number.parseInt(
+  process.env.LOCAL_AI_FALLBACK_PLANNER_TIMEOUT_MS ??
+    process.env.LOCAL_AI_PLANNER_TIMEOUT_MS ??
+    "180000",
+  10,
+);
+const PRIMARY_PLANNER_NUM_PREDICT = Number.parseInt(
+  process.env.LOCAL_AI_PRIMARY_PLANNER_NUM_PREDICT ??
+    process.env.LOCAL_AI_PLANNER_NUM_PREDICT ??
+    "1200",
+  10,
+);
+const FALLBACK_PLANNER_NUM_PREDICT = Number.parseInt(
+  process.env.LOCAL_AI_FALLBACK_PLANNER_NUM_PREDICT ??
+    process.env.LOCAL_AI_PLANNER_NUM_PREDICT ??
+    "1200",
   10,
 );
 const VISION_TIMEOUT_MS = Number.parseInt(
@@ -109,8 +129,12 @@ export function getLocalAiRuntimeConfig() {
   return {
     baseUrl: LOCAL_AI_BASE_URL,
     fallbackPlannerModel: LOCAL_AI_FALLBACK_PLANNER_MODEL,
+    fallbackPlannerNumPredict: FALLBACK_PLANNER_NUM_PREDICT,
+    fallbackPlannerTimeoutMs: FALLBACK_PLANNER_TIMEOUT_MS,
     plannerModel: LOCAL_AI_PLANNER_MODEL,
-    plannerTimeoutMs: PLANNER_TIMEOUT_MS,
+    plannerPromptContract: "compact-spread-plan",
+    plannerNumPredict: PRIMARY_PLANNER_NUM_PREDICT,
+    plannerTimeoutMs: PRIMARY_PLANNER_TIMEOUT_MS,
     provider: process.env.AI_DRAFT_PROVIDER ?? "ollama",
     visionImageMaxEdge: VISION_IMAGE_MAX_EDGE,
     visionMaxPhotos: VISION_MAX_PHOTOS,
@@ -548,6 +572,9 @@ function buildPlannerPrompt(input: {
       "Use at most 4 photos per spread.",
       "Alternate hero, detail/grid, and quiet caption/reflection pages.",
       "Captions should be specific, human, concise, and avoid placeholder wording.",
+      "Return compact spread plans only: id, templateId, storyBeat, photoIds, title, and caption.",
+      "storyBeat must be exactly one of: opener, scene_setter, highlight, details, reflection, closing.",
+      "Do not return cropIntents, photoRoles, or rationale; the deterministic validator fills those safely.",
       "Never copy outputShape placeholder values into the final plan.",
       "Return valid JSON only.",
     ],
@@ -557,11 +584,8 @@ function buildPlannerPrompt(input: {
       spreadPlans: [
         {
           caption: "Caption text",
-          cropIntents: [{ photoId: "photo-id", region: "center" }],
           id: "spread-1",
           photoIds: ["photo-id"],
-          photoRoles: [{ photoId: "photo-id", role: "hero" }],
-          rationale: "Why this layout works",
           storyBeat: "opener",
           templateId: "full-bleed-1",
           title: "Spread title",
@@ -585,12 +609,12 @@ function buildPlannerPrompt(input: {
       id: photo.id,
       insight: input.insights[photo.id]
         ? {
-            captionClues: input.insights[photo.id].captionClues,
+            captionClues: input.insights[photo.id].captionClues.slice(0, 3),
             cropSafeRegion: input.insights[photo.id].cropSafeRegion,
             focalPoint: input.insights[photo.id].focalPoint,
             imageQuality: input.insights[photo.id].imageQuality,
             peopleCount: input.insights[photo.id].peopleCount,
-            sceneTags: input.insights[photo.id].sceneTags,
+            sceneTags: input.insights[photo.id].sceneTags.slice(0, 4),
         }
         : null,
       aesthetic: input.aesthetics[photo.id]
@@ -921,9 +945,9 @@ async function requestPlannerPlan(input: {
       format: "json",
       messages,
       model: LOCAL_AI_PLANNER_MODEL,
-      numPredict: 2800,
+      numPredict: PRIMARY_PLANNER_NUM_PREDICT,
       temperature: 0.25,
-      timeoutMs: PLANNER_TIMEOUT_MS,
+      timeoutMs: PRIMARY_PLANNER_TIMEOUT_MS,
     });
 
     return {
@@ -935,14 +959,30 @@ async function requestPlannerPlan(input: {
     const fallbackWarning = `${LOCAL_AI_PLANNER_MODEL} planner failed, attempting ${LOCAL_AI_FALLBACK_PLANNER_MODEL}: ${
       primaryError instanceof Error ? primaryError.message : "unknown error"
     }`;
+
+    if (LOCAL_AI_FALLBACK_PLANNER_MODEL === LOCAL_AI_PLANNER_MODEL) {
+      const warning = `${fallbackWarning}; skipped duplicate fallback attempt because planner and fallback model are both ${LOCAL_AI_PLANNER_MODEL}`;
+
+      return {
+        model: "deterministic-editorial-fallback",
+        plan: buildDeterministicEditorialPlan({
+          aesthetics: input.aesthetics,
+          insights: input.insights,
+          project: input.project,
+          warning,
+        }),
+        warnings: [warning],
+      };
+    }
+
     try {
       const content = await postOllamaJson({
         format: "json",
         messages,
         model: LOCAL_AI_FALLBACK_PLANNER_MODEL,
-        numPredict: 2800,
+        numPredict: FALLBACK_PLANNER_NUM_PREDICT,
         temperature: 0.2,
-        timeoutMs: PLANNER_TIMEOUT_MS,
+        timeoutMs: FALLBACK_PLANNER_TIMEOUT_MS,
       });
 
       return {

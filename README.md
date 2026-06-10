@@ -35,7 +35,15 @@ LOCAL_AI_BASE_URL=http://127.0.0.1:11434
 LOCAL_AI_PLANNER_MODEL=qwen3:14b
 LOCAL_AI_VISION_MODEL=qwen2.5vl:7b
 LOCAL_AI_FALLBACK_PLANNER_MODEL=qwen3:8b
+LOCAL_AI_PRIMARY_PLANNER_TIMEOUT_MS=120000
+LOCAL_AI_FALLBACK_PLANNER_TIMEOUT_MS=180000
+LOCAL_AI_PRIMARY_PLANNER_NUM_PREDICT=1200
+LOCAL_AI_FALLBACK_PLANNER_NUM_PREDICT=1200
 ```
+
+The primary planner is quality-first and can be slow on an 8 GB laptop GPU. The
+fallback planner has its own timeout so `qwen3:8b` gets a real chance to return
+valid compact JSON before the deterministic editorial fallback takes over.
 
 4. For physical phones, set `EXPO_PUBLIC_API_BASE_URL` to your laptop LAN IP, for example:
 

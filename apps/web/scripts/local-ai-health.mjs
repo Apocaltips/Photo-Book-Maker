@@ -46,6 +46,7 @@ async function main() {
     ollamaReachable: body.ai?.ollamaReachable,
     plannerStatus: body.plannerStatus,
     queue: body.queue,
+    runtimeConfig: body.ai?.config ?? null,
     store: body.store,
   };
 

@@ -54,6 +54,10 @@ LOCAL_AI_BASE_URL=http://127.0.0.1:11434
 LOCAL_AI_PLANNER_MODEL=qwen3:14b
 LOCAL_AI_VISION_MODEL=qwen2.5vl:7b
 LOCAL_AI_FALLBACK_PLANNER_MODEL=qwen3:8b
+LOCAL_AI_PRIMARY_PLANNER_TIMEOUT_MS=120000
+LOCAL_AI_FALLBACK_PLANNER_TIMEOUT_MS=180000
+LOCAL_AI_PRIMARY_PLANNER_NUM_PREDICT=1200
+LOCAL_AI_FALLBACK_PLANNER_NUM_PREDICT=1200
 OPENAI_API_KEY=
 ```
 
@@ -68,8 +72,10 @@ ollama pull qwen3:8b
 
 `qwen3:14b` is the planner and caption brain, `qwen2.5vl:7b` analyzes photos,
 and `qwen3:8b` is the fallback planner if the larger model fails benchmark
-thresholds. `OPENAI_API_KEY` remains optional for hosted production or
-comparison testing.
+thresholds. The default compact planner budgets are 120 seconds / 1200 output
+tokens for `qwen3:14b` and 180 seconds / 1200 output tokens for `qwen3:8b`;
+record any overrides next to the benchmark report path. `OPENAI_API_KEY`
+remains optional for hosted production or comparison testing.
 
 ## 4. Deploy The Web/API App
 

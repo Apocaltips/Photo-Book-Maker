@@ -12,6 +12,10 @@ The app is not ready for outside testers until these are true:
 - A tester can create a real account, create a trip/yearbook, upload photos from web, answer the AI Designer questions, generate a book, edit a spread, and save a proof PDF.
 - `/ai-health` shows Ollama reachable, `qwen3:14b`, `qwen3:8b`, and `qwen2.5vl:7b` installed, no active stuck runs, and a recent saved run with a quality score.
 - `/ai-health` shows queue health plus planner mode for the latest and last successful run. If the app uses `qwen3:8b` or the deterministic safe fallback because `qwen3:14b` times out, that fallback status must stay visible in the page and benchmark report.
+- Default local planner budgets are `LOCAL_AI_PRIMARY_PLANNER_TIMEOUT_MS=120000`,
+  `LOCAL_AI_FALLBACK_PLANNER_TIMEOUT_MS=180000`, and 1200 compact planner output
+  tokens per model. Keep those values in each benchmark report so slow
+  local-model behavior is visible instead of being mistaken for design quality.
 - The Cap Cana 13-photo set passes `npm run test:ai:local`; the 60-photo test set must produce 10-14 spreads, use at least 35% of approved photos, include hero/detail/quiet rhythm, and avoid unsupported templates or placeholder copy.
 - `npm run test:ai:benchmark` records elapsed time, prompt pressure, planner/fallback mode, JSON acceptance, duplicate rate, photo usage, unsupported templates, quality score, and acceptance failures in a JSON report outside the repo by default.
 - The generated proof must look photo-first: filled pages, subtle floating photo borders, varied caption positions, safe-area/bleed preview, and no repeated same-corner captions across the book.

@@ -79,7 +79,16 @@ export default async function LocalAiHealthPage() {
         <div className="mt-4 grid gap-3 md:grid-cols-2">
           <ConfigRow label="Base URL" value={ai.config.baseUrl} />
           <ConfigRow label="Provider" value={ai.config.provider} />
-          <ConfigRow label="Planner timeout" value={`${ai.config.plannerTimeoutMs}ms`} />
+          <ConfigRow label="Primary planner timeout" value={`${ai.config.plannerTimeoutMs}ms`} />
+          <ConfigRow
+            label="Fallback planner timeout"
+            value={`${ai.config.fallbackPlannerTimeoutMs}ms`}
+          />
+          <ConfigRow label="Primary output budget" value={`${ai.config.plannerNumPredict} tokens`} />
+          <ConfigRow
+            label="Fallback output budget"
+            value={`${ai.config.fallbackPlannerNumPredict} tokens`}
+          />
           <ConfigRow label="Vision budget" value={`${ai.config.visionMaxPhotos} photos`} />
         </div>
       </section>

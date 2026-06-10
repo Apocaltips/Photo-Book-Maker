@@ -260,6 +260,7 @@ function assertExistingStoreOptIn() {
 const startedAt = Date.now();
 assertExistingStoreOptIn();
 const templates = await apiJson("/api/templates");
+const health = await apiJson("/api/ai/local/health").catch(() => null);
 const templateIds = new Set(
   templates.catalog?.spreadTemplates?.map((template) => template.id) ?? [],
 );
@@ -325,6 +326,7 @@ const summary = {
   qualityReport,
   runId: run?.id,
   runStatus: run?.status,
+  runtimeConfig: health?.ai?.config ?? null,
   validationWarnings: run?.validationWarnings ?? [],
 };
 

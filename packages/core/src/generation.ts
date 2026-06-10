@@ -588,6 +588,43 @@ function parseCropIntents(value: unknown): AiBookPlanCropIntent[] {
   });
 }
 
+function normalizeStoryBeat(value: unknown): BookPageStoryBeat | null {
+  if (typeof value !== "string") {
+    return null;
+  }
+
+  const normalized = value.toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "");
+  if (VALID_STORY_BEATS.has(normalized as BookPageStoryBeat)) {
+    return normalized as BookPageStoryBeat;
+  }
+
+  if (/^(arrival|arrival_scene|scene|scene_setting|scene_setter|setting|place|establishing)$/.test(normalized)) {
+    return "scene_setter";
+  }
+
+  if (/(hero|highlight|standout|moment|anchor)/.test(normalized)) {
+    return "highlight";
+  }
+
+  if (/(detail|details|texture|grid|food|small_moment)/.test(normalized)) {
+    return "details";
+  }
+
+  if (/(quiet|reflection|reflective|pause|caption)/.test(normalized)) {
+    return "reflection";
+  }
+
+  if (/(closing|closer|ending|final|finish)/.test(normalized)) {
+    return "closing";
+  }
+
+  if (/(open|opener|cover|start)/.test(normalized)) {
+    return "opener";
+  }
+
+  return null;
+}
+
 function parseChapter(value: unknown): AiBookPlanChapter | null {
   if (!value || typeof value !== "object") {
     return null;
@@ -622,12 +659,9 @@ function parseSpread(value: unknown): AiBookPlanSpread | null {
     title?: unknown;
   };
 
-  if (
-    typeof candidate.id !== "string" ||
-    typeof candidate.templateId !== "string" ||
-    typeof candidate.storyBeat !== "string" ||
-    !VALID_STORY_BEATS.has(candidate.storyBeat as BookPageStoryBeat)
-  ) {
+  const storyBeat = normalizeStoryBeat(candidate.storyBeat);
+
+  if (typeof candidate.id !== "string" || typeof candidate.templateId !== "string" || !storyBeat) {
     return null;
   }
 
@@ -638,7 +672,7 @@ function parseSpread(value: unknown): AiBookPlanSpread | null {
     photoIds: asStringArray(candidate.photoIds),
     photoRoles: parsePhotoRoles(candidate.photoRoles),
     rationale: typeof candidate.rationale === "string" ? candidate.rationale : "",
-    storyBeat: candidate.storyBeat as BookPageStoryBeat,
+    storyBeat,
     templateId: candidate.templateId,
     title: typeof candidate.title === "string" ? candidate.title : "",
   };

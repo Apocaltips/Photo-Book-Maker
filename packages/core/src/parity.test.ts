@@ -421,6 +421,46 @@ describe("AI book generation engine", () => {
     expect(() => parseAiBookPlanJson("{ not json")).toThrow(/invalid json/i);
   });
 
+  it("normalizes common planner story beat synonyms", () => {
+    const parsedPlan = parseAiBookPlanJson(
+      JSON.stringify({
+        designScore: 88,
+        spreadPlans: [
+          {
+            caption: "Arrival at the resort.",
+            id: "spread-1",
+            photoIds: ["photo-1"],
+            storyBeat: "arrival/scene",
+            templateId: "full-bleed-1",
+            title: "Arrival",
+          },
+          {
+            caption: "The standout pool moment.",
+            id: "spread-2",
+            photoIds: ["photo-2"],
+            storyBeat: "hero moment",
+            templateId: "hero-1",
+            title: "Poolside",
+          },
+          {
+            caption: "A quieter page with room to breathe.",
+            id: "spread-3",
+            photoIds: ["photo-3"],
+            storyBeat: "quiet caption",
+            templateId: "caption-1",
+            title: "Quiet Pause",
+          },
+        ],
+      }),
+    );
+
+    expect(parsedPlan.spreadPlans.map((spread) => spread.storyBeat)).toEqual([
+      "scene_setter",
+      "highlight",
+      "reflection",
+    ]);
+  });
+
   it("repairs AI book plans into supported, duplicate-free, must-include drafts", () => {
     const project = applyBookTemplatePack(
       {
