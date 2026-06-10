@@ -123,7 +123,7 @@ The authoritative API for v1 is the Next.js app in `apps/web`.
 1. Deploy `apps/web` to Vercel or another Next-compatible host.
 2. Add the same environment variables to the hosted project.
 3. Confirm `https://YOUR-WEB-APP/api/projects` returns an auth-required JSON response.
-4. Confirm `https://YOUR-WEB-APP/api/templates` returns at least 12 book template packs and 64 spread templates.
+4. Confirm `https://YOUR-WEB-APP/api/templates` returns at least 16 book template packs and 88 spread templates.
 5. In local/staging, confirm `/ai-health` shows the local AI models are ready, queue health is clean, and the latest saved generation has an acceptable quality score before using AI Designer with testers.
 6. For hosted web alpha, configure `LOCAL_AI_WORKER_SECRET` and `LOCAL_AI_WORKER_ENABLED=1` on the hosted app. Keep `LOCAL_AI_DIRECT_IN_PRODUCTION=0` so Vercel never tries to call local Ollama directly.
    Use unique random values of at least 24 characters for both
@@ -160,7 +160,13 @@ The authoritative API for v1 is the Next.js app in `apps/web`.
     signing, clean generation queue state, and latest saved AI generation
     quality score.
     Treat any failed check as a no-go for family/friend testers.
-11. After one hosted tester project has a saved AI generation, run
+11. Create at least three real Supabase Auth tester accounts: an owner, an
+    invited collaborator, and a wrong-user control account. The owner must
+    create a book and invite the collaborator; the collaborator must accept
+    with the invited email and edit the shared book; the wrong-user account
+    must be blocked from the private project and from accepting the invite.
+    Keep the account emails and project id with the tester-session notes.
+12. After one hosted tester project has a saved AI generation, run
     `npm run test:alpha:hosted` with `HOSTED_ALPHA_BASE_URL`,
     `ALPHA_READINESS_SECRET`, `HOSTED_ALPHA_PROOF_BEARER_TOKEN`,
     `HOSTED_ALPHA_PROOF_PROJECT_ID` or `HOSTED_ALPHA_PROOF_PROJECT_TITLE`,
@@ -169,7 +175,7 @@ The authoritative API for v1 is the Next.js app in `apps/web`.
     report readiness, render a real authenticated proof, and reach the private
     worker processor. Keep the combined `HOSTED_ALPHA_ACCEPTANCE_REPORT_PATH`
     report and its companion hosted-alpha reports with the tester-session notes.
-12. Leave `PRINT_PROVIDER=manual_pdf` for Phase 1. When direct print checkout
+13. Leave `PRINT_PROVIDER=manual_pdf` for Phase 1. When direct print checkout
     starts, set `PRINT_PROVIDER` to the selected API candidate, configure the
     Stripe/email/monitoring/print adapter variables, confirm a reviewed sample
     order with `PRINT_PROVIDER_SAMPLE_ORDER_CONFIRMED=1`, then run

@@ -25,6 +25,11 @@ The app is not ready for outside testers until these are true:
 - Web and mobile uploads fingerprint files before saving them to a project, skip duplicate selections, and report uploaded, failed, and duplicate-skipped counts so testers can retry only the files that need attention.
 - Web uploads decode JPEG, PNG, and WebP files before requesting upload tickets, keep real image dimensions in the project, reject damaged/non-photo selections, and mark HEIC/HEIF uploads for crop review when the browser cannot read dimensions.
 - The generated proof must look photo-first: filled pages, subtle floating photo borders, varied caption positions, safe-area/bleed preview, and no repeated same-corner captions across the book.
+- Hosted family/friend testing must use separate real Supabase Auth accounts:
+  an owner, an invited collaborator, and a wrong-user control account. The
+  owner creates the book and invite, the invited collaborator accepts with the
+  matching email and edits the book, and the wrong-user account remains blocked
+  from the private project and invite.
 - Direct print checkout remains disabled; testers use the PDF proof handoff.
 
 ## Phase 2: Provider Alpha Gate
@@ -214,6 +219,10 @@ still calls only the protected hosted readiness route plus proof-quality and is
 useful when diagnosing a hosted proof failure.
 Replace the placeholder secret values above with real 24+ character random
 shared secrets; the gate rejects placeholder-looking values on purpose.
+Run the owner/collaborator/wrong-user Supabase account matrix before sharing
+the hosted URL. The local `npm run test:e2e:web` smoke validates the same
+access-control and invite behavior with dev-auth headers, but it is not a
+substitute for one real hosted login pass.
 
 For the Phase 2 direct-print gate, run:
 

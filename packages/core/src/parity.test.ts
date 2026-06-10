@@ -50,8 +50,42 @@ function createProjectWithPhotos() {
 
 describe("template catalog", () => {
   it("ships the v1 template-pack and spread-template floor", () => {
-    expect(BOOK_TEMPLATE_PACKS).toHaveLength(12);
-    expect(SPREAD_TEMPLATES).toHaveLength(64);
+    expect(BOOK_TEMPLATE_PACKS).toHaveLength(16);
+    expect(SPREAD_TEMPLATES).toHaveLength(88);
+  });
+
+  it("keeps every book pack wired to existing spread templates", () => {
+    const templateIds = new Set(SPREAD_TEMPLATES.map((template) => template.id));
+
+    expect(
+      BOOK_TEMPLATE_PACKS.every((pack) =>
+        pack.spreadTemplateIds.length > 0 &&
+        pack.spreadTemplateIds.every((templateId) => templateIds.has(templateId)) &&
+        templateIds.has(pack.coverTemplateId),
+      ),
+    ).toBe(true);
+  });
+
+  it("exposes the new panorama, journal, and motion layout families", () => {
+    const newLayoutStyles = [
+      "panorama_spread",
+      "photo_journal",
+      "burst_sequence",
+    ];
+
+    for (const layoutStyle of newLayoutStyles) {
+      const templatesForStyle = SPREAD_TEMPLATES.filter(
+        (template) => template.layoutStyle === layoutStyle,
+      );
+      const packUsesStyle = BOOK_TEMPLATE_PACKS.some((pack) =>
+        pack.spreadTemplateIds.some((templateId) =>
+          templatesForStyle.some((template) => template.id === templateId),
+        ),
+      );
+
+      expect(templatesForStyle).toHaveLength(8);
+      expect(packUsesStyle).toBe(true);
+    }
   });
 
   it("persists template pack choices onto draft pages", () => {
@@ -84,6 +118,23 @@ describe("template catalog", () => {
       ),
     ).toBe(true);
     expect(catalogTemplateIds.has("collage-1")).toBe(false);
+  });
+
+  it("makes the new book systems selectable and visible to AI planning", () => {
+    const project = createProjectWithPhotos();
+    const pack = BOOK_TEMPLATE_PACKS.find((entry) => entry.id === "resort-panorama-luxe")!;
+    const updatedProject = applyBookTemplatePack(project, pack.id);
+    const catalog = getAiTemplateCatalogForPrompt(pack.id);
+    const catalogTemplateIds = new Set(
+      catalog.spreadTemplates.map((template) => template.id),
+    );
+
+    expect(updatedProject.draftEditorState?.templatePackId).toBe(pack.id);
+    expect(updatedProject.bookDraft.pages[0]?.templateId).toBe("panorama-1");
+    expect(catalog.bookTemplatePacks).toHaveLength(1);
+    expect(catalogTemplateIds.has("panorama-1")).toBe(true);
+    expect(catalogTemplateIds.has("photo-journal-1")).toBe(true);
+    expect(catalogTemplateIds.has("burst-sequence-1")).toBe(false);
   });
 });
 

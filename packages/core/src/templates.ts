@@ -90,6 +90,16 @@ const spreadFamilies: Array<{
     tags: ["panorama", "dramatic", "premium"],
   },
   {
+    id: "panorama",
+    name: "Panorama Story",
+    category: "premium",
+    description: "Wide scenic pages for resort, overlook, skyline, and landscape moments.",
+    layoutStyle: "panorama_spread",
+    minPhotos: 1,
+    maxPhotos: 3,
+    tags: ["panorama", "landscape", "scenic"],
+  },
+  {
     id: "caption",
     name: "Caption Feature",
     category: "yearbook",
@@ -98,6 +108,26 @@ const spreadFamilies: Array<{
     minPhotos: 1,
     maxPhotos: 2,
     tags: ["caption", "copy", "reflection"],
+  },
+  {
+    id: "photo-journal",
+    name: "Photo Journal",
+    category: "minimal",
+    description: "Editorial image-and-copy pages for notes, context, and quieter memories.",
+    layoutStyle: "photo_journal",
+    minPhotos: 1,
+    maxPhotos: 3,
+    tags: ["journal", "caption", "editorial"],
+  },
+  {
+    id: "burst-sequence",
+    name: "Burst Sequence",
+    category: "family",
+    description: "Fast multi-frame spreads for action, candids, arrivals, and playful sequences.",
+    layoutStyle: "burst_sequence",
+    minPhotos: 4,
+    maxPhotos: 8,
+    tags: ["sequence", "action", "candid"],
   },
 ];
 
@@ -147,7 +177,7 @@ function getIdealPhotoCount(layoutStyle: PageLayoutStyle) {
 
 function getTemplateMetadata(layoutStyle: PageLayoutStyle) {
   const isHero = ["full_bleed", "hero", "panorama_spread", "hero_full_bleed"].includes(layoutStyle);
-  const isDense = ["collage", "family_recap", "dense_candid_grid", "mosaic", "memorabilia_spread"].includes(layoutStyle);
+  const isDense = ["burst_sequence", "collage", "family_recap", "dense_candid_grid", "mosaic", "memorabilia_spread"].includes(layoutStyle);
   const isQuiet = ["caption", "timeline", "chapter", "text_divider", "closing"].includes(layoutStyle);
 
   return {
@@ -194,7 +224,10 @@ export const SPREAD_TEMPLATES: SpreadTemplate[] = spreadFamilies.flatMap((family
         "editorial travel",
         family.layoutStyle === "timeline" ? "arrival/departure" : "",
         family.layoutStyle === "full_bleed" ? "panorama hero" : "",
+        family.layoutStyle === "panorama_spread" ? "wide scenic hero" : "",
         family.layoutStyle === "caption" ? "quiet caption" : "",
+        family.layoutStyle === "photo_journal" ? "journal notes" : "",
+        family.layoutStyle === "burst_sequence" ? "movement sequence" : "",
         family.layoutStyle === "family_recap" || family.layoutStyle === "collage"
           ? "food/detail grid"
           : "",
@@ -209,18 +242,18 @@ export const SPREAD_TEMPLATES: SpreadTemplate[] = spreadFamilies.flatMap((family
       visualDensity: metadata.visualDensity,
       bestUseCases: [
         family.description,
-        family.layoutStyle === "full_bleed"
+        family.layoutStyle === "full_bleed" || family.layoutStyle === "panorama_spread"
           ? "Resort, ocean, skyline, landscape, or panorama hero pages."
-          : family.layoutStyle === "caption"
+          : family.layoutStyle === "caption" || family.layoutStyle === "photo_journal"
             ? "Quiet reflection, closing, or copy-led memory pages."
-            : family.layoutStyle === "family_recap" || family.layoutStyle === "collage"
+            : family.layoutStyle === "family_recap" || family.layoutStyle === "collage" || family.layoutStyle === "burst_sequence"
               ? "Food, detail, candid, texture, and supporting memory groups."
               : "Balanced story spreads with clear hierarchy.",
       ],
       avoidWhen: [
-        family.layoutStyle === "full_bleed"
+        family.layoutStyle === "full_bleed" || family.layoutStyle === "panorama_spread"
           ? "Avoid with low-resolution, vertical, or cluttered images."
-          : family.layoutStyle === "collage"
+          : family.layoutStyle === "collage" || family.layoutStyle === "burst_sequence"
             ? "Avoid when the spread needs a single emotional focal point."
             : "Avoid if the photo count falls outside the template limits.",
       ],
@@ -318,6 +351,38 @@ export const BOOK_TEMPLATE_PACKS: BookTemplatePack[] = [
     previewAccent: "#335c52",
   }),
   pack({
+    id: "resort-panorama-luxe",
+    name: "Resort Panorama Luxe",
+    category: "premium",
+    description: "Wide cinematic scenic pages mixed with polished editorial context.",
+    formatId: "11x8.5-landscape",
+    styleMode: "minimal_editorial",
+    fontPresetId: "continental",
+    captionTone: "reflective",
+    storyMode: "location_clusters",
+    themeId: "coastline",
+    coverTemplateId: "panorama-1",
+    spreadTemplateIds: [...spreadIds("panorama"), ...spreadIds("full-bleed"), ...spreadIds("photo-journal")],
+    tags: ["resort", "panorama", "premium"],
+    previewAccent: "#6a7ea8",
+  }),
+  pack({
+    id: "action-weekend-burst",
+    name: "Action Weekend Burst",
+    category: "travel",
+    description: "Fast-paced sequences for active trips, arrivals, candids, and quick story beats.",
+    formatId: "10x10-square",
+    styleMode: "bold_travel",
+    fontPresetId: "poster",
+    captionTone: "playful",
+    storyMode: "day_by_day",
+    themeId: "golden-hour",
+    coverTemplateId: "burst-sequence-1",
+    spreadTemplateIds: [...spreadIds("burst-sequence"), ...spreadIds("collage"), ...spreadIds("timeline")],
+    tags: ["action", "weekend", "candid"],
+    previewAccent: "#c76c3a",
+  }),
+  pack({
     id: "couples-keepsake",
     name: "Couples Keepsake",
     category: "couples",
@@ -382,6 +447,22 @@ export const BOOK_TEMPLATE_PACKS: BookTemplatePack[] = [
     previewAccent: "#c76c3a",
   }),
   pack({
+    id: "family-motion-recap",
+    name: "Family Motion Recap",
+    category: "family",
+    description: "A lively family book with action sequences, recap pages, and warm journal moments.",
+    formatId: "10x10-square",
+    styleMode: "warm_scrapbook",
+    fontPresetId: "field",
+    captionTone: "playful",
+    storyMode: "theme_clusters",
+    themeId: "pine-ink",
+    coverTemplateId: "burst-sequence-3",
+    spreadTemplateIds: [...spreadIds("burst-sequence"), ...spreadIds("family-recap"), ...spreadIds("photo-journal")],
+    tags: ["family", "movement", "recap"],
+    previewAccent: "#335c52",
+  }),
+  pack({
     id: "annual-classic",
     name: "Annual Classic",
     category: "yearbook",
@@ -427,6 +508,22 @@ export const BOOK_TEMPLATE_PACKS: BookTemplatePack[] = [
     coverTemplateId: "minimal-grid-1",
     spreadTemplateIds: [...spreadIds("minimal-grid"), ...spreadIds("caption"), ...spreadIds("full-bleed")],
     tags: ["minimal", "gallery", "clean"],
+    previewAccent: "#6a7ea8",
+  }),
+  pack({
+    id: "story-journal-classic",
+    name: "Story Journal Classic",
+    category: "minimal",
+    description: "A quieter book system for reflective captions, travel notes, and gallery pacing.",
+    formatId: "12x12-square",
+    styleMode: "clean_modern",
+    fontPresetId: "novel",
+    captionTone: "reflective",
+    storyMode: "theme_clusters",
+    themeId: "coastline",
+    coverTemplateId: "photo-journal-1",
+    spreadTemplateIds: [...spreadIds("photo-journal"), ...spreadIds("minimal-grid"), ...spreadIds("caption")],
+    tags: ["journal", "minimal", "reflective"],
     previewAccent: "#6a7ea8",
   }),
   pack({

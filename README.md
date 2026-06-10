@@ -140,6 +140,14 @@ because the local shell may not match Vercel. Set
 `ALPHA_READINESS_CHECK_CALLER_ENV=1` when you also want to verify this PC's
 worker-side environment before a tester session.
 
+For live family/friend testing, create at least three real Supabase Auth tester
+accounts before sharing the app: one owner, one invited collaborator, and one
+wrong-user control account. The owner should create a book and send an invite,
+the collaborator should accept it with the invited email and edit the shared
+book, and the wrong-user account should fail to open the private project or
+accept the invite. The local `npm run test:e2e:web` smoke covers the same
+isolation matrix with dev-auth headers.
+
 Before inviting outside testers, run the hosted alpha acceptance gate against a
 real generated proof from the hosted project store and the private worker on
 this PC:
@@ -317,7 +325,7 @@ npx eas build --platform ios --profile preview
 - Remote photo upload flow for S3-compatible storage when `PHOTO_STORAGE_*` variables are configured
 - Web project creation, browser photo upload, invite, note, curation, blocker resolution, finalize, draft editor, and print-proof page
 - Native mobile template pack, theme, spread copy, spread approval, draft publish/load, preview, and proof export controls
-- Local AI Designer generation from imported photos and notes using a 12-pack / 64-spread controlled template catalog
+- Local AI Designer generation from imported photos and notes using a 16-pack / 88-spread controlled template catalog
 - Proof PDF export from iOS and web print-proof Save-as-PDF handoff
 - Finalization checks plus proof PDF export for handoff to a real print vendor
 

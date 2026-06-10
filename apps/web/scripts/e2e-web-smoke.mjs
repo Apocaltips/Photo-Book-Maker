@@ -1188,8 +1188,8 @@ try {
 
     const body = JSON.parse(text);
     return (
-      body.catalog?.bookTemplatePacks?.length >= 12 &&
-      body.catalog?.spreadTemplates?.length >= 64
+      body.catalog?.bookTemplatePacks?.length >= 16 &&
+      body.catalog?.spreadTemplates?.length >= 88
     );
   }, "template catalog smoke");
 

@@ -750,6 +750,9 @@ function getPlannerTemplateCatalog(templatePackId: string | null | undefined) {
     "caption-1",
     "timeline-1",
     "collage-1",
+    "panorama-1",
+    "photo-journal-1",
+    "burst-sequence-1",
   ]);
   const spreadTemplates = catalog.spreadTemplates.filter((template) =>
     preferredTemplateIds.has(template.id),
@@ -776,12 +779,12 @@ function getVisibleTemplateFallbackId(
 ) {
   const candidates =
     storyBeat === "opener"
-      ? ["full-bleed-1", "hero-1", "full-bleed-2"]
+      ? ["panorama-1", "full-bleed-1", "hero-1", "full-bleed-2"]
       : storyBeat === "details"
-        ? ["minimal-grid-1", "collage-1", "minimal-grid-2"]
+        ? ["burst-sequence-1", "minimal-grid-1", "collage-1", "minimal-grid-2"]
         : storyBeat === "reflection" || storyBeat === "closing"
-          ? ["caption-1", "minimal-grid-2", "full-bleed-2"]
-          : ["timeline-1", "hero-2", "hero-1"];
+          ? ["photo-journal-1", "caption-1", "minimal-grid-2", "full-bleed-2"]
+          : ["timeline-1", "photo-journal-1", "hero-2", "hero-1"];
 
   return candidates.find((templateId) => allowedTemplateIds.has(templateId)) ??
     [...allowedTemplateIds][0] ??

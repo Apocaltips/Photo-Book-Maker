@@ -192,8 +192,8 @@ function addSharedSecretStrengthChecks(
 
 function addTemplateCatalogChecks(checks: ReadinessCheck[]) {
   const catalog = listTemplateCatalog();
-  const minTemplatePacks = parseMinEnv("ALPHA_READINESS_MIN_TEMPLATE_PACKS", 12);
-  const minSpreadTemplates = parseMinEnv("ALPHA_READINESS_MIN_SPREAD_TEMPLATES", 64);
+  const minTemplatePacks = parseMinEnv("ALPHA_READINESS_MIN_TEMPLATE_PACKS", 16);
+  const minSpreadTemplates = parseMinEnv("ALPHA_READINESS_MIN_SPREAD_TEMPLATES", 88);
   const packCount = catalog.bookTemplatePacks.length;
   const spreadCount = catalog.spreadTemplates.length;
 

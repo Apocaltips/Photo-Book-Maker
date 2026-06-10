@@ -2,6 +2,7 @@
 
 import {
   BOOK_TEMPLATE_PACKS,
+  SPREAD_TEMPLATES,
   applyBookTemplatePack,
   buildDefaultDraftEditorState,
   ensureDraftEditorState,
@@ -825,9 +826,9 @@ export function BookDraftEditor({
                 Catalog scope
               </div>
               <div className="mt-1">
-                {BOOK_TEMPLATE_PACKS.length} book packs and 64 spread templates ship in
-                v1. The selected pack saves with the draft so iOS and web reopen the
-                same design.
+                {BOOK_TEMPLATE_PACKS.length} book packs and {SPREAD_TEMPLATES.length}{" "}
+                spread templates ship in v1. The selected pack saves with the draft so
+                iOS and web reopen the same design.
               </div>
             </div>
             <SelectField

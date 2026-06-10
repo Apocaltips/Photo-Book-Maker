@@ -1852,6 +1852,12 @@ export function getAiTemplateCatalogForPrompt(templatePackId?: string | null) {
     "timeline-2",
     "couple-story-1",
     "couple-story-2",
+    "panorama-1",
+    "panorama-2",
+    "photo-journal-1",
+    "photo-journal-2",
+    "burst-sequence-1",
+    "burst-sequence-2",
   ]);
   const allowedTemplateIds = selectedPack
     ? new Set(selectedPack.spreadTemplateIds)
