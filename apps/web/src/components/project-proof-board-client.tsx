@@ -30,6 +30,15 @@ type UploadProgress = {
   uploaded: number;
 };
 
+const SUPPORTED_WEB_PHOTO_CONTENT_TYPES = new Set([
+  "image/jpeg",
+  "image/png",
+  "image/webp",
+  "image/heic",
+  "image/heif",
+]);
+const HEIC_WEB_PHOTO_CONTENT_TYPES = new Set(["image/heic", "image/heif"]);
+
 const ACTIVE_GENERATION_STATUSES = new Set<GenerationRun["status"]>([
   "queued",
   "analyzing_photos",
@@ -101,22 +110,101 @@ export function ProjectProofBoardClient({
     return payload;
   }
 
-  async function getImageDimensions(file: File) {
+  function guessPhotoContentType(file: File) {
+    const browserType = file.type.split(";")[0]?.trim().toLowerCase();
+    if (browserType) {
+      return browserType;
+    }
+
+    const extension = file.name.split(".").pop()?.toLowerCase();
+    if (extension === "jpg" || extension === "jpeg") {
+      return "image/jpeg";
+    }
+    if (extension === "png") {
+      return "image/png";
+    }
+    if (extension === "webp") {
+      return "image/webp";
+    }
+    if (extension === "heic") {
+      return "image/heic";
+    }
+    if (extension === "heif") {
+      return "image/heif";
+    }
+
+    return "";
+  }
+
+  async function decodeImageDimensions(file: File) {
     const objectUrl = URL.createObjectURL(file);
 
     try {
-      return await new Promise<{ height: number; width: number }>((resolve) => {
+      return await new Promise<{ height: number; width: number }>((resolve, reject) => {
         const image = new Image();
-        image.onload = () =>
+        image.onload = () => {
+          if (!image.naturalHeight || !image.naturalWidth) {
+            reject(new Error("Photo did not report usable dimensions."));
+            return;
+          }
+
           resolve({
-            height: image.naturalHeight || 1200,
-            width: image.naturalWidth || 1600,
+            height: image.naturalHeight,
+            width: image.naturalWidth,
           });
-        image.onerror = () => resolve({ height: 1200, width: 1600 });
+        };
+        image.onerror = () => reject(new Error("Photo could not be decoded."));
         image.src = objectUrl;
       });
     } finally {
       URL.revokeObjectURL(objectUrl);
+    }
+  }
+
+  async function getUploadPhotoMetadata(file: File) {
+    const mimeType = guessPhotoContentType(file);
+    const fileLabel = file.name || "selected photo";
+
+    if (!SUPPORTED_WEB_PHOTO_CONTENT_TYPES.has(mimeType)) {
+      throw new Error(`${fileLabel} is not a supported photo type.`);
+    }
+
+    try {
+      const dimensions = await decodeImageDimensions(file);
+      const qualityNotes = ["Uploaded from web.", "Waiting on location confirmation."];
+
+      if (!file.type) {
+        qualityNotes.push("Photo type was inferred from the file name.");
+      }
+
+      if (Math.min(dimensions.width, dimensions.height) < 900) {
+        qualityNotes.push(
+          `Resolution is ${dimensions.width}x${dimensions.height}; review before full-page print.`,
+        );
+      }
+
+      return {
+        ...dimensions,
+        mimeType,
+        qualityNotes,
+      };
+    } catch (error) {
+      if (HEIC_WEB_PHOTO_CONTENT_TYPES.has(mimeType)) {
+        return {
+          height: 3024,
+          mimeType,
+          qualityNotes: [
+            "Uploaded from web.",
+            "Browser could not read HEIC/HEIF dimensions; review crops before print.",
+            "Waiting on location confirmation.",
+          ],
+          width: 3024,
+        };
+      }
+
+      throw error instanceof Error
+        ? new Error(`${fileLabel} does not look like a usable photo. ${error.message}`)
+        : new Error(`${fileLabel} does not look like a usable photo.`);
     }
   }
 
@@ -173,6 +261,7 @@ export function ProjectProofBoardClient({
         });
 
         try {
+          const metadata = await getUploadPhotoMetadata(file);
           const contentHash = await getFileContentHash(file);
           const normalizedContentHash = contentHash?.trim().toLowerCase();
 
@@ -191,7 +280,7 @@ export function ProjectProofBoardClient({
               "Content-Type": "application/json",
             },
             body: JSON.stringify({
-              contentType: file.type || "image/jpeg",
+              contentType: metadata.mimeType,
               fileName: file.name || `web-upload-${Date.now()}-${index}.jpg`,
             }),
           });
@@ -211,7 +300,7 @@ export function ProjectProofBoardClient({
           const uploadResponse = await fetch(ticketBody.upload.uploadUrl, {
             method: "PUT",
             headers: {
-              "Content-Type": file.type || "image/jpeg",
+              "Content-Type": metadata.mimeType,
             },
             body: file,
           });
@@ -220,19 +309,18 @@ export function ProjectProofBoardClient({
             throw new Error(`Remote upload failed for ${file.name}.`);
           }
 
-          const dimensions = await getImageDimensions(file);
           photos.push({
             capturedAt: new Date(file.lastModified || Date.now()).toISOString(),
             ...(contentHash ? { contentHash } : {}),
-            height: dimensions.height,
+            height: metadata.height,
             locationConfidence: "missing",
-            mimeType: file.type || "image/jpeg",
-            qualityNotes: ["Uploaded from web.", "Waiting on location confirmation."],
+            mimeType: metadata.mimeType,
+            qualityNotes: metadata.qualityNotes,
             storagePath: ticketBody.upload.storagePath,
             title: file.name.replace(/\.[^.]+$/, "") || `Web upload ${index + 1}`,
             uploaderId: workspace.session?.user.id ?? DEV_AUTH_ID,
             uri: ticketBody.upload.downloadUrl,
-            width: dimensions.width,
+            width: metadata.width,
           });
         } catch {
           failedFileNames.push(file.name || `photo ${index + 1}`);

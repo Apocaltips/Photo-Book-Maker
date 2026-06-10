@@ -2,6 +2,7 @@ import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { NextResponse } from "next/server";
 import {
+  getPhotoUploadBytesError,
   getLocalUploadFilePath,
   isLocalObjectStorageEnabled,
 } from "@/lib/server/object-storage";
@@ -39,8 +40,18 @@ export async function PUT(
   const { path: pathSegments } = await params;
   const storagePath = getStoragePath(pathSegments);
   const filePath = getLocalUploadFilePath(storagePath);
+  const bytes = Buffer.from(await request.arrayBuffer());
+  const validationError = getPhotoUploadBytesError({
+    bytes,
+    contentType: request.headers.get("content-type") ?? undefined,
+  });
+
+  if (validationError) {
+    return NextResponse.json({ message: validationError }, { status: 400 });
+  }
+
   await mkdir(path.dirname(filePath), { recursive: true });
-  await writeFile(filePath, Buffer.from(await request.arrayBuffer()));
+  await writeFile(filePath, bytes);
 
   return NextResponse.json({ ok: true, storagePath });
 }

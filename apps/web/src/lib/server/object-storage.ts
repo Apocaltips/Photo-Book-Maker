@@ -25,10 +25,24 @@ export const SUPPORTED_PHOTO_UPLOAD_CONTENT_TYPES = [
 const uploadExpirySeconds = 60 * 15;
 const downloadExpirySeconds = 60 * 60 * 24 * 7;
 const maxUploadFileNameLength = 180;
+const uploadFileExtensionsByContentType = {
+  "image/heic": "heic",
+  "image/heif": "heif",
+  "image/jpeg": "jpg",
+  "image/png": "png",
+  "image/webp": "webp",
+} satisfies Record<(typeof SUPPORTED_PHOTO_UPLOAD_CONTENT_TYPES)[number], string>;
+const uploadFileExtensionAliasesByContentType = {
+  "image/heic": ["heic"],
+  "image/heif": ["heif"],
+  "image/jpeg": ["jpg", "jpeg"],
+  "image/png": ["png"],
+  "image/webp": ["webp"],
+} satisfies Record<(typeof SUPPORTED_PHOTO_UPLOAD_CONTENT_TYPES)[number], string[]>;
 
 let cachedClient: S3Client | null | undefined;
 
-function normalizeContentType(contentType: string) {
+export function normalizePhotoUploadContentType(contentType: string) {
   return contentType.split(";")[0]?.trim().toLowerCase() ?? "";
 }
 
@@ -37,7 +51,7 @@ export function getPhotoUploadInputError(input: {
   fileName?: string;
 }) {
   const fileName = input.fileName?.trim() ?? "";
-  const contentType = normalizeContentType(input.contentType ?? "");
+  const contentType = normalizePhotoUploadContentType(input.contentType ?? "");
 
   if (!fileName || !contentType) {
     return "fileName and contentType are required.";
@@ -56,6 +70,59 @@ export function getPhotoUploadInputError(input: {
   return null;
 }
 
+export function getPhotoUploadBytesError(input: {
+  bytes: Buffer;
+  contentType?: string;
+}) {
+  const contentType = normalizePhotoUploadContentType(input.contentType ?? "");
+  const bytes = input.bytes;
+
+  if (!SUPPORTED_PHOTO_UPLOAD_CONTENT_TYPES.includes(
+    contentType as (typeof SUPPORTED_PHOTO_UPLOAD_CONTENT_TYPES)[number],
+  )) {
+    return "Unsupported photo type. Upload JPEG, PNG, WebP, HEIC, or HEIF photos.";
+  }
+
+  if (!bytes.length) {
+    return "The uploaded photo is empty.";
+  }
+
+  if (contentType === "image/jpeg") {
+    return bytes.length >= 3 &&
+      bytes[0] === 0xff &&
+      bytes[1] === 0xd8 &&
+      bytes[2] === 0xff
+      ? null
+      : "The uploaded file is not a valid JPEG photo.";
+  }
+
+  if (contentType === "image/png") {
+    const pngSignature = [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a];
+    return pngSignature.every((byte, index) => bytes[index] === byte)
+      ? null
+      : "The uploaded file is not a valid PNG photo.";
+  }
+
+  if (contentType === "image/webp") {
+    return bytes.length >= 12 &&
+      bytes.subarray(0, 4).toString("ascii") === "RIFF" &&
+      bytes.subarray(8, 12).toString("ascii") === "WEBP"
+      ? null
+      : "The uploaded file is not a valid WebP photo.";
+  }
+
+  const isHeifContainer =
+    bytes.length >= 12 && bytes.subarray(4, 8).toString("ascii") === "ftyp";
+  const heifBrands = bytes.subarray(8, Math.min(bytes.length, 40)).toString("ascii");
+  const hasSupportedHeifBrand = /\b(?:heic|heix|hevc|hevx|heif|mif1|msf1)\b/.test(
+    heifBrands,
+  );
+
+  return isHeifContainer && hasSupportedHeifBrand
+    ? null
+    : "The uploaded file is not a valid HEIC or HEIF photo.";
+}
+
 function sanitizeFileName(fileName: string) {
   const normalized = fileName
     .trim()
@@ -64,6 +131,27 @@ function sanitizeFileName(fileName: string) {
     .replace(/^-+|-+$/g, "");
 
   return normalized || `photo-${Date.now()}.jpg`;
+}
+
+function withContentTypeExtension(fileName: string, contentType: string) {
+  const normalizedContentType = normalizePhotoUploadContentType(contentType);
+  const sanitized = sanitizeFileName(fileName);
+  const knownContentType =
+    normalizedContentType as (typeof SUPPORTED_PHOTO_UPLOAD_CONTENT_TYPES)[number];
+  const expectedExtension = uploadFileExtensionsByContentType[knownContentType];
+  const acceptedExtensions = uploadFileExtensionAliasesByContentType[knownContentType] ?? [];
+
+  if (!expectedExtension) {
+    return sanitized;
+  }
+
+  const extension = path.extname(sanitized).replace(/^\./, "").toLowerCase();
+  if (acceptedExtensions.includes(extension)) {
+    return sanitized;
+  }
+
+  const baseName = sanitized.replace(/\.[^.]+$/, "") || `photo-${Date.now()}`;
+  return `${baseName}.${expectedExtension}`;
 }
 
 function getBucketName() {
@@ -247,7 +335,8 @@ export async function createPhotoUploadTicket(input: {
     throw new Error(validationError);
   }
 
-  const contentType = normalizeContentType(input.contentType);
+  const contentType = normalizePhotoUploadContentType(input.contentType);
+  const fileName = withContentTypeExtension(input.fileName, contentType);
   const bucket = getBucketName();
   const client = getS3Client();
 
@@ -261,7 +350,7 @@ export async function createPhotoUploadTicket(input: {
     const storagePath = [
       "local-uploads",
       input.projectId,
-      `${Date.now()}-${randomUUID()}-${sanitizeFileName(input.fileName)}`,
+      `${Date.now()}-${randomUUID()}-${fileName}`,
     ].join("/");
     const localUploadOrigin = getLocalUploadOrigin(input.origin);
     const localUrl = `${localUploadOrigin}/api/local-uploads/${storagePath
@@ -281,7 +370,7 @@ export async function createPhotoUploadTicket(input: {
   const storagePath = [
     "projects",
     input.projectId,
-    `${Date.now()}-${randomUUID()}-${sanitizeFileName(input.fileName)}`,
+    `${Date.now()}-${randomUUID()}-${fileName}`,
   ].join("/");
 
   const uploadUrl = await getSignedUrl(

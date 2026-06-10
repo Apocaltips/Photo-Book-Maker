@@ -702,6 +702,32 @@ async function runProjectE2E() {
     );
   }
 
+  const corruptUpload = (
+    await apiJson(`/api/projects/${project.id}/uploads`, {
+      method: "POST",
+      body: JSON.stringify({
+        contentType: "image/png",
+        fileName: `android-e2e-corrupt-${stamp}.png`,
+      }),
+    })
+  ).upload;
+  const corruptUploadResponse = await fetchWithTimeout(corruptUpload.uploadUrl, {
+    method: "PUT",
+    headers: {
+      "Content-Type": "image/png",
+    },
+    body: Buffer.from("not a valid png"),
+  });
+  const corruptUploadBody = await corruptUploadResponse.json().catch(() => ({}));
+  if (
+    corruptUploadResponse.status !== 400 ||
+    !/valid PNG photo/i.test(corruptUploadBody.message ?? "")
+  ) {
+    throw new Error(
+      `Local upload route did not reject corrupt PNG bytes: ${corruptUploadResponse.status}`,
+    );
+  }
+
   const upload = (
     await apiJson(`/api/projects/${project.id}/uploads`, {
       method: "POST",
