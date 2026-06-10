@@ -9,8 +9,10 @@ import {
   authorizeAiWorkerRequest,
   createAiWorkerLeaseToken,
   getAiWorkerMaxAttempts,
+  hashAiWorkerJobProject,
   hashAiWorkerLeaseToken,
   normalizeAiWorkerLeaseSeconds,
+  signAiWorkerJob,
 } from "@/lib/server/ai-worker-auth";
 import {
   isRevisionConflictError,
@@ -196,10 +198,21 @@ export async function POST(request: Request) {
     return NextResponse.json({ job: null });
   }
 
+  const expectedRevision = project.revision ?? 1;
+  const projectDigest = hashAiWorkerJobProject(project);
   return NextResponse.json({
     job: {
-      expectedRevision: project.revision ?? 1,
+      expectedRevision,
+      jobSignature: signAiWorkerJob({
+        expectedRevision,
+        projectDigest,
+        projectId: project.id,
+        runId: claimedRun.id,
+        workerId,
+        workerLeaseToken,
+      }),
       project,
+      projectDigest,
       projectId: project.id,
       run: claimedRun,
       runId: claimedRun.id,

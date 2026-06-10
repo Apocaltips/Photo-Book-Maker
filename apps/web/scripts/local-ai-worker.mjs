@@ -1,4 +1,6 @@
 /* global AbortSignal, URL, clearInterval, console, fetch, process, setInterval, setTimeout */
+import { Buffer } from "node:buffer";
+import { createHash, createHmac, timingSafeEqual } from "node:crypto";
 
 const hostedBaseUrl = (
   process.env.LOCAL_AI_WORKER_HOSTED_BASE_URL ??
@@ -141,6 +143,44 @@ async function claimJob() {
   });
 }
 
+function getJobSignaturePayload(job) {
+  return JSON.stringify({
+    expectedRevision: job.expectedRevision,
+    projectDigest: job.projectDigest,
+    projectId: job.projectId,
+    runId: job.runId,
+    version: 1,
+    workerId: job.workerId,
+    workerLeaseToken: job.workerLeaseToken,
+  });
+}
+
+function hashJobProject(project) {
+  return createHash("sha256").update(JSON.stringify(project)).digest("hex");
+}
+
+function signJob(job) {
+  return `v1:${createHmac("sha256", secret).update(getJobSignaturePayload(job)).digest("hex")}`;
+}
+
+function assertValidJobSignature(job) {
+  if (!job.jobSignature || !job.workerLeaseToken || !job.projectDigest) {
+    throw new Error(
+      "Claimed AI worker job is missing its signature, lease token, or project digest.",
+    );
+  }
+
+  if (hashJobProject(job.project) !== job.projectDigest) {
+    throw new Error("Claimed AI worker job project digest did not match.");
+  }
+
+  const expected = Buffer.from(signJob(job));
+  const actual = Buffer.from(job.jobSignature);
+  if (expected.length !== actual.length || !timingSafeEqual(expected, actual)) {
+    throw new Error("Claimed AI worker job signature did not match.");
+  }
+}
+
 async function failJob(job, error) {
   await apiJson(hostedBaseUrl, "/api/ai/worker/generation/fail", {
     method: "POST",
@@ -223,6 +263,7 @@ async function runOnce() {
     return;
   }
 
+  assertValidJobSignature(claim.job);
   try {
     await processJob(claim.job);
   } catch (error) {

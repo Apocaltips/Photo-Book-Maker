@@ -1,5 +1,14 @@
 import { NextResponse } from "next/server";
-import { createHash, randomUUID } from "node:crypto";
+import { createHash, createHmac, timingSafeEqual, randomUUID } from "node:crypto";
+
+export type AiWorkerJobSignatureInput = {
+  expectedRevision: number;
+  projectDigest: string;
+  projectId: string;
+  runId: string;
+  workerId: string;
+  workerLeaseToken: string;
+};
 
 function parsePositiveIntegerEnv(value: string | undefined, fallback: number, min = 1) {
   const parsed = Number.parseInt(value ?? "", 10);
@@ -83,6 +92,54 @@ export function isAiWorkerLeaseTokenValid(
   return (
     !expectedHash ||
     Boolean(providedToken && hashAiWorkerLeaseToken(providedToken) === expectedHash)
+  );
+}
+
+export function hashAiWorkerJobProject(project: unknown) {
+  return createHash("sha256").update(JSON.stringify(project)).digest("hex");
+}
+
+function getAiWorkerSignaturePayload(input: AiWorkerJobSignatureInput) {
+  return JSON.stringify({
+    expectedRevision: input.expectedRevision,
+    projectDigest: input.projectDigest,
+    projectId: input.projectId,
+    runId: input.runId,
+    version: 1,
+    workerId: input.workerId,
+    workerLeaseToken: input.workerLeaseToken,
+  });
+}
+
+export function signAiWorkerJob(
+  input: AiWorkerJobSignatureInput,
+  secret = getAiWorkerSecret(),
+) {
+  if (!secret) {
+    throw new Error("Local AI worker secret is not configured.");
+  }
+
+  return `v1:${createHmac("sha256", secret)
+    .update(getAiWorkerSignaturePayload(input))
+    .digest("hex")}`;
+}
+
+export function isAiWorkerJobSignatureValid(
+  input: AiWorkerJobSignatureInput,
+  signature: string | undefined,
+  secret = getAiWorkerSecret(),
+) {
+  if (!signature || !secret) {
+    return false;
+  }
+
+  const expected = signAiWorkerJob(input, secret);
+  const expectedBuffer = Buffer.from(expected);
+  const actualBuffer = Buffer.from(signature);
+
+  return (
+    expectedBuffer.length === actualBuffer.length &&
+    timingSafeEqual(expectedBuffer, actualBuffer)
   );
 }
 

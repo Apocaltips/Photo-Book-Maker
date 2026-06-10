@@ -556,6 +556,9 @@ async function runProjectE2E() {
     claimed.job?.runId !== queuedGeneration.run.id ||
     claimed.job?.workerId !== "e2e-worker" ||
     claimed.job?.run?.workerAttemptCount !== 1 ||
+    !claimed.job?.jobSignature ||
+    claimed.job.run?.jobSignature ||
+    !claimed.job?.projectDigest ||
     !claimed.job?.workerLeaseToken ||
     claimed.job.run?.workerLeaseToken ||
     !claimed.job.run?.workerLeaseTokenHash
