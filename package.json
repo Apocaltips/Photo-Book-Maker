@@ -16,6 +16,7 @@
     "test:ai:health": "npm run test:ai:health -w @photo-book-maker/web",
     "test:ai:benchmark": "npm run test:ai:benchmark -w @photo-book-maker/web",
     "test:ai:local": "npm run test:ai:local -w @photo-book-maker/web",
-    "test:e2e:web": "npm run test:e2e -w @photo-book-maker/web"
+    "test:e2e:web": "npm run test:e2e -w @photo-book-maker/web",
+    "worker:ai:local": "npm run worker:ai:local -w @photo-book-maker/web"
   }
 }

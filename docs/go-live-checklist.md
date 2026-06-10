@@ -80,7 +80,9 @@ The authoritative API for v1 is the Next.js app in `apps/web`.
 3. Confirm `https://YOUR-WEB-APP/api/projects` returns an auth-required JSON response.
 4. Confirm `https://YOUR-WEB-APP/api/templates` returns at least 12 book template packs and 64 spread templates.
 5. In local/staging, confirm `/ai-health` shows the local AI models are ready, queue health is clean, and the latest saved generation has an acceptable quality score before using AI Designer with testers.
-6. Run the local AI benchmark and keep the generated report path with tester-session notes. If the benchmark used the fallback planner or deterministic safe fallback, record that explicitly instead of treating it as a primary-planner pass.
+6. For hosted web alpha, configure `LOCAL_AI_WORKER_SECRET` and `LOCAL_AI_WORKER_ENABLED=1` on the hosted app. Keep `LOCAL_AI_DIRECT_IN_PRODUCTION=0` so Vercel never tries to call local Ollama directly.
+7. On the private PC, run the local web app with Ollama and storage credentials, then run `npm run worker:ai:local` with `LOCAL_AI_WORKER_HOSTED_BASE_URL` pointed at the hosted app and `LOCAL_AI_WORKER_PROCESSOR_BASE_URL` pointed at the local app. Leave `LOCAL_AI_WORKER_HEARTBEAT_MS=60000` unless a benchmark proves the hosted queue needs a shorter heartbeat.
+8. Run the local AI benchmark and keep the generated report path with tester-session notes. If the benchmark used the fallback planner or deterministic safe fallback, record that explicitly instead of treating it as a primary-planner pass.
 
 ## 5. Point Mobile At The Hosted API
 

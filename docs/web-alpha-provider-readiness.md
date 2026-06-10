@@ -52,6 +52,27 @@ Bake-off criteria:
 
 For hosted web testing before a dedicated AI provider exists, never expose Ollama or `localhost:11434` publicly. The hosted app must enqueue generation work, and a private worker on this PC should poll authenticated jobs, run local models, and post results back. This keeps local AI replaceable by a dedicated API provider later.
 
+Worker bridge v1:
+
+- Hosted web/API: set `LOCAL_AI_WORKER_ENABLED=1` and `LOCAL_AI_WORKER_SECRET`.
+- Private PC processor: run the local web app with Ollama and storage credentials available.
+- Private PC worker: set `LOCAL_AI_WORKER_HOSTED_BASE_URL` to the hosted app,
+  `LOCAL_AI_WORKER_PROCESSOR_BASE_URL` to the local app, and run
+  `npm run worker:ai:local`.
+- The worker calls `/api/ai/worker/generation/claim`, processes the payload
+  through `/api/ai/worker/generation/process` on the private PC, then posts to
+  `/api/ai/worker/generation/complete` or `/api/ai/worker/generation/fail`.
+- The worker heartbeats during long local model calls with
+  `LOCAL_AI_WORKER_HEARTBEAT_MS` so slow 60-photo and 174-photo test runs are
+  not reclaimed as abandoned.
+- All worker endpoints require `Authorization: Bearer <LOCAL_AI_WORKER_SECRET>`.
+  The processor endpoint is disabled in production unless
+  `LOCAL_AI_PROCESSOR_IN_PRODUCTION=1`, because Ollama should run on the private
+  worker machine, not inside the hosted app.
+- The worker refuses to use a remote hosted URL as its processor unless
+  `LOCAL_AI_WORKER_ALLOW_HOSTED_PROCESSOR=1` is set intentionally. In normal
+  alpha testing, hosted base URL is public and processor base URL is local.
+
 ## Validation Commands
 
 Run these before a family/friend testing session:

@@ -7,6 +7,7 @@ import {
 } from "@photo-book-maker/core";
 import { NextResponse } from "next/server";
 import { authorizeProjectRequest } from "@/lib/server/auth";
+import { isAiWorkerQueueEnabled } from "@/lib/server/ai-worker-auth";
 import { generateProjectBookWithLocalAi } from "@/lib/server/book-generation-ai";
 import { mutationErrorResponse } from "@/lib/server/mutation-response";
 import { hydrateProjectForClient } from "@/lib/server/project-response";
@@ -31,11 +32,12 @@ export async function POST(
     const directLocalAiAllowed =
       process.env.NODE_ENV !== "production" ||
       process.env.LOCAL_AI_DIRECT_IN_PRODUCTION === "1";
-    if (!directLocalAiAllowed) {
+    const queueForWorker = isAiWorkerQueueEnabled();
+    if (!directLocalAiAllowed && !queueForWorker) {
       return NextResponse.json(
         {
           message:
-            "Local AI direct generation is disabled in production. Configure the private AI worker bridge before enabling hosted AI Designer runs.",
+            "Local AI direct generation is disabled in production. Configure LOCAL_AI_WORKER_SECRET for the private worker bridge before enabling hosted AI Designer runs.",
         },
         { status: 503 },
       );
@@ -48,7 +50,11 @@ export async function POST(
 
     const body = (await request.json().catch(() => ({}))) as GenerationRunBody;
     const queuedRun = createGenerationRun({
-      progress: ["generation queued"],
+      progress: [
+        queueForWorker
+          ? "generation queued for private local AI worker"
+          : "generation queued",
+      ],
       status: "queued",
     });
     failureRunId = queuedRun.id;
@@ -73,6 +79,18 @@ export async function POST(
 
     if (!startedProject) {
       return NextResponse.json({ message: "Project not found." }, { status: 404 });
+    }
+
+    if (queueForWorker) {
+      return NextResponse.json(
+        {
+          message: "AI book generation queued for the private local worker.",
+          project: await hydrateProjectForClient(startedProject, getRequestOrigin(request)),
+          run: startedProject.generationRuns?.find((entry) => entry.id === queuedRun.id) ??
+            queuedRun,
+        },
+        { status: 202 },
+      );
     }
 
     const persistRun = async (run: GenerationRun) => {

@@ -56,6 +56,25 @@ primary planner, fallback planner, or the deterministic safe fallback. A safe
 fallback can be acceptable for local alpha when the quality score passes, but
 it should stay visible instead of being treated like a primary-model success.
 
+For hosted web alpha with local AI, do not expose Ollama. Configure
+`LOCAL_AI_WORKER_SECRET` on the hosted web app and this PC, set
+`LOCAL_AI_WORKER_ENABLED=1` on the hosted app, then run the private worker from
+this checkout:
+
+```powershell
+$env:LOCAL_AI_WORKER_SECRET="same-secret-as-hosted"
+$env:LOCAL_AI_WORKER_HOSTED_BASE_URL="https://YOUR-WEB-APP"
+$env:LOCAL_AI_WORKER_PROCESSOR_BASE_URL="http://127.0.0.1:3000"
+npm run worker:ai:local
+```
+
+Use `LOCAL_AI_WORKER_LOOP=1` for continuous polling. The hosted app queues the
+job; the private worker claims it, runs local Ollama through the local processor
+app, heartbeats while the local models are running, and posts the saved draft
+back to the hosted app. Keep `LOCAL_AI_WORKER_PROCESSOR_BASE_URL` pointed at a
+private local URL. The worker refuses to use a remote hosted URL as its processor
+unless `LOCAL_AI_WORKER_ALLOW_HOSTED_PROCESSOR=1` is set intentionally.
+
 6. In a second terminal, start Expo:
 
 ```bash

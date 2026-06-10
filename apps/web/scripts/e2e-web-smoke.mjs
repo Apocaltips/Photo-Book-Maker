@@ -33,6 +33,7 @@ const devAuthHeaders = {
   "X-Photo-Book-Dev-Id": "android-tester",
   "X-Photo-Book-Dev-Name": "Android Tester",
 };
+const workerSecret = "photo-book-e2e-worker-secret";
 const otherDevAuthHeaders = {
   "X-Photo-Book-Dev-Email": "family-friend@example.com",
   "X-Photo-Book-Dev-Id": "family-friend",
@@ -70,6 +71,8 @@ const server = reuseExistingServer
           NEXT_TELEMETRY_DISABLED: "1",
           NEXT_PUBLIC_API_BASE_URL: `${baseUrl}/api`,
           PHOTO_BOOK_FILE_STORE_DIR: fileStoreDir,
+          LOCAL_AI_WORKER_ENABLED: "1",
+          LOCAL_AI_WORKER_SECRET: workerSecret,
         },
         shell: true,
         stdio: ["ignore", "pipe", "pipe"],
@@ -82,6 +85,8 @@ const server = reuseExistingServer
           NEXT_TELEMETRY_DISABLED: "1",
           NEXT_PUBLIC_API_BASE_URL: `${baseUrl}/api`,
           PHOTO_BOOK_FILE_STORE_DIR: fileStoreDir,
+          LOCAL_AI_WORKER_ENABLED: "1",
+          LOCAL_AI_WORKER_SECRET: workerSecret,
         },
         stdio: ["ignore", "pipe", "pipe"],
       });
@@ -188,6 +193,24 @@ async function apiJson(path, init = {}) {
   return body;
 }
 
+async function workerApiJson(path, init = {}) {
+  const response = await fetchWithTimeout(`${baseUrl}${path}`, {
+    ...init,
+    headers: {
+      "Authorization": `Bearer ${workerSecret}`,
+      "Content-Type": "application/json",
+      ...(init.headers ?? {}),
+    },
+  });
+  const body = await response.json().catch(() => ({}));
+
+  if (!response.ok) {
+    throw new Error(`Worker API call failed ${path}: ${response.status}\n${JSON.stringify(body)}`);
+  }
+
+  return body;
+}
+
 async function runProjectE2E() {
   const stamp = Date.now();
   let project = (
@@ -258,6 +281,165 @@ async function runProjectE2E() {
   ) {
     throw new Error("Generation questionnaire route did not return usable defaults.");
   }
+
+  const queuedGeneration = await apiJson(`/api/projects/${project.id}/generation/run`, {
+    method: "POST",
+    body: JSON.stringify({
+      expectedRevision: project.revision,
+      questionnaire: generationQuestions.questionnaire.answers,
+    }),
+  });
+  project = queuedGeneration.project;
+  if (
+    queuedGeneration.run?.status !== "queued" ||
+    !queuedGeneration.run?.progress?.some((entry) => entry.includes("private local AI worker"))
+  ) {
+    throw new Error("Worker-enabled generation route did not queue a worker job.");
+  }
+
+  const unauthorizedClaim = await fetchWithTimeout(`${baseUrl}/api/ai/worker/generation/claim`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      workerId: "unauthorized-e2e-worker",
+    }),
+  });
+  if (unauthorizedClaim.status !== 401) {
+    throw new Error(`Worker claim route did not reject missing secret: ${unauthorizedClaim.status}`);
+  }
+
+  const claimed = await workerApiJson("/api/ai/worker/generation/claim", {
+    method: "POST",
+    body: JSON.stringify({
+      workerId: "e2e-worker",
+    }),
+  });
+  if (claimed.job?.runId !== queuedGeneration.run.id || claimed.job?.workerId !== "e2e-worker") {
+    throw new Error("Worker claim route did not return the queued generation job.");
+  }
+
+  const secondClaim = await workerApiJson("/api/ai/worker/generation/claim", {
+    method: "POST",
+    body: JSON.stringify({
+      workerId: "e2e-worker-two",
+    }),
+  });
+  if (secondClaim.job) {
+    throw new Error("Worker claim route allowed a second worker to claim the active run.");
+  }
+
+  const staleHeartbeat = await fetchWithTimeout(
+    `${baseUrl}/api/ai/worker/generation/heartbeat`,
+    {
+      method: "POST",
+      headers: {
+        "Authorization": `Bearer ${workerSecret}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        projectId: claimed.job.projectId,
+        runId: claimed.job.runId,
+        workerId: "stale-e2e-worker",
+      }),
+    },
+  );
+  if (staleHeartbeat.status !== 409) {
+    throw new Error(`Worker heartbeat did not reject a stale worker: ${staleHeartbeat.status}`);
+  }
+
+  const heartbeat = await workerApiJson("/api/ai/worker/generation/heartbeat", {
+    method: "POST",
+    body: JSON.stringify({
+      projectId: claimed.job.projectId,
+      runId: claimed.job.runId,
+      workerId: "e2e-worker",
+    }),
+  });
+  if (heartbeat.run?.workerId !== "e2e-worker" || !heartbeat.run?.workerHeartbeatAt) {
+    throw new Error("Worker heartbeat did not refresh claimed run state.");
+  }
+
+  const completedByStaleWorker = {
+    ...claimed.job.project,
+    generationRuns: [
+      {
+        ...claimed.job.run,
+        completedAt: new Date().toISOString(),
+        progress: [...claimed.job.run.progress, "draft saved"],
+        status: "saved",
+      },
+      ...(claimed.job.project.generationRuns ?? []).filter((run) => run.id !== claimed.job.runId),
+    ],
+  };
+  const staleComplete = await fetchWithTimeout(
+    `${baseUrl}/api/ai/worker/generation/complete`,
+    {
+      method: "POST",
+      headers: {
+        "Authorization": `Bearer ${workerSecret}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        expectedRevision: claimed.job.expectedRevision,
+        project: completedByStaleWorker,
+        projectId: claimed.job.projectId,
+        runId: claimed.job.runId,
+        workerId: "stale-e2e-worker",
+      }),
+    },
+  );
+  if (staleComplete.status !== 409) {
+    throw new Error(`Worker complete did not reject a stale worker: ${staleComplete.status}`);
+  }
+
+  const failWithoutWorker = await fetchWithTimeout(`${baseUrl}/api/ai/worker/generation/fail`, {
+    method: "POST",
+    headers: {
+      "Authorization": `Bearer ${workerSecret}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      errorMessage: "E2E missing worker ID failure check.",
+      projectId: claimed.job.projectId,
+      runId: claimed.job.runId,
+    }),
+  });
+  if (failWithoutWorker.status !== 400) {
+    throw new Error(`Worker fail route did not require workerId: ${failWithoutWorker.status}`);
+  }
+
+  const staleFail = await fetchWithTimeout(`${baseUrl}/api/ai/worker/generation/fail`, {
+    method: "POST",
+    headers: {
+      "Authorization": `Bearer ${workerSecret}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      errorMessage: "E2E stale worker failure check.",
+      projectId: claimed.job.projectId,
+      runId: claimed.job.runId,
+      workerId: "stale-e2e-worker",
+    }),
+  });
+  if (staleFail.status !== 409) {
+    throw new Error(`Worker fail route did not reject a stale worker: ${staleFail.status}`);
+  }
+
+  const failed = await workerApiJson("/api/ai/worker/generation/fail", {
+    method: "POST",
+    body: JSON.stringify({
+      errorMessage: "E2E intentionally failed a queued worker job after claim.",
+      projectId: claimed.job.projectId,
+      runId: claimed.job.runId,
+      workerId: "e2e-worker",
+    }),
+  });
+  if (failed.run?.status !== "failed") {
+    throw new Error("Worker fail route did not mark the claimed run failed.");
+  }
+  project = (await apiJson(`/api/projects/${project.id}`)).project;
 
   const upload = (
     await apiJson(`/api/projects/${project.id}/uploads`, {

@@ -11,7 +11,8 @@
     "test:ai:benchmark": "node scripts/local-ai-benchmark.mjs",
     "test:ai:local": "node scripts/ai-generation-smoke.mjs",
     "test:e2e": "node scripts/e2e-web-smoke.mjs",
-    "typecheck": "tsc -p tsconfig.json --noEmit"
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "worker:ai:local": "node scripts/local-ai-worker.mjs"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1019.0",

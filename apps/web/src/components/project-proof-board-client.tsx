@@ -375,9 +375,15 @@ export function ProjectProofBoardClient({
         },
       });
       setLastGenerationRun(result.run ?? null);
-      setBoardMessage(
-        `Your book draft is ready: ${result.project.bookDraft.pages.length} spreads saved. Review it, then save the PDF when it looks right.`,
-      );
+      if (result.run && result.run.status !== "saved") {
+        setBoardMessage(
+          `Your AI book job is ${formatGenerationStatus(result.run.status).toLowerCase()} on the private local worker. The editable draft and PDF export unlock after the worker saves it.`,
+        );
+      } else {
+        setBoardMessage(
+          `Your book draft is ready: ${result.project.bookDraft.pages.length} spreads saved. Review it, then save the PDF when it looks right.`,
+        );
+      }
     } catch (caughtError) {
       const fallback = "The book could not be made yet.";
       setBoardMessage(
@@ -1079,6 +1085,13 @@ function AiDesignerPanel({
       : null;
   const selectedTemplatePackId =
     project.draftEditorState?.templatePackId ?? BOOK_TEMPLATE_PACKS[0]?.id ?? "";
+  const lastRunIsSaved = lastRun?.status === "saved";
+  const lastRunIsFailed = lastRun?.status === "failed";
+  const lastRunMessage = lastRunIsFailed
+    ? "The last build failed safely and did not overwrite the draft."
+    : lastRunIsSaved
+      ? "Your editable book draft is ready to review."
+      : "Your book is queued or running on the private local worker. Review and PDF export unlock after the draft is saved.";
 
   return (
     <section
@@ -1301,11 +1314,7 @@ function AiDesignerPanel({
           <div className="text-xs font-semibold uppercase tracking-[0.16em] text-[#7b6f67]">
             Last book build: {formatGenerationStatus(lastRun.status)}
           </div>
-          <div className="mt-2">
-            {lastRun.status === "failed"
-              ? "The last build failed safely and did not overwrite the draft."
-              : "Your editable book draft is ready to review."}
-          </div>
+          <div className="mt-2">{lastRunMessage}</div>
           <div className="mt-3 grid gap-2 sm:grid-cols-3">
             <MiniStat
               label="Quality"
@@ -1326,14 +1335,17 @@ function AiDesignerPanel({
             <MiniStat label="Planner" value={lastRun.modelNames.planner} />
           </div>
           {lastRun.progress.length ? (
-            <div className="mt-2">Finished: {formatGenerationProgress(lastRun.progress)}</div>
+            <div className="mt-2">
+              {lastRunIsSaved ? "Finished" : "Progress"}:{" "}
+              {formatGenerationProgress(lastRun.progress)}
+            </div>
           ) : null}
           {lastRun.validationWarnings.length ? (
             <div className="mt-2 text-[#8d4f33]">
               {lastRun.validationWarnings.slice(0, 2).map(formatGenerationWarning).join(" ")}
             </div>
           ) : null}
-          {lastRun.status !== "failed" ? (
+          {lastRunIsSaved ? (
             <>
               <Link
                 href={`/projects/${project.id}/editor`}

@@ -417,6 +417,10 @@ export interface GenerationRun {
   startedAt: string;
   status: "queued" | "analyzing_photos" | "planning" | "validating" | "saved" | "failed";
   validationWarnings: string[];
+  workerClaimedAt?: string;
+  workerHeartbeatAt?: string;
+  workerId?: string;
+  workerLeaseExpiresAt?: string;
 }
 
 export interface UploadBatch {
