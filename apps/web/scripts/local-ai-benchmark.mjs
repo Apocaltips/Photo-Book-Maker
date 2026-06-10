@@ -3,7 +3,7 @@
 import { spawn } from "node:child_process";
 import { access, copyFile, cp, mkdtemp, mkdir, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { dirname, join, resolve } from "node:path";
+import { dirname, extname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const scriptDir = dirname(fileURLToPath(import.meta.url));
@@ -24,6 +24,57 @@ const fileStoreDir = isolated
   : undefined;
 let server;
 let serverOutput = "";
+
+function parseList(value) {
+  return (value ?? "")
+    .split(",")
+    .map((entry) => entry.trim())
+    .filter(Boolean);
+}
+
+function slugify(value) {
+  return value
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 80) || "project";
+}
+
+function getBenchmarkTargets() {
+  const targets = [
+    ...parseList(process.env.AI_BENCHMARK_PROJECT_IDS).map((projectId) => ({
+      projectId,
+    })),
+    ...parseList(process.env.AI_BENCHMARK_PROJECT_TITLES).map((projectTitle) => ({
+      projectTitle,
+    })),
+  ];
+
+  if (targets.length) {
+    return targets;
+  }
+
+  return [
+    {
+      projectId: process.env.AI_GENERATION_PROJECT_ID,
+      projectTitle: process.env.AI_GENERATION_PROJECT_TITLE,
+    },
+  ];
+}
+
+function getTargetReportPath(target, index, total) {
+  if (total === 1) {
+    return reportPath;
+  }
+
+  const extension = extname(reportPath) || ".json";
+  const basePath = reportPath.endsWith(extension)
+    ? reportPath.slice(0, -extension.length)
+    : reportPath;
+  const label = slugify(target.projectId ?? target.projectTitle ?? `project-${index + 1}`);
+
+  return `${basePath}-${String(index + 1).padStart(2, "0")}-${label}${extension}`;
+}
 
 async function pathExists(path) {
   try {
@@ -199,19 +250,39 @@ try {
     LOCAL_AI_HEALTH_REQUIRE_SAVED_RUN:
       process.env.LOCAL_AI_HEALTH_REQUIRE_SAVED_RUN ?? "0",
   });
-  await runNode("ai-generation-smoke.mjs", {
-    AI_GENERATION_ALLOW_EXISTING_STORE: isolated
-      ? "1"
-      : process.env.AI_GENERATION_ALLOW_EXISTING_STORE,
-    AI_GENERATION_BASE_URL: baseUrl,
-    AI_GENERATION_REPORT_PATH: reportPath,
-  });
+  const targets = getBenchmarkTargets();
+  const reports = [];
+
+  for (const [index, target] of targets.entries()) {
+    const targetReportPath = getTargetReportPath(target, index, targets.length);
+    const smokeEnv = {
+      AI_GENERATION_ALLOW_EXISTING_STORE: isolated
+        ? "1"
+        : process.env.AI_GENERATION_ALLOW_EXISTING_STORE,
+      AI_GENERATION_BASE_URL: baseUrl,
+      AI_GENERATION_REPORT_PATH: targetReportPath,
+    };
+    if (target.projectId) {
+      smokeEnv.AI_GENERATION_PROJECT_ID = target.projectId;
+    }
+    if (target.projectTitle) {
+      smokeEnv.AI_GENERATION_PROJECT_TITLE = target.projectTitle;
+    }
+
+    await runNode("ai-generation-smoke.mjs", smokeEnv);
+    reports.push({
+      projectId: target.projectId ?? null,
+      projectTitle: target.projectTitle ?? null,
+      reportPath: targetReportPath,
+    });
+  }
 
   console.log(
     JSON.stringify(
       {
         isolated,
-        reportPath,
+        reportPath: targets.length === 1 ? reports[0]?.reportPath ?? reportPath : null,
+        reports,
         sourceDataDir: isolated ? sourceDataDir : null,
         status: "local AI benchmark passed",
         tempStoreDir: isolated ? fileStoreDir : null,

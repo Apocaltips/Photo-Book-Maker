@@ -138,6 +138,8 @@ opt-in because it saves a generation run to the selected project:
 
 ```powershell
 npm run test:ai:benchmark
+$env:AI_BENCHMARK_PROJECT_IDS="trip-cap-cana-2026-trip-full-album,trip-madeira-island-60-photo-trip-1781039520416"; npm run test:ai:benchmark
+$env:AI_GENERATION_PROJECT_ID="trip-madeira-island-60-photo-trip-1781039520416"; $env:AI_GENERATION_CONTEXT_LABEL="Madeira"; $env:AI_GENERATION_CONTEXT_TERMS="madeira"; npm run test:ai:benchmark
 $env:AI_BENCHMARK_ISOLATED="0"; $env:AI_GENERATION_ALLOW_EXISTING_STORE="1"; npm run test:ai:benchmark
 $env:AI_GENERATION_ALLOW_EXISTING_STORE="1"; npm run test:ai:local
 ```

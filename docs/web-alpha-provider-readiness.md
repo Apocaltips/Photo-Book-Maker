@@ -97,6 +97,13 @@ server, runs generation, writes the report, and deletes the temp store. Stop any
 running local Next dev server before using it because Next cannot run two dev
 servers for this app directory.
 
+Run the 13-photo plus 60-photo matrix from the isolated temp store before
+outside tester sessions:
+
+```powershell
+$env:AI_BENCHMARK_PROJECT_IDS="trip-cap-cana-2026-trip-full-album,trip-madeira-island-60-photo-trip-1781039520416"; npm run test:ai:benchmark
+```
+
 Use live-store mutation only when explicitly needed:
 
 ```powershell

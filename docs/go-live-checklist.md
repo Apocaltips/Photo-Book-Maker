@@ -219,6 +219,7 @@ benchmark report path with tester-session notes:
 
 ```powershell
 npm run test:ai:benchmark
+$env:AI_BENCHMARK_PROJECT_IDS="trip-cap-cana-2026-trip-full-album,trip-madeira-island-60-photo-trip-1781039520416"; npm run test:ai:benchmark
 ```
 
 Only opt into the current local project store when you intentionally want the

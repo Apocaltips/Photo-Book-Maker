@@ -27,6 +27,152 @@ const devAuthHeaders = {
   "X-Photo-Book-Dev-Id": process.env.AI_GENERATION_DEV_ID ?? "android-tester",
   "X-Photo-Book-Dev-Name": process.env.AI_GENERATION_DEV_NAME ?? "Android Tester",
 };
+const genericContextWords = new Set([
+  "album",
+  "and",
+  "book",
+  "clean",
+  "draft",
+  "family",
+  "for",
+  "from",
+  "full",
+  "generation",
+  "image",
+  "images",
+  "into",
+  "item",
+  "items",
+  "local",
+  "manual",
+  "memory",
+  "memories",
+  "photo",
+  "photos",
+  "project",
+  "set",
+  "stock",
+  "test",
+  "testing",
+  "the",
+  "travel",
+  "trip",
+  "upload",
+  "using",
+  "vacation",
+  "with",
+]);
+const weakSingleContextWords = new Set([
+  "beach",
+  "bay",
+  "city",
+  "east",
+  "island",
+  "lake",
+  "long",
+  "mount",
+  "new",
+  "north",
+  "old",
+  "saint",
+  "san",
+  "santa",
+  "south",
+  "west",
+]);
+
+function parseList(value) {
+  return (value ?? "")
+    .split(",")
+    .map((entry) => entry.trim())
+    .filter(Boolean);
+}
+
+function escapeRegExp(value) {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function toTitleCase(value) {
+  return value.replace(/\b[a-z]/g, (letter) => letter.toUpperCase());
+}
+
+function tokenizeContextText(value) {
+  const text = value.toLowerCase();
+  const tokens = text.match(/[a-z0-9]+/g) ?? [];
+
+  return tokens.filter(
+    (token) =>
+      token.length >= 3 &&
+      !/^\d+$/.test(token) &&
+      !genericContextWords.has(token),
+  );
+}
+
+function getContextTokens(project) {
+  const titleTokens = tokenizeContextText(project.title ?? "");
+  if (titleTokens.length) {
+    return titleTokens;
+  }
+
+  return tokenizeContextText(project.subtitle ?? "");
+}
+
+function getTripContextLabel(project) {
+  const envLabel = process.env.AI_GENERATION_CONTEXT_LABEL?.trim();
+  if (envLabel) {
+    return envLabel;
+  }
+
+  const tokens = getContextTokens(project);
+  if (tokens.length) {
+    return toTitleCase(tokens.slice(0, 3).join(" "));
+  }
+
+  return project.title ?? project.subtitle ?? "this trip";
+}
+
+function getTripContextTerms(project) {
+  const explicitTerms = parseList(process.env.AI_GENERATION_CONTEXT_TERMS).map((term) =>
+    term.toLowerCase(),
+  );
+  if (explicitTerms.length) {
+    return explicitTerms;
+  }
+
+  const tokens = getContextTokens(project);
+  const terms = new Set();
+  const label = getTripContextLabel(project).toLowerCase();
+  if (label && label !== "this trip") {
+    terms.add(label);
+  }
+  if (tokens.length >= 2) {
+    terms.add(tokens.slice(0, 2).join(" "));
+  }
+  if (tokens.length === 1 && !weakSingleContextWords.has(tokens[0])) {
+    terms.add(tokens[0]);
+  }
+  if (tokens.at(-1) === "island") {
+    const islandDestinationToken = tokens.find(
+      (token) => token.length >= 5 && !weakSingleContextWords.has(token),
+    );
+    if (islandDestinationToken) {
+      terms.add(islandDestinationToken);
+    }
+  }
+
+  return [...terms];
+}
+
+function copyMentionsAnyTerm(copy, terms) {
+  if (!terms.length) {
+    return true;
+  }
+
+  return terms.some((term) => {
+    const pattern = escapeRegExp(term).replace(/\s+/g, "\\s+");
+    return new RegExp(`\\b${pattern}\\b`, "i").test(copy);
+  });
+}
 
 async function apiJson(path, init = {}) {
   const url = new URL(`${baseUrl}${path}`);
@@ -133,9 +279,9 @@ function assertAcceptance(project, templateIds) {
   const hasQuietCaption = pages.some((page) =>
     /reflection|closing|quiet|caption/.test(`${page.storyBeat ?? ""} ${page.templateId ?? ""}`),
   );
-  const hasTripContext = /cap cana|dominican republic|dominican/i.test(
-    `${project.title} ${project.subtitle} ${project.bookDraft?.summary ?? ""} ${captions}`,
-  );
+  const tripContextTerms = getTripContextTerms(project);
+  const generatedCopy = `${project.bookDraft?.summary ?? ""} ${captions}`;
+  const hasTripContext = copyMentionsAnyTerm(generatedCopy, tripContextTerms);
   const hasPlaceholderCopy = /caption text|placeholder|lorem ipsum|spread title|photo-id/i.test(
     captions,
   );
@@ -177,7 +323,9 @@ function assertAcceptance(project, templateIds) {
     failures.push("no quiet caption/reflection spread detected");
   }
   if (!hasTripContext) {
-    failures.push("captions/summary do not mention Cap Cana or Dominican context");
+    failures.push(
+      `captions/summary do not mention expected trip context (${tripContextTerms.join(", ")})`,
+    );
   }
   if (hasPlaceholderCopy) {
     failures.push("placeholder copy detected in generated captions");
@@ -191,6 +339,7 @@ function assertAcceptance(project, templateIds) {
     hasQuietCaption,
     hasTripContext,
     pageCount: pages.length,
+    tripContextTerms,
     unsupportedTemplates,
     usagePercent,
     usedPhotoCount: usedPhotoIds.size,
@@ -267,14 +416,19 @@ const templateIds = new Set(
 const initialProject = await findProject();
 const approvedBefore = getApprovedPhotos(initialProject);
 const questions = await apiJson(`/api/projects/${initialProject.id}/generation/questions`);
+const tripContextLabel = getTripContextLabel(initialProject);
 const questionnaire = {
   ...questions.questionnaire.answers,
-  audience: "The people who took the Cap Cana trip and want a polished printed keepsake.",
-  coverPreference:
-    "Choose the strongest Cap Cana scenic or emotional image, favoring resort light and water.",
+  audience: [
+    `The people who took the ${tripContextLabel} trip`,
+    "and want a polished printed keepsake.",
+  ].join(" "),
+  coverPreference: [
+    `Choose the strongest ${tripContextLabel} scenic or emotional image,`,
+    "favoring location, light, and a clear sense of the trip.",
+  ].join(" "),
   density: "balanced",
-  tripPurpose:
-    "A premium vacation photo book for the Cap Cana 2026 Trip in the Dominican Republic.",
+  tripPurpose: `A premium vacation photo book for ${tripContextLabel}.`,
 };
 
 const runResponse = await apiJson(`/api/projects/${initialProject.id}/generation/run`, {
