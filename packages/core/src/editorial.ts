@@ -8,6 +8,11 @@ import type {
   Project,
   PublishedBookDraft,
 } from "./types";
+import {
+  getBookTemplatePack,
+  getDefaultTemplatePackId,
+  getSpreadTemplate,
+} from "./templates";
 
 const BOOK_DRAFT_FORMAT_LABELS: Record<BookDraftFormatId, BookDraftFormat> = {
   "8x8-square": "8x8 square",
@@ -61,12 +66,15 @@ function createDefaultPhotoCaptions(project: Project) {
 }
 
 export function buildDefaultDraftEditorState(project: Project): BookDraftEditorState {
+  const templatePack = getBookTemplatePack(getDefaultTemplatePackId(project.type));
+
   return {
-    formatId: getBookDraftFormatId(project.bookDraft.format),
-    styleMode: getDefaultStyleMode(project),
-    fontPresetId: "gallery",
-    captionTone: "warm",
-    storyMode: getDefaultStoryMode(project),
+    formatId: templatePack?.formatId ?? getBookDraftFormatId(project.bookDraft.format),
+    styleMode: templatePack?.styleMode ?? getDefaultStyleMode(project),
+    fontPresetId: templatePack?.fontPresetId ?? "gallery",
+    templatePackId: templatePack?.id ?? getDefaultTemplatePackId(project.type),
+    captionTone: templatePack?.captionTone ?? "warm",
+    storyMode: templatePack?.storyMode ?? getDefaultStoryMode(project),
     printPreviewMode: "clean",
     density: 55,
     showChapterDividers: true,
@@ -86,12 +94,14 @@ export function buildDefaultDraftEditorState(project: Project): BookDraftEditorS
 export function ensureDraftEditorState(project: Project): BookDraftEditorState {
   const defaults = buildDefaultDraftEditorState(project);
   const current = project.draftEditorState;
+  const currentTemplatePack = getBookTemplatePack(current?.templatePackId);
   const validPageIds = new Set(project.bookDraft.pages.map((page) => page.id));
   const validPhotoIds = new Set(project.photos.map((photo) => photo.id));
 
   return {
     ...defaults,
     ...current,
+    templatePackId: currentTemplatePack?.id ?? defaults.templatePackId,
     photoCaptions: {
       ...defaults.photoCaptions,
       ...(current?.photoCaptions ?? {}),
@@ -177,6 +187,55 @@ export function saveWorkingDraft(
   },
 ) {
   return normalizeProjectDraftState(normalizeWorkingDraftPayload(project, payload));
+}
+
+export function applyBookTemplatePack(project: Project, templatePackId: string): Project {
+  const templatePack =
+    getBookTemplatePack(templatePackId) ??
+    getBookTemplatePack(getDefaultTemplatePackId(project.type));
+  const normalizedProject = normalizeProjectDraftState(project);
+  const nextEditorState = ensureDraftEditorState(normalizedProject);
+
+  if (!templatePack) {
+    return normalizedProject;
+  }
+
+  return normalizeProjectDraftState({
+    ...normalizedProject,
+    selectedThemeId: templatePack.themeId,
+    bookDraft: {
+      ...normalizedProject.bookDraft,
+      format: getBookDraftFormatLabel(templatePack.formatId),
+      themeId: templatePack.themeId,
+      pages: normalizedProject.bookDraft.pages.map((page, index) => ({
+        ...page,
+        ...(() => {
+          const templateId =
+          templatePack.spreadTemplateIds[index % templatePack.spreadTemplateIds.length] ??
+          page.templateId;
+          const template = getSpreadTemplate(templateId);
+
+          return template
+            ? {
+                style: template.layoutStyle,
+                templateId: template.id,
+                layoutVariation: template.layoutVariation,
+              }
+            : { templateId };
+        })(),
+      })),
+    },
+    draftEditorState: {
+      ...nextEditorState,
+      captionTone: templatePack.captionTone,
+      fontPresetId: templatePack.fontPresetId,
+      formatId: templatePack.formatId,
+      storyMode: templatePack.storyMode,
+      styleMode: templatePack.styleMode,
+      templatePackId: templatePack.id,
+      updatedAt: nowIso(),
+    },
+  });
 }
 
 export function publishCurrentDraft(

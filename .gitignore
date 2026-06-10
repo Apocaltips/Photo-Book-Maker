@@ -11,3 +11,4 @@ npm-debug.log*
 .eas-inspect
 .vercel
 .codex-logs
+tmp/

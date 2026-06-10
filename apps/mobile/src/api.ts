@@ -1,10 +1,15 @@
 import type {
   AddLocalPhotoInput,
   AddProjectNoteInput,
+  BookDraftEditorState,
+  BookGenerationQuestionnaire,
+  BookGenerationQuestionnaireAnswers,
   CreateProjectInput,
+  GenerationRun,
   Project,
-} from "./core";
+} from "@photo-book-maker/core";
 import Constants from "expo-constants";
+import * as FileSystem from "expo-file-system/legacy";
 import { NativeModules, Platform } from "react-native";
 import { getAccessToken } from "./supabase";
 
@@ -71,9 +76,20 @@ export function getProjectWebPreviewUrl(projectId: string) {
   return webBaseUrl ? `${webBaseUrl}/projects/${projectId}/preview` : null;
 }
 
+export function getProjectWebProofUrl(projectId: string) {
+  const webBaseUrl = getResolvedWebBaseUrl();
+  return webBaseUrl ? `${webBaseUrl}/projects/${projectId}/proof` : null;
+}
+
 function getBaseUrl() {
   return getConfiguredBaseUrl();
 }
+
+const devAuthHeaders = {
+  "X-Photo-Book-Dev-Email": "android-tester@example.com",
+  "X-Photo-Book-Dev-Id": "android-tester",
+  "X-Photo-Book-Dev-Name": "Android Tester",
+};
 
 async function request<T>(path: string, init?: RequestInit): Promise<T | null> {
   const baseUrl = getBaseUrl();
@@ -87,7 +103,7 @@ async function request<T>(path: string, init?: RequestInit): Promise<T | null> {
     ...init,
     headers: {
       "Content-Type": "application/json",
-      ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
+      ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : devAuthHeaders),
       ...(init?.headers ?? {}),
     },
   });
@@ -118,6 +134,10 @@ type RemotePhotoUploadTicket = {
   uploadUrl: string;
 };
 
+type RevisionedInput = {
+  expectedRevision?: number;
+};
+
 export function hasRemoteApi() {
   return Boolean(getBaseUrl());
 }
@@ -137,7 +157,7 @@ export async function createProjectRemote(input: CreateProjectInput) {
 
 export async function inviteCollaboratorRemote(
   projectId: string,
-  input: { email: string; name: string },
+  input: { email: string; name: string } & RevisionedInput,
 ) {
   const data = await request<{ inviteUrl?: string; message?: string; project: Project }>(
     `/projects/${projectId}/collaborators`,
@@ -158,7 +178,7 @@ export async function inviteCollaboratorRemote(
 export async function resolveTaskRemote(
   projectId: string,
   taskId: string,
-  input?: { locationLabel?: string },
+  input?: { locationLabel?: string } & RevisionedInput,
 ) {
   const data = await request<{ project: Project }>(
     `/projects/${projectId}/tasks/${taskId}/resolve`,
@@ -169,17 +189,23 @@ export async function resolveTaskRemote(
         ...(input?.locationLabel?.trim()
           ? { locationLabel: input.locationLabel.trim() }
           : {}),
+        expectedRevision: input?.expectedRevision,
       }),
     },
   );
   return data?.project ?? null;
 }
 
-export async function togglePageApprovalRemote(projectId: string, pageId: string) {
+export async function togglePageApprovalRemote(
+  projectId: string,
+  pageId: string,
+  expectedRevision?: number,
+) {
   const data = await request<{ project: Project }>(
     `/projects/${projectId}/pages/${pageId}/approval`,
     {
       method: "POST",
+      body: JSON.stringify({ expectedRevision }),
     },
   );
   return data?.project ?? null;
@@ -188,7 +214,7 @@ export async function togglePageApprovalRemote(projectId: string, pageId: string
 export async function updatePageCopyRemote(
   projectId: string,
   pageId: string,
-  input: { title: string; caption: string; confirmed?: boolean },
+  input: { title: string; caption: string; confirmed?: boolean } & RevisionedInput,
 ) {
   const data = await request<{ project: Project }>(
     `/projects/${projectId}/pages/${pageId}`,
@@ -200,17 +226,25 @@ export async function updatePageCopyRemote(
   return data?.project ?? null;
 }
 
-export async function toggleMustIncludeRemote(projectId: string, photoId: string) {
+export async function toggleMustIncludeRemote(
+  projectId: string,
+  photoId: string,
+  expectedRevision?: number,
+) {
   const data = await request<{ project: Project }>(
     `/projects/${projectId}/photos/${photoId}/must-include`,
     {
       method: "POST",
+      body: JSON.stringify({ expectedRevision }),
     },
   );
   return data?.project ?? null;
 }
 
-export async function addNoteRemote(projectId: string, input: AddProjectNoteInput) {
+export async function addNoteRemote(
+  projectId: string,
+  input: AddProjectNoteInput & RevisionedInput,
+) {
   const data = await request<{ project: Project }>(`/projects/${projectId}/notes`, {
     method: "POST",
     body: JSON.stringify(input),
@@ -218,10 +252,14 @@ export async function addNoteRemote(projectId: string, input: AddProjectNoteInpu
   return data?.project ?? null;
 }
 
-export async function addPhotosRemote(projectId: string, photos: AddLocalPhotoInput[]) {
+export async function addPhotosRemote(
+  projectId: string,
+  photos: AddLocalPhotoInput[],
+  expectedRevision?: number,
+) {
   const data = await request<{ project: Project }>(`/projects/${projectId}/photos`, {
     method: "POST",
-    body: JSON.stringify({ photos }),
+    body: JSON.stringify({ expectedRevision, photos }),
   });
   return data?.project ?? null;
 }
@@ -244,7 +282,30 @@ export async function createPhotoUploadTicketRemote(
 export async function uploadFileToRemoteStorage(
   upload: RemotePhotoUploadTicket,
   localUri: string,
+  base64?: string | null,
 ) {
+  const uploadableUri = await prepareUploadFileUri(localUri, upload.contentType, base64);
+
+  if (uploadableUri.startsWith("file://")) {
+    const uploadResponse = await FileSystem.uploadAsync(upload.uploadUrl, uploadableUri, {
+      headers: {
+        "Content-Type": upload.contentType,
+      },
+      httpMethod: "PUT",
+      uploadType: FileSystem.FileSystemUploadType.BINARY_CONTENT,
+    });
+
+    if (uploadResponse.status < 200 || uploadResponse.status >= 300) {
+      throw new Error(`Remote storage upload failed: ${uploadResponse.status}`);
+    }
+
+    return {
+      downloadUrl: upload.downloadUrl,
+      mimeType: upload.contentType,
+      storagePath: upload.storagePath,
+    };
+  }
+
   const fileResponse = await fetch(localUri);
   const blob = await fileResponse.blob();
   const uploadResponse = await fetch(upload.uploadUrl, {
@@ -266,12 +327,117 @@ export async function uploadFileToRemoteStorage(
   };
 }
 
-export async function setThemeRemote(projectId: string, selectedThemeId: string) {
+function getFileExtension(contentType: string) {
+  const subtype = contentType.split("/")[1]?.split(";")[0]?.trim().toLowerCase();
+
+  if (!subtype) {
+    return "jpg";
+  }
+
+  if (subtype === "jpeg") {
+    return "jpg";
+  }
+
+  return subtype.replace(/[^a-z0-9]/g, "") || "jpg";
+}
+
+async function prepareUploadFileUri(
+  localUri: string,
+  contentType: string,
+  base64?: string | null,
+) {
+  if (localUri.startsWith("file://")) {
+    return localUri;
+  }
+
+  if (!base64 || !FileSystem.cacheDirectory) {
+    return localUri;
+  }
+
+  const uploadFileUri = `${FileSystem.cacheDirectory}photo-book-upload-${Date.now()}.${getFileExtension(
+    contentType,
+  )}`;
+  await FileSystem.writeAsStringAsync(uploadFileUri, base64, {
+    encoding: FileSystem.EncodingType.Base64,
+  });
+
+  return uploadFileUri;
+}
+
+export async function setThemeRemote(
+  projectId: string,
+  selectedThemeId: string,
+  expectedRevision?: number,
+) {
   const data = await request<{ project: Project }>(`/projects/${projectId}`, {
     method: "PATCH",
-    body: JSON.stringify({ selectedThemeId }),
+    body: JSON.stringify({ expectedRevision, selectedThemeId }),
   });
   return data?.project ?? null;
+}
+
+export async function saveDraftRemote(
+  projectId: string,
+  input: {
+    bookDraft?: Project["bookDraft"];
+    draftEditorState?: BookDraftEditorState;
+    selectedThemeId?: string;
+    subtitle?: string;
+    title?: string;
+  } & RevisionedInput,
+) {
+  const data = await request<{ project: Project }>(`/projects/${projectId}/draft`, {
+    method: "PATCH",
+    body: JSON.stringify(input),
+  });
+  return data?.project ?? null;
+}
+
+export async function publishDraftRemote(
+  projectId: string,
+  input: {
+    bookDraft?: Project["bookDraft"];
+    draftEditorState?: BookDraftEditorState;
+    name: string;
+    selectedThemeId?: string;
+    subtitle?: string;
+    title?: string;
+  } & RevisionedInput,
+) {
+  const data = await request<{ project: Project }>(`/projects/${projectId}/drafts`, {
+    method: "POST",
+    body: JSON.stringify(input),
+  });
+  return data?.project ?? null;
+}
+
+export async function fetchGenerationQuestionsRemote(projectId: string) {
+  const data = await request<{ questionnaire: BookGenerationQuestionnaire }>(
+    `/projects/${projectId}/generation/questions`,
+  );
+  return data?.questionnaire ?? null;
+}
+
+export async function generateAiBookRemote(
+  projectId: string,
+  input: {
+    expectedRevision?: number;
+    questionnaire?: Partial<BookGenerationQuestionnaireAnswers>;
+  },
+) {
+  const data = await request<{ project: Project; run?: GenerationRun }>(
+    `/projects/${projectId}/generation/run`,
+    {
+      method: "POST",
+      body: JSON.stringify(input),
+    },
+  );
+  return data
+    ? {
+        project: data.project,
+        run: data.run ?? null,
+      }
+    : null;
 }
 
 export async function advancePrintOrderRemote(projectId: string) {
@@ -284,9 +450,13 @@ export async function advancePrintOrderRemote(projectId: string) {
   return data?.project ?? null;
 }
 
-export async function finalizeProjectRemote(projectId: string) {
+export async function finalizeProjectRemote(
+  projectId: string,
+  expectedRevision?: number,
+) {
   const data = await request<{ project: Project }>(`/projects/${projectId}/finalize`, {
     method: "POST",
+    body: JSON.stringify({ expectedRevision }),
   });
   return data?.project ?? null;
 }

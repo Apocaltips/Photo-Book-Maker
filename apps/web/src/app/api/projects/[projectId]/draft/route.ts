@@ -1,8 +1,10 @@
 import { saveWorkingDraft, type BookDraftEditorState, type Project } from "@photo-book-maker/core";
 import { NextResponse } from "next/server";
 import { authorizeProjectRequest } from "@/lib/server/auth";
+import { mutationErrorResponse } from "@/lib/server/mutation-response";
 import { updateProject } from "@/lib/server/project-store";
 import { hydrateProjectForClient } from "@/lib/server/project-response";
+import { getRequestOrigin } from "@/lib/server/request-origin";
 
 type DraftRequestBody = {
   bookDraft?: Project["bookDraft"];
@@ -10,6 +12,7 @@ type DraftRequestBody = {
   selectedThemeId?: string;
   subtitle?: string;
   title?: string;
+  expectedRevision?: number;
 };
 
 export async function PATCH(
@@ -22,15 +25,31 @@ export async function PATCH(
     return auth.response;
   }
 
-  const body = (await request.json()) as DraftRequestBody;
-  const project = await updateProject(projectId, (current) => saveWorkingDraft(current, body));
+  try {
+    const body = (await request.json()) as DraftRequestBody;
+    const project = await updateProject(
+      projectId,
+      (current) => saveWorkingDraft(current, body),
+      {
+        expectedRevision: body.expectedRevision,
+        activity: {
+          actorEmail: auth.user.email,
+          actorId: auth.user.id,
+          message: `${auth.user.name} saved the working draft.`,
+          type: "draft_saved",
+        },
+      },
+    );
 
-  if (!project) {
-    return NextResponse.json({ message: "Project not found." }, { status: 404 });
+    if (!project) {
+      return NextResponse.json({ message: "Project not found." }, { status: 404 });
+    }
+
+    return NextResponse.json({
+      message: "Working draft saved.",
+      project: await hydrateProjectForClient(project, getRequestOrigin(request)),
+    });
+  } catch (error) {
+    return mutationErrorResponse(error, "Unable to save the working draft.");
   }
-
-  return NextResponse.json({
-    message: "Working draft saved.",
-    project: await hydrateProjectForClient(project),
-  });
 }

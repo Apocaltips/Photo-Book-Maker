@@ -1,7 +1,10 @@
 import { normalizeProjectDraftState, type Project } from "@photo-book-maker/core";
 import { signObjectReadUrl } from "@/lib/server/object-storage";
 
-export async function hydrateProjectForClient(project: Project): Promise<Project> {
+export async function hydrateProjectForClient(
+  project: Project,
+  origin?: string,
+): Promise<Project> {
   const normalizedProject = normalizeProjectDraftState(project);
   const photos = await Promise.all(
     normalizedProject.photos.map(async (photo) => {
@@ -9,7 +12,11 @@ export async function hydrateProjectForClient(project: Project): Promise<Project
         return photo;
       }
 
-      const signedUrl = await signObjectReadUrl(photo.storagePath).catch(() => null);
+      const signedUrl = await signObjectReadUrl(
+        photo.storagePath,
+        undefined,
+        origin,
+      ).catch(() => null);
 
       return {
         ...photo,
@@ -24,6 +31,6 @@ export async function hydrateProjectForClient(project: Project): Promise<Project
   };
 }
 
-export async function hydrateProjectsForClient(projects: Project[]) {
-  return Promise.all(projects.map((project) => hydrateProjectForClient(project)));
+export async function hydrateProjectsForClient(projects: Project[], origin?: string) {
+  return Promise.all(projects.map((project) => hydrateProjectForClient(project, origin)));
 }

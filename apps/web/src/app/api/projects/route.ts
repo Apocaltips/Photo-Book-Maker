@@ -10,6 +10,7 @@ import {
   hydrateProjectForClient,
   hydrateProjectsForClient,
 } from "@/lib/server/project-response";
+import { getRequestOrigin } from "@/lib/server/request-origin";
 
 export async function GET(request: Request) {
   try {
@@ -17,10 +18,12 @@ export async function GET(request: Request) {
     if (!user) {
       return unauthorizedResponse();
     }
+    const origin = getRequestOrigin(request);
 
     return NextResponse.json({
       projects: await hydrateProjectsForClient(
         filterProjectsForUser(await readProjects(), user.email),
+        origin,
       ),
     });
   } catch (error) {
@@ -50,7 +53,7 @@ export async function POST(request: Request) {
     return NextResponse.json(
       {
         message: "Project created.",
-        project: await hydrateProjectForClient(project),
+        project: await hydrateProjectForClient(project, getRequestOrigin(request)),
       },
       { status: 201 },
     );

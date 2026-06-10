@@ -8,6 +8,7 @@ import {
   type ProjectSummary,
 } from "./types";
 import { normalizeProjectDraftState } from "./editorial";
+import { createProjectActivityEvent, normalizeProjectRecord } from "./lifecycle";
 
 const editorialThemes: BookTheme[] = [
   {
@@ -1044,7 +1045,10 @@ export function createSeedProjects(): Project[] {
     },
   };
 
-  return [normalizeProjectDraftState(weekendTrip), normalizeProjectDraftState(yearbook)];
+  return [
+    normalizeProjectRecord(normalizeProjectDraftState(weekendTrip)),
+    normalizeProjectRecord(normalizeProjectDraftState(yearbook)),
+  ];
 }
 
 export function getProjectSummary(project: Project): ProjectSummary {
@@ -1081,7 +1085,9 @@ export function createProjectRecord(input: CreateProjectInput): Project {
     .replace(/[^a-z0-9]+/g, "-")
     .replace(/(^-|-$)/g, "");
 
-  return normalizeProjectDraftState({
+  const createdAt = new Date().toISOString();
+
+  return normalizeProjectRecord(normalizeProjectDraftState({
     id: `${input.type}-${titleSeed || "new-project"}`,
     type: input.type,
     title: input.title,
@@ -1105,8 +1111,8 @@ export function createProjectRecord(input: CreateProjectInput): Project {
         email: owner.email,
         role: "owner",
         status: "accepted",
-        sentAt: new Date().toISOString(),
-        acceptedAt: new Date().toISOString(),
+        sentAt: createdAt,
+        acceptedAt: createdAt,
         acceptedByUserId: owner.id,
       },
     ],
@@ -1126,5 +1132,16 @@ export function createProjectRecord(input: CreateProjectInput): Project {
         "The draft book will appear here once uploads and memory notes give the layout engine enough material to curate a real first proof.",
       pages: [],
     },
-  });
+    revision: 1,
+    updatedAt: createdAt,
+    activity: [
+      createProjectActivityEvent({
+        actorEmail: owner.email,
+        actorId: owner.id,
+        createdAt,
+        message: `${owner.name} created ${input.title}.`,
+        type: "project_created",
+      }),
+    ],
+  }));
 }

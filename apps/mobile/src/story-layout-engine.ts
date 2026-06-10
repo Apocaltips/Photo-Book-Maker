@@ -1,4 +1,4 @@
-import type { BookPage, PageLayoutStyle, PhotoAsset, Project } from "./core";
+import type { BookPage, PageLayoutStyle, PhotoAsset, Project } from "@photo-book-maker/core";
 
 export type StoryLayoutSystem =
   | "minimal_grid"

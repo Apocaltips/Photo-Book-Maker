@@ -1,10 +1,29 @@
-import { Alert, Linking, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
-import type { Project } from "./core";
+import { useEffect, useMemo, useState } from "react";
+import {
+  Alert,
+  Linking,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  View,
+} from "react-native";
+import {
+  BOOK_TEMPLATE_PACKS,
+  ensureDraftEditorState,
+  getBookMakingGuide,
+  getBookTemplatePack,
+  type BookMakingGuide,
+  type BookPage,
+  type BookTemplatePack,
+  type Project,
+  type PublishedBookDraft,
+} from "@photo-book-maker/core";
 import {
   getProjectWebEditorUrl,
+  getProjectWebProofUrl,
   getProjectWebPreviewUrl,
-  getProjectWebUrl,
-  getResolvedWebBaseUrl,
 } from "./api";
 import { StorybookPageCanvas } from "./storybook-page-canvas";
 
@@ -13,26 +32,57 @@ const palette = {
   accentSoft: "#f2dfd1",
   card: "rgba(255,251,246,0.88)",
   forest: "#2e5c4d",
+  forestSoft: "#d9ebe3",
   ink: "#1f1814",
   line: "rgba(31, 24, 20, 0.12)",
   muted: "#6f625b",
+  paper: "#fffaf5",
 };
 
 type Props = {
+  isAiGenerating?: boolean;
+  onGenerateAiBook: () => void;
   onExportProof: () => void;
+  onLoadPublishedDraft: (snapshot: PublishedBookDraft) => void;
+  onPublishDraft: (name: string) => void;
+  onSelectTemplatePack: (templatePackId: string) => void;
+  onSelectTheme: (themeId: string) => void;
+  onTogglePage: (pageId: string) => void;
+  onUpdatePageCopy: (
+    pageId: string,
+    input: { caption: string; confirmed?: boolean; title: string },
+  ) => void;
   project?: Project;
 };
 
+function getProjectAccent(project: Project) {
+  return (
+    project.bookThemes.find((theme) => theme.id === project.selectedThemeId)?.accent ??
+    palette.accent
+  );
+}
+
+function getPagePhotos(project: Project, page: BookPage) {
+  return page.photoIds
+    .map((photoId) => project.photos.find((photo) => photo.id === photoId))
+    .filter((photo): photo is Project["photos"][number] => Boolean(photo));
+}
+
+function getTemplatePack(project: Project) {
+  const editorState = ensureDraftEditorState(project);
+  return getBookTemplatePack(editorState.templatePackId) ?? BOOK_TEMPLATE_PACKS[0];
+}
+
 function ActionButton({
-  dark,
   disabled,
   label,
   onPress,
+  tone = "light",
 }: {
-  dark?: boolean;
   disabled?: boolean;
   label: string;
   onPress: () => void;
+  tone?: "dark" | "light" | "soft";
 }) {
   return (
     <Pressable
@@ -40,11 +90,17 @@ function ActionButton({
       onPress={onPress}
       style={[
         styles.actionButton,
-        dark ? styles.actionButtonDark : null,
+        tone === "dark" ? styles.actionButtonDark : null,
+        tone === "soft" ? styles.actionButtonSoft : null,
         disabled ? styles.actionButtonDisabled : null,
       ]}
     >
-      <Text style={[styles.actionButtonText, dark ? styles.actionButtonTextDark : null]}>
+      <Text
+        style={[
+          styles.actionButtonText,
+          tone === "dark" ? styles.actionButtonTextDark : null,
+        ]}
+      >
         {label}
       </Text>
     </Pressable>
@@ -66,31 +122,90 @@ function MetricPill({
   );
 }
 
-function LinkCard({
-  description,
-  label,
-  url,
+function TemplatePackChip({
+  active,
+  pack,
+  onPress,
 }: {
-  description: string;
-  label: string;
-  url: string | null;
+  active: boolean;
+  pack: BookTemplatePack;
+  onPress: () => void;
 }) {
   return (
-    <View style={styles.linkCard}>
-      <Text style={styles.linkCardTitle}>{label}</Text>
-      <Text style={styles.linkCardBody}>{description}</Text>
-      <Text selectable style={styles.linkCardUrl}>
-        {url ?? "Web editor unavailable until EXPO_PUBLIC_API_BASE_URL points to the deployed site."}
+    <Pressable
+      onPress={onPress}
+      style={[
+        styles.templateChip,
+        active ? styles.templateChipActive : null,
+      ]}
+    >
+      <View
+        style={[
+          styles.templateChipSwatch,
+          { backgroundColor: pack.previewAccent },
+        ]}
+      />
+      <Text style={styles.templateChipTitle}>{pack.name}</Text>
+      <Text style={styles.templateChipMeta}>
+        {pack.category} / {pack.spreadTemplateIds.length} spreads
       </Text>
-    </View>
+    </Pressable>
+  );
+}
+
+function ThemeChip({
+  active,
+  theme,
+  onPress,
+}: {
+  active: boolean;
+  theme: Project["bookThemes"][number];
+  onPress: () => void;
+}) {
+  return (
+    <Pressable
+      onPress={onPress}
+      style={[styles.themeChip, active ? styles.themeChipActive : null]}
+    >
+      <View style={[styles.themeSwatch, { backgroundColor: theme.accent }]} />
+      <Text style={styles.themeTitle}>{theme.name}</Text>
+      <Text style={styles.themeBody}>{theme.mood}</Text>
+    </Pressable>
+  );
+}
+
+function PagePill({
+  active,
+  index,
+  page,
+  onPress,
+}: {
+  active: boolean;
+  index: number;
+  page: BookPage;
+  onPress: () => void;
+}) {
+  return (
+    <Pressable
+      onPress={onPress}
+      style={[styles.pagePill, active ? styles.pagePillActive : null]}
+    >
+      <Text style={styles.pagePillIndex}>{index + 1}</Text>
+      <Text style={styles.pagePillTitle} numberOfLines={2}>
+        {page.title}
+      </Text>
+      <Text style={styles.pagePillMeta}>
+        {page.approved ? "Approved" : "Needs review"}
+      </Text>
+    </Pressable>
   );
 }
 
 async function openWebUrl(url: string | null, label: string) {
   if (!url) {
     Alert.alert(
-      "Web editor not available",
-      "Set the mobile app to your deployed web URL first so this phone knows where to open the editor.",
+      "Web link unavailable",
+      "Point EXPO_PUBLIC_API_BASE_URL at the deployed web app to open this link.",
     );
     return;
   }
@@ -98,46 +213,144 @@ async function openWebUrl(url: string | null, label: string) {
   try {
     await Linking.openURL(url);
   } catch {
-    Alert.alert("Couldn't open link", `Try opening this ${label} URL manually:\n\n${url}`);
+    Alert.alert("Could not open link", `Try opening this ${label} URL manually:\n\n${url}`);
   }
 }
 
-function getProjectAccent(project: Project) {
-  return (
-    project.bookThemes.find((theme) => theme.id === project.selectedThemeId)?.accent ??
-    palette.accent
-  );
+function formatGenerationStatus(status?: string) {
+  switch (status) {
+    case "saved":
+      return "Draft ready";
+    case "running":
+      return "Making book";
+    case "failed":
+      return "Needs retry";
+    default:
+      return "None";
+  }
 }
 
-export function MobileEditorTab({ onExportProof, project }: Props) {
+function formatGenerationProgress(progress: string[]) {
+  if (!progress.length) {
+    return "Ready";
+  }
+
+  const latest = progress.at(-1)?.toLowerCase() ?? "";
+  if (latest.includes("saved")) {
+    return "Photo review, layout, and captions finished.";
+  }
+  if (latest.includes("vision") || latest.includes("photo")) {
+    return "Reviewing the uploaded photos.";
+  }
+  if (latest.includes("plan") || latest.includes("draft")) {
+    return "Building the book draft.";
+  }
+
+  return "Working on the book.";
+}
+
+export function MobileEditorTab({
+  isAiGenerating = false,
+  onGenerateAiBook,
+  onExportProof,
+  onLoadPublishedDraft,
+  onPublishDraft,
+  onSelectTemplatePack,
+  onSelectTheme,
+  onTogglePage,
+  onUpdatePageCopy,
+  project,
+}: Props) {
+  const [selectedPageId, setSelectedPageId] = useState("");
+  const [titleDraft, setTitleDraft] = useState("");
+  const [captionDraft, setCaptionDraft] = useState("");
+  const [publishName, setPublishName] = useState("");
+
+  const selectedPage =
+    project?.bookDraft.pages.find((page) => page.id === selectedPageId) ??
+    project?.bookDraft.pages[0];
+  const selectedPageIndex = project?.bookDraft.pages.findIndex(
+    (page) => page.id === selectedPage?.id,
+  ) ?? 0;
+
+  useEffect(() => {
+    if (!project) {
+      return;
+    }
+
+    const nextPage =
+      project.bookDraft.pages.find((page) => page.id === selectedPageId) ??
+      project.bookDraft.pages[0];
+
+    setSelectedPageId(nextPage?.id ?? "");
+  }, [project, selectedPageId]);
+
+  useEffect(() => {
+    setTitleDraft(selectedPage?.title ?? "");
+    setCaptionDraft(selectedPage?.caption ?? "");
+  }, [selectedPage?.caption, selectedPage?.id, selectedPage?.title]);
+
+  useEffect(() => {
+    if (project) {
+      setPublishName(`${project.title} - iOS edit`);
+    }
+  }, [project?.id, project?.title]);
+
+  const selectedPhotos = useMemo(
+    () => (project && selectedPage ? getPagePhotos(project, selectedPage) : []),
+    [project, selectedPage],
+  );
+
   if (!project) {
     return null;
   }
 
-  const editorUrl = getProjectWebEditorUrl(project.id);
-  const previewUrl = getProjectWebPreviewUrl(project.id);
-  const boardUrl = getProjectWebUrl(project.id);
-  const webBaseUrl = getResolvedWebBaseUrl();
+  const editorState = ensureDraftEditorState(project);
+  const bookGuide = getBookMakingGuide(project);
+  const selectedTemplatePack = getTemplatePack(project);
   const accent = getProjectAccent(project);
   const approvedPageCount = project.bookDraft.pages.filter((page) => page.approved).length;
   const confirmedCopyCount = project.bookDraft.pages.filter(
     (page) => page.copyStatus === "confirmed",
   ).length;
-  const featuredPage =
-    project.bookDraft.pages.find((page) => !page.approved) ?? project.bookDraft.pages[0];
-  const featuredPhotos = featuredPage.photoIds
-    .map((photoId) => project.photos.find((photo) => photo.id === photoId))
-    .filter((photo): photo is Project["photos"][number] => Boolean(photo));
+  const previewUrl = getProjectWebPreviewUrl(project.id);
+  const editorUrl = getProjectWebEditorUrl(project.id);
+  const proofUrl = getProjectWebProofUrl(project.id);
+  const latestGenerationRun = project.generationRuns?.[0];
+  const generationNotice = latestGenerationRun?.validationWarnings.length
+    ? latestGenerationRun.status === "failed"
+      ? "The book could not be made. Check the local AI service and try again."
+      : "A few design details were cleaned up automatically before saving."
+    : null;
+  const unresolvedBlockers = project.resolutionTasks.filter(
+    (task) => task.status !== "resolved",
+  ).length;
+  const approvedPhotoCount = project.photos.filter((photo) => photo.approved).length;
+  const canRunAiDesigner = approvedPhotoCount > 0 && unresolvedBlockers === 0;
+  const hasUnsavedCopy =
+    selectedPage &&
+    (titleDraft.trim() !== selectedPage.title || captionDraft.trim() !== selectedPage.caption);
+
+  function saveCopy(confirmed?: boolean) {
+    if (!selectedPage) {
+      return;
+    }
+
+    onUpdatePageCopy(selectedPage.id, {
+      caption: captionDraft,
+      confirmed,
+      title: titleDraft,
+    });
+  }
 
   return (
     <View style={styles.sectionStack}>
       <View style={styles.surfaceCard}>
-        <Text style={styles.cardEyebrow}>Editing handoff</Text>
-        <Text style={styles.cardTitle}>Collect on phone, design on web</Text>
+        <Text style={styles.cardEyebrow}>Book editor</Text>
+        <Text style={styles.cardTitle}>Edit this book on your phone</Text>
         <Text style={styles.cardBody}>
-          The mobile app is now the fast collection workflow: upload photos, add notes,
-          invite collaborators, and keep the trip moving. Use the web editor for book
-          design, spread changes, captions, and final proof review.
+          Review one spread at a time, adjust the words or template, save a draft,
+          and export the proof from the same book.
         </Text>
 
         <View style={styles.metricRow}>
@@ -146,79 +359,293 @@ export function MobileEditorTab({ onExportProof, project }: Props) {
           <MetricPill label="Approved" value={approvedPageCount} />
           <MetricPill label="Copy locked" value={confirmedCopyCount} />
         </View>
+      </View>
 
-        <View style={styles.actionStack}>
+      <MobileWorkflowGuide guide={bookGuide} isAiGenerating={isAiGenerating ?? false} />
+
+      <View style={styles.surfaceCard}>
+        <Text style={styles.cardEyebrow}>AI Designer</Text>
+        <Text style={styles.cardTitle}>Make my photo book</Text>
+        <Text style={styles.cardBody}>
+          Defaults are fine. The local AI picks templates, writes captions, and saves
+          a draft you can edit.
+        </Text>
+
+        <View style={styles.metricRow}>
+          <MetricPill label="Photos ready" value={approvedPhotoCount} />
+          <MetricPill label="Fix before print" value={unresolvedBlockers} />
+          <MetricPill
+            label="Last run"
+            value={formatGenerationStatus(latestGenerationRun?.status)}
+          />
+        </View>
+
+        {latestGenerationRun ? (
+          <View style={styles.aiRunPanel}>
+            <Text style={styles.aiRunTitle}>
+              {latestGenerationRun.status === "saved" ? "Draft ready to review" : "Book build status"}
+            </Text>
+            <Text style={styles.aiRunBody}>
+              {formatGenerationProgress(latestGenerationRun.progress)}
+            </Text>
+            {generationNotice ? (
+              <Text style={styles.aiWarning}>{generationNotice}</Text>
+            ) : null}
+          </View>
+        ) : null}
+
+        <ActionButton
+          disabled={isAiGenerating || !canRunAiDesigner}
+          label={isAiGenerating ? "Making the book..." : "Make my book"}
+          onPress={onGenerateAiBook}
+          tone="dark"
+        />
+        {!canRunAiDesigner ? (
+          <Text style={styles.helperText}>
+            Add photos and clear open fixes before making the book.
+          </Text>
+        ) : null}
+      </View>
+
+      <View style={styles.surfaceCard}>
+        <Text style={styles.cardEyebrow}>Template catalog</Text>
+        <Text style={styles.cardBody}>
+          {BOOK_TEMPLATE_PACKS.length} book packs are available. The selected pack
+          saves with the draft and reopens the same on web.
+        </Text>
+        <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+          <View style={styles.horizontalChipRow}>
+            {BOOK_TEMPLATE_PACKS.map((pack) => (
+              <TemplatePackChip
+                key={pack.id}
+                active={pack.id === selectedTemplatePack?.id}
+                pack={pack}
+                onPress={() => onSelectTemplatePack(pack.id)}
+              />
+            ))}
+          </View>
+        </ScrollView>
+        <Text style={styles.helperText}>
+          Active: {selectedTemplatePack?.name ?? "Default pack"} / {editorState.formatId} /{" "}
+          {editorState.styleMode.replaceAll("_", " ")}
+        </Text>
+      </View>
+
+      <View style={styles.surfaceCard}>
+        <Text style={styles.cardEyebrow}>Theme</Text>
+        <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+          <View style={styles.horizontalChipRow}>
+            {project.bookThemes.map((theme) => (
+              <ThemeChip
+                key={theme.id}
+                active={theme.id === project.selectedThemeId}
+                theme={theme}
+                onPress={() => onSelectTheme(theme.id)}
+              />
+            ))}
+          </View>
+        </ScrollView>
+      </View>
+
+      <View style={styles.surfaceCard}>
+        <Text style={styles.cardEyebrow}>Spread navigator</Text>
+        <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+          <View style={styles.horizontalChipRow}>
+            {project.bookDraft.pages.map((page, index) => (
+              <PagePill
+                key={page.id}
+                active={page.id === selectedPage?.id}
+                index={index}
+                page={page}
+                onPress={() => setSelectedPageId(page.id)}
+              />
+            ))}
+          </View>
+        </ScrollView>
+      </View>
+
+      {selectedPage ? (
+        <View style={styles.surfaceCard}>
+          <Text style={styles.cardEyebrow}>
+            Spread {Math.max(0, selectedPageIndex) + 1} / copy and approval
+          </Text>
+          <Text style={styles.cardBody}>
+            {selectedPage.templateId ?? "No template id"} /{" "}
+            {selectedPage.layoutVariation
+              ? `variation ${selectedPage.layoutVariation}`
+              : selectedPage.style}
+          </Text>
+
+          <TextInput
+            value={titleDraft}
+            onChangeText={setTitleDraft}
+            placeholder="Spread title"
+            placeholderTextColor={palette.muted}
+            style={styles.input}
+          />
+          <TextInput
+            value={captionDraft}
+            onChangeText={setCaptionDraft}
+            multiline
+            placeholder="Spread caption"
+            placeholderTextColor={palette.muted}
+            style={[styles.input, styles.textarea]}
+          />
+
+          <View style={styles.actionRow}>
+            <ActionButton
+              disabled={!hasUnsavedCopy}
+              label="Save copy"
+              onPress={() => saveCopy(false)}
+            />
+            <ActionButton
+              label={selectedPage.copyStatus === "confirmed" ? "Copy locked" : "Lock copy"}
+              onPress={() => saveCopy(true)}
+              tone="soft"
+            />
+          </View>
+
           <ActionButton
-            dark
-            disabled={!editorUrl}
-            label="Open web editor"
-            onPress={() => openWebUrl(editorUrl, "editor")}
+            label={selectedPage.approved ? "Mark as needs review" : "Approve spread"}
+            onPress={() => onTogglePage(selectedPage.id)}
+            tone={selectedPage.approved ? "soft" : "dark"}
+          />
+        </View>
+      ) : null}
+
+      {selectedPage ? (
+        <View style={styles.surfaceCard}>
+          <Text style={styles.cardEyebrow}>Print-safe preview</Text>
+          <StorybookPageCanvas
+            accent={accent}
+            page={selectedPage}
+            photos={selectedPhotos}
+            project={project}
+          />
+          <View style={styles.previewMetaRow}>
+            {selectedPhotos.map((photo) => (
+              <Text key={photo.id} style={styles.previewMeta}>
+                {photo.mustInclude ? "Must include / " : ""}
+                {photo.title}
+              </Text>
+            ))}
+          </View>
+        </View>
+      ) : null}
+
+      <View style={styles.surfaceCard}>
+        <Text style={styles.cardEyebrow}>Draft versions</Text>
+        <TextInput
+          value={publishName}
+          onChangeText={setPublishName}
+          placeholder="Draft name"
+          placeholderTextColor={palette.muted}
+          style={styles.input}
+        />
+        <ActionButton
+          label="Publish named draft"
+          onPress={() => onPublishDraft(publishName.trim() || `${project.title} - iOS edit`)}
+          tone="dark"
+        />
+        {project.publishedDrafts?.length ? (
+          <View style={styles.draftStack}>
+            {project.publishedDrafts.slice(0, 5).map((snapshot) => (
+              <Pressable
+                key={snapshot.id}
+                onPress={() => onLoadPublishedDraft(snapshot)}
+                style={styles.draftCard}
+              >
+                <Text style={styles.draftTitle}>{snapshot.name}</Text>
+                <Text style={styles.draftBody}>
+                  {snapshot.bookDraft.pages.length} spreads /{" "}
+                  {new Date(snapshot.savedAt).toLocaleDateString()}
+                </Text>
+              </Pressable>
+            ))}
+          </View>
+        ) : (
+          <Text style={styles.emptyText}>No published drafts yet.</Text>
+        )}
+      </View>
+
+      <View style={styles.surfaceCard}>
+        <Text style={styles.cardEyebrow}>Final step</Text>
+        <Text style={styles.cardBody}>
+          Save the book as a PDF from this phone, or open the web PDF page when you
+          want browser print controls.
+        </Text>
+        <View style={styles.actionStack}>
+          <ActionButton label="Save PDF from phone" onPress={onExportProof} tone="dark" />
+          <ActionButton
+            label="Open web PDF page"
+            onPress={() => openWebUrl(proofUrl, "proof")}
           />
           <ActionButton
-            disabled={!previewUrl}
-            label="Open web preview"
+            label="Open web review"
             onPress={() => openWebUrl(previewUrl, "preview")}
           />
           <ActionButton
-            disabled={!boardUrl}
-            label="Open curated draft board"
-            onPress={() => openWebUrl(boardUrl, "board")}
+            label="Open web editor"
+            onPress={() => openWebUrl(editorUrl, "editor")}
           />
-          <ActionButton label="Export proof PDF from phone" onPress={onExportProof} />
         </View>
-      </View>
-
-      <View style={styles.surfaceCard}>
-        <Text style={styles.cardEyebrow}>Current spread preview</Text>
-        <Text style={styles.previewTitle}>{featuredPage.title}</Text>
-        <Text style={styles.previewBody}>
-          Quick phone preview only. Real layout editing happens on the web editor so you
-          and your girlfriend are working from one polished editing surface.
-        </Text>
-
-        <StorybookPageCanvas
-          accent={accent}
-          page={featuredPage}
-          photos={featuredPhotos}
-          project={project}
-        />
-      </View>
-
-      <View style={styles.surfaceCard}>
-        <Text style={styles.cardEyebrow}>Open on your laptop</Text>
-        <Text style={styles.cardBody}>
-          Sign into the web app with the same account you use here. Start from the editor
-          link if you want to jump straight into spread editing.
-        </Text>
-
-        <ScrollView
-          contentContainerStyle={styles.linkStack}
-          showsVerticalScrollIndicator={false}
-        >
-          <LinkCard
-            description="Best place to change spreads, captions, themes, and sequence."
-            label="Editor URL"
-            url={editorUrl}
-          />
-          <LinkCard
-            description="Use this for the proof board and project overview."
-            label="Project board URL"
-            url={boardUrl}
-          />
-          <LinkCard
-            description="Use this for read-only printable preview checks."
-            label="Preview URL"
-            url={previewUrl}
-          />
-          <LinkCard
-            description="The mobile app is currently pointed at this deployed site."
-            label="Web base URL"
-            url={webBaseUrl}
-          />
-        </ScrollView>
       </View>
     </View>
   );
+}
+
+function MobileWorkflowGuide({
+  guide,
+  isAiGenerating,
+}: {
+  guide: BookMakingGuide;
+  isAiGenerating: boolean;
+}) {
+  return (
+    <View style={styles.surfaceCard}>
+      <Text style={styles.cardEyebrow}>Easy path</Text>
+      <Text style={styles.cardTitle}>Next: {guide.nextActionLabel}</Text>
+      <Text style={styles.cardBody}>{guide.nextStepDetail}</Text>
+
+      <View style={styles.workflowStepStack}>
+        {guide.steps.map((step, index) => (
+          <View key={step.id} style={styles.workflowStepCard}>
+            <View style={styles.workflowStepNumber}>
+              <Text style={styles.workflowStepNumberText}>{index + 1}</Text>
+            </View>
+            <View style={styles.workflowStepBody}>
+              <Text style={styles.workflowStepTitle}>{step.label.replace(/^\d+\.\s*/, "")}</Text>
+              <Text style={styles.workflowStepDetail}>{step.detail}</Text>
+            </View>
+            <Text
+              style={[
+                styles.workflowStepStatus,
+                step.status === "blocked" ? styles.workflowStepStatusBlocked : null,
+                step.status === "done" ? styles.workflowStepStatusDone : null,
+              ]}
+            >
+              {step.id === "design" && isAiGenerating
+                ? "Working"
+                : getMobileStepStatusLabel(step.status)}
+            </Text>
+          </View>
+        ))}
+      </View>
+    </View>
+  );
+}
+
+function getMobileStepStatusLabel(status: BookMakingGuide["steps"][number]["status"]) {
+  switch (status) {
+    case "blocked":
+      return "Fix";
+    case "current":
+      return "Now";
+    case "done":
+      return "Done";
+    case "waiting":
+      return "Next";
+  }
 }
 
 const styles = StyleSheet.create({
@@ -251,6 +678,13 @@ const styles = StyleSheet.create({
     lineHeight: 21,
     color: palette.muted,
   },
+  helperText: {
+    fontSize: 13,
+    lineHeight: 20,
+    color: palette.forest,
+    fontWeight: "600",
+    textTransform: "capitalize",
+  },
   metricRow: {
     flexDirection: "row",
     flexWrap: "wrap",
@@ -278,8 +712,209 @@ const styles = StyleSheet.create({
     textTransform: "uppercase",
     letterSpacing: 0.5,
   },
+  workflowStepStack: {
+    gap: 10,
+  },
+  workflowStepCard: {
+    minHeight: 76,
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: palette.line,
+    backgroundColor: "rgba(255,255,255,0.78)",
+    padding: 12,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+  },
+  workflowStepNumber: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: palette.ink,
+  },
+  workflowStepNumberText: {
+    color: "#fffaf5",
+    fontSize: 14,
+    fontWeight: "700",
+  },
+  workflowStepBody: {
+    flex: 1,
+    minWidth: 0,
+  },
+  workflowStepTitle: {
+    fontSize: 15,
+    lineHeight: 18,
+    color: palette.ink,
+    fontWeight: "700",
+  },
+  workflowStepDetail: {
+    marginTop: 3,
+    fontSize: 12,
+    lineHeight: 17,
+    color: palette.muted,
+  },
+  workflowStepStatus: {
+    minWidth: 48,
+    borderRadius: 999,
+    overflow: "hidden",
+    backgroundColor: palette.accentSoft,
+    paddingHorizontal: 9,
+    paddingVertical: 5,
+    textAlign: "center",
+    fontSize: 11,
+    lineHeight: 14,
+    color: palette.accent,
+    fontWeight: "700",
+  },
+  workflowStepStatusBlocked: {
+    backgroundColor: "#f8ded2",
+    color: "#983d16",
+  },
+  workflowStepStatusDone: {
+    backgroundColor: palette.forestSoft,
+    color: palette.forest,
+  },
+  horizontalChipRow: {
+    flexDirection: "row",
+    gap: 10,
+    paddingRight: 8,
+  },
+  templateChip: {
+    width: 184,
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: palette.line,
+    backgroundColor: "rgba(255,255,255,0.78)",
+    padding: 12,
+    gap: 6,
+  },
+  templateChipActive: {
+    borderColor: "rgba(195,109,63,0.42)",
+    backgroundColor: "#fff6ef",
+  },
+  templateChipSwatch: {
+    width: 36,
+    height: 8,
+    borderRadius: 999,
+  },
+  templateChipTitle: {
+    fontSize: 15,
+    lineHeight: 18,
+    color: palette.ink,
+    fontWeight: "700",
+  },
+  templateChipMeta: {
+    fontSize: 11,
+    lineHeight: 16,
+    color: palette.muted,
+    textTransform: "capitalize",
+  },
+  themeChip: {
+    width: 154,
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: palette.line,
+    backgroundColor: "rgba(255,255,255,0.78)",
+    padding: 12,
+    gap: 6,
+  },
+  themeChipActive: {
+    borderColor: "rgba(46,92,77,0.36)",
+    backgroundColor: "#f7fff9",
+  },
+  themeSwatch: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+  },
+  themeTitle: {
+    fontSize: 14,
+    fontWeight: "700",
+    color: palette.ink,
+  },
+  themeBody: {
+    fontSize: 11,
+    lineHeight: 16,
+    color: palette.muted,
+  },
+  pagePill: {
+    width: 142,
+    minHeight: 106,
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: palette.line,
+    backgroundColor: "rgba(255,255,255,0.78)",
+    padding: 12,
+    gap: 5,
+  },
+  pagePillActive: {
+    borderColor: "rgba(195,109,63,0.42)",
+    backgroundColor: palette.accentSoft,
+  },
+  pagePillIndex: {
+    fontSize: 12,
+    color: palette.accent,
+    fontWeight: "700",
+  },
+  pagePillTitle: {
+    fontSize: 14,
+    lineHeight: 17,
+    color: palette.ink,
+    fontWeight: "700",
+  },
+  pagePillMeta: {
+    fontSize: 11,
+    lineHeight: 16,
+    color: palette.muted,
+  },
+  input: {
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: palette.line,
+    backgroundColor: palette.paper,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    color: palette.ink,
+    fontSize: 15,
+  },
+  textarea: {
+    minHeight: 118,
+    textAlignVertical: "top",
+  },
+  actionRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 10,
+  },
   actionStack: {
     gap: 10,
+  },
+  aiRunPanel: {
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: "rgba(46,92,77,0.16)",
+    backgroundColor: "rgba(255,255,255,0.74)",
+    padding: 12,
+    gap: 5,
+  },
+  aiRunTitle: {
+    fontSize: 13,
+    lineHeight: 18,
+    color: palette.ink,
+    fontWeight: "700",
+  },
+  aiRunBody: {
+    fontSize: 12,
+    lineHeight: 18,
+    color: palette.muted,
+  },
+  aiWarning: {
+    fontSize: 12,
+    lineHeight: 18,
+    color: palette.accent,
+    fontWeight: "600",
   },
   actionButton: {
     minHeight: 46,
@@ -296,6 +931,10 @@ const styles = StyleSheet.create({
     backgroundColor: palette.forest,
     borderColor: palette.forest,
   },
+  actionButtonSoft: {
+    backgroundColor: palette.forestSoft,
+    borderColor: "rgba(46,92,77,0.24)",
+  },
   actionButtonDisabled: {
     opacity: 0.52,
   },
@@ -307,43 +946,40 @@ const styles = StyleSheet.create({
   actionButtonTextDark: {
     color: "#fffaf5",
   },
-  previewTitle: {
-    fontSize: 20,
-    lineHeight: 24,
-    fontWeight: "700",
-    color: palette.ink,
+  previewMetaRow: {
+    gap: 5,
   },
-  previewBody: {
-    fontSize: 13,
-    lineHeight: 20,
+  previewMeta: {
+    fontSize: 12,
+    lineHeight: 18,
     color: palette.muted,
+    fontWeight: "600",
   },
-  linkStack: {
+  draftStack: {
     gap: 10,
   },
-  linkCard: {
+  draftCard: {
     borderRadius: 18,
     borderWidth: 1,
     borderColor: palette.line,
     backgroundColor: "rgba(255,255,255,0.78)",
     padding: 14,
-    gap: 6,
+    gap: 4,
   },
-  linkCardTitle: {
-    fontSize: 13,
-    letterSpacing: 0.4,
-    textTransform: "uppercase",
-    fontWeight: "700",
-    color: palette.muted,
-  },
-  linkCardBody: {
-    fontSize: 13,
+  draftTitle: {
+    fontSize: 15,
     lineHeight: 19,
     color: palette.ink,
+    fontWeight: "700",
   },
-  linkCardUrl: {
+  draftBody: {
     fontSize: 12,
     lineHeight: 18,
-    color: palette.accent,
+    color: palette.muted,
+  },
+  emptyText: {
+    fontSize: 13,
+    lineHeight: 20,
+    color: palette.muted,
   },
 });

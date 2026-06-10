@@ -5,8 +5,10 @@ import {
 } from "@photo-book-maker/core";
 import { NextResponse } from "next/server";
 import { authorizeProjectRequest } from "@/lib/server/auth";
+import { mutationErrorResponse } from "@/lib/server/mutation-response";
 import { updateProject } from "@/lib/server/project-store";
 import { hydrateProjectForClient } from "@/lib/server/project-response";
+import { getRequestOrigin } from "@/lib/server/request-origin";
 
 type PublishDraftBody = {
   bookDraft?: Project["bookDraft"];
@@ -15,6 +17,7 @@ type PublishDraftBody = {
   selectedThemeId?: string;
   subtitle?: string;
   title?: string;
+  expectedRevision?: number;
 };
 
 export async function POST(
@@ -27,17 +30,32 @@ export async function POST(
     return auth.response;
   }
 
-  const body = (await request.json()) as PublishDraftBody;
-  const project = await updateProject(projectId, (current) =>
-    publishCurrentDraft(current, body.name ?? "", body),
-  );
+  try {
+    const body = (await request.json()) as PublishDraftBody;
+    const draftName = body.name ?? "";
+    const project = await updateProject(
+      projectId,
+      (current) => publishCurrentDraft(current, draftName, body),
+      {
+        expectedRevision: body.expectedRevision,
+        activity: {
+          actorEmail: auth.user.email,
+          actorId: auth.user.id,
+          message: `${auth.user.name} published ${draftName.trim() || "a draft"}.`,
+          type: "draft_published",
+        },
+      },
+    );
 
-  if (!project) {
-    return NextResponse.json({ message: "Project not found." }, { status: 404 });
+    if (!project) {
+      return NextResponse.json({ message: "Project not found." }, { status: 404 });
+    }
+
+    return NextResponse.json({
+      message: "Draft published.",
+      project: await hydrateProjectForClient(project, getRequestOrigin(request)),
+    });
+  } catch (error) {
+    return mutationErrorResponse(error, "Unable to publish this draft.");
   }
-
-  return NextResponse.json({
-    message: "Draft published.",
-    project: await hydrateProjectForClient(project),
-  });
 }

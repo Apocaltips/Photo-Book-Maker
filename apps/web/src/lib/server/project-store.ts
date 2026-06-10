@@ -1,4 +1,9 @@
-import { isDemoProject } from "@photo-book-maker/core";
+import {
+  advanceProjectRevision,
+  isDemoProject,
+  normalizeProjectRecord,
+  type ProjectActivityEvent,
+} from "@photo-book-maker/core";
 import type { Project } from "@photo-book-maker/core";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
@@ -15,7 +20,31 @@ type ProjectRow = {
   payload: Project;
 };
 
-const dataDirectory = path.join(process.cwd(), "data");
+type ProjectActivityInput = Omit<ProjectActivityEvent, "createdAt" | "id"> & {
+  createdAt?: string;
+};
+
+export class RevisionConflictError extends Error {
+  currentRevision: number;
+  expectedRevision: number;
+
+  constructor(input: { currentRevision: number; expectedRevision: number }) {
+    super(
+      `Project revision conflict. Expected revision ${input.expectedRevision}, but current revision is ${input.currentRevision}.`,
+    );
+    this.name = "RevisionConflictError";
+    this.currentRevision = input.currentRevision;
+    this.expectedRevision = input.expectedRevision;
+  }
+}
+
+export function isRevisionConflictError(error: unknown): error is RevisionConflictError {
+  return error instanceof RevisionConflictError;
+}
+
+const dataDirectory = process.env.PHOTO_BOOK_FILE_STORE_DIR
+  ? path.resolve(process.env.PHOTO_BOOK_FILE_STORE_DIR)
+  : path.join(process.cwd(), "data");
 const dataFile = path.join(dataDirectory, "projects.json");
 const supabaseProjectsTable =
   process.env.SUPABASE_PROJECTS_TABLE ?? "photo_book_projects";
@@ -82,12 +111,18 @@ async function ensureFileStore() {
 async function readProjectsFromFile(): Promise<Project[]> {
   await ensureFileStore();
   const raw = await readFile(dataFile, "utf8");
-  return (JSON.parse(raw) as Project[]).filter((project) => !isDemoProject(project));
+  return (JSON.parse(raw) as Project[])
+    .filter((project) => !isDemoProject(project))
+    .map(normalizeProjectRecord);
 }
 
 async function writeProjectsToFile(projects: Project[]) {
   await ensureFileStore();
-  await writeFile(dataFile, JSON.stringify(projects, null, 2), "utf8");
+  await writeFile(
+    dataFile,
+    JSON.stringify(projects.map(normalizeProjectRecord), null, 2),
+    "utf8",
+  );
 }
 
 async function readProjectsFromSupabase(client: SupabaseClient): Promise<Project[]> {
@@ -102,13 +137,14 @@ async function readProjectsFromSupabase(client: SupabaseClient): Promise<Project
 
   return (data ?? [])
     .map((row) => row.payload as Project)
-    .filter((project) => !isDemoProject(project));
+    .filter((project) => !isDemoProject(project))
+    .map(normalizeProjectRecord);
 }
 
 async function writeProjectsToSupabase(client: SupabaseClient, projects: Project[]) {
   const { error } = await client
     .from(supabaseProjectsTable)
-    .upsert(projects.map(toProjectRow), { onConflict: "id" });
+    .upsert(projects.map(normalizeProjectRecord).map(toProjectRow), { onConflict: "id" });
 
   if (error) {
     throw new Error(`Failed to write Supabase project store: ${error.message}`);
@@ -127,17 +163,23 @@ export async function readProjects(): Promise<Project[]> {
 
 export async function writeProjects(projects: Project[]) {
   const supabase = getSupabaseAdminClient();
+  const normalizedProjects = projects.map(normalizeProjectRecord);
 
   if (!supabase) {
-    return writeProjectsToFile(projects);
+    return writeProjectsToFile(normalizedProjects);
   }
 
-  return writeProjectsToSupabase(supabase, projects);
+  return writeProjectsToSupabase(supabase, normalizedProjects);
 }
 
 export async function updateProject(
   projectId: string,
   updater: (project: Project) => Project | Promise<Project>,
+  options?: {
+    activity?: ProjectActivityInput;
+    expectedRevision?: number;
+    skipRevisionAdvance?: boolean;
+  },
 ) {
   const projects = await readProjects();
   const index = projects.findIndex((project) => project.id === projectId);
@@ -146,8 +188,21 @@ export async function updateProject(
     return null;
   }
 
-  const updatedProject = await updater(projects[index]);
-  projects[index] = updatedProject;
+  const currentProject = normalizeProjectRecord(projects[index]);
+  if (
+    typeof options?.expectedRevision === "number" &&
+    currentProject.revision !== options.expectedRevision
+  ) {
+    throw new RevisionConflictError({
+      currentRevision: currentProject.revision ?? 1,
+      expectedRevision: options.expectedRevision,
+    });
+  }
+
+  const updatedProject = normalizeProjectRecord(await updater(currentProject));
+  projects[index] = options?.skipRevisionAdvance
+    ? updatedProject
+    : advanceProjectRevision(updatedProject, options?.activity);
   await writeProjects(projects);
-  return updatedProject;
+  return projects[index];
 }

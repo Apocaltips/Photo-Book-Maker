@@ -2,6 +2,7 @@ import { findProjectById, type Project } from "@photo-book-maker/core";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import { NextResponse } from "next/server";
 import { readProjects } from "@/lib/server/project-store";
+import { DEV_AUTH_EMAIL, DEV_AUTH_ID, DEV_AUTH_NAME } from "@/lib/dev-auth";
 
 export type AuthenticatedUser = {
   email: string;
@@ -46,6 +47,27 @@ function getBearerToken(request: Request) {
   return header.slice("Bearer ".length).trim() || null;
 }
 
+function isDevAuthEnabled() {
+  return !getSupabaseAuthClient() && process.env.NODE_ENV !== "production";
+}
+
+function getDevAuthenticatedUser(request: Request): AuthenticatedUser {
+  const email =
+    request.headers.get("x-photo-book-dev-email")?.trim().toLowerCase() ||
+    DEV_AUTH_EMAIL;
+  const name = request.headers.get("x-photo-book-dev-name")?.trim() || DEV_AUTH_NAME;
+  const id =
+    request.headers.get("x-photo-book-dev-id")?.trim() ||
+    email.replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "") ||
+    DEV_AUTH_ID;
+
+  return {
+    email,
+    id,
+    name,
+  };
+}
+
 function getDisplayName(email: string, metadata: Record<string, unknown> | null | undefined) {
   const fullName =
     typeof metadata?.full_name === "string"
@@ -64,6 +86,10 @@ function getDisplayName(email: string, metadata: Record<string, unknown> | null 
 export async function getAuthenticatedUser(request: Request): Promise<AuthenticatedUser | null> {
   const token = getBearerToken(request);
   const client = getSupabaseAuthClient();
+
+  if (!client && isDevAuthEnabled()) {
+    return getDevAuthenticatedUser(request);
+  }
 
   if (!token || !client) {
     return null;

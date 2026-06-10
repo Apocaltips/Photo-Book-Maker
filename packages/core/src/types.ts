@@ -36,6 +36,29 @@ export type ProjectStatus =
   | "reviewing"
   | "ready_to_print"
   | "printed";
+export type TemplateCategory =
+  | "travel"
+  | "couples"
+  | "family"
+  | "yearbook"
+  | "minimal"
+  | "premium";
+export type ProjectActivityEventType =
+  | "project_created"
+  | "invite_sent"
+  | "invite_accepted"
+  | "photos_uploaded"
+  | "photo_curated"
+  | "note_added"
+  | "task_resolved"
+  | "template_changed"
+  | "draft_saved"
+  | "draft_published"
+  | "draft_ai_generated"
+  | "draft_ai_refreshed"
+  | "project_finalized"
+  | "proof_exported";
+export type PhotoUploadStatus = "queued" | "uploading" | "uploaded" | "failed";
 
 export type ResolutionTaskType = "location" | "people" | "order";
 export type ResolutionTaskStatus = "open" | "in_progress" | "resolved";
@@ -116,6 +139,15 @@ export interface PhotoVersion {
   height: number;
 }
 
+export interface PhotoUploadState {
+  batchId?: string;
+  errorMessage?: string;
+  progress: number;
+  remoteUrl?: string;
+  status: PhotoUploadStatus;
+  updatedAt: string;
+}
+
 export interface PhotoAsset {
   id: string;
   title: string;
@@ -133,6 +165,7 @@ export interface PhotoAsset {
   faceClusterIds: string[];
   versions: PhotoVersion[];
   qualityNotes: string[];
+  uploadState?: PhotoUploadState;
 }
 
 export interface FaceCluster {
@@ -173,6 +206,10 @@ export interface BookPage {
   layoutNote: string;
   curationNote: string;
   approved: boolean;
+  templateId?: string;
+  layoutVariation?: number;
+  photoRoles?: AiBookPlanPhotoRole[];
+  cropIntents?: AiBookPlanCropIntent[];
 }
 
 export interface BookDraft {
@@ -189,6 +226,7 @@ export interface BookDraftEditorState {
   formatId: BookDraftFormatId;
   styleMode: BookStyleMode;
   fontPresetId: string;
+  templatePackId?: string;
   captionTone: BookCaptionTone;
   storyMode: BookStoryMode;
   printPreviewMode: BookPrintPreviewMode;
@@ -204,7 +242,190 @@ export interface BookDraftEditorState {
   photoCaptions: Record<string, string>;
   updatedAt?: string;
   lastAiRefreshAt?: string;
-  aiProvider?: "openai" | "manual";
+  aiProvider?: "openai" | "ollama" | "manual";
+}
+
+export interface SpreadTemplate {
+  id: string;
+  name: string;
+  category: TemplateCategory;
+  description: string;
+  layoutStyle: PageLayoutStyle;
+  layoutVariation: number;
+  minPhotos: number;
+  maxPhotos: number;
+  tags: string[];
+  idealPhotoCount?: number;
+  allowedPhotoRoles?: AiPhotoRole[];
+  cropSlotBehavior?: "safe-center" | "face-priority" | "full-bleed" | "grid-crop" | "no-crop";
+  visualDensity?: "quiet" | "balanced" | "dense";
+  rhythmRole?: "opener" | "hero" | "support" | "detail" | "divider" | "closer";
+  safeAreaBehavior?: "strict" | "standard" | "bleed-aware";
+  bestUseCases?: string[];
+  avoidWhen?: string[];
+}
+
+export interface BookTemplatePack {
+  id: string;
+  name: string;
+  category: TemplateCategory;
+  description: string;
+  formatId: BookDraftFormatId;
+  styleMode: BookStyleMode;
+  fontPresetId: string;
+  captionTone: BookCaptionTone;
+  storyMode: BookStoryMode;
+  themeId: string;
+  spreadTemplateIds: string[];
+  coverTemplateId: string;
+  tags: string[];
+  previewAccent: string;
+}
+
+export type BookGenerationQuestionId =
+  | "tripPurpose"
+  | "audience"
+  | "mustIncludeMoments"
+  | "coverPreference"
+  | "namesPrivacy"
+  | "mapMemorabiliaPreference"
+  | "captionDepth";
+
+export type BookGenerationCaptionDepth = "short" | "balanced" | "story";
+export type BookGenerationDensity = "airy" | "balanced" | "full";
+export type AiPhotoRole = "hero" | "support" | "detail" | "texture" | "cover" | "closing";
+export type AiCropRegion =
+  | "center"
+  | "top"
+  | "bottom"
+  | "left"
+  | "right"
+  | "face"
+  | "wide"
+  | "safe-full";
+
+export interface BookGenerationQuestionnaireAnswers {
+  audience: string;
+  bookSize: BookDraftFormatId;
+  captionDepth: BookGenerationCaptionDepth;
+  coverPreference: string;
+  density: BookGenerationDensity;
+  mapMemorabiliaPreference: string;
+  mustIncludeMoments: string;
+  namesPrivacy: string;
+  tone: BookCaptionTone;
+  tripPurpose: string;
+}
+
+export interface BookGenerationQuestion {
+  id: BookGenerationQuestionId;
+  label: string;
+  prompt: string;
+  defaultAnswer: string;
+  required: boolean;
+}
+
+export interface BookGenerationQuestionnaire {
+  answers: BookGenerationQuestionnaireAnswers;
+  questions: BookGenerationQuestion[];
+}
+
+export interface PhotoInsight {
+  cacheKey: string;
+  captionClues: string[];
+  cropSafeRegion: AiCropRegion;
+  focalPoint: "center" | "faces" | "landscape" | "detail" | "unknown";
+  hasFood: boolean;
+  hasPanorama: boolean;
+  hasPeople: boolean;
+  hasSelfie: boolean;
+  hasText: boolean;
+  imageQuality: "excellent" | "good" | "usable" | "risky";
+  peopleCount: number;
+  photoId: string;
+  sceneTags: string[];
+}
+
+export interface AiBookPlanPhotoRole {
+  photoId: string;
+  role: AiPhotoRole;
+}
+
+export interface AiBookPlanCropIntent {
+  photoId: string;
+  region: AiCropRegion;
+}
+
+export interface AiBookPlanSpread {
+  caption: string;
+  cropIntents: AiBookPlanCropIntent[];
+  id: string;
+  photoIds: string[];
+  photoRoles: AiBookPlanPhotoRole[];
+  rationale: string;
+  storyBeat: BookPageStoryBeat;
+  templateId: string;
+  title: string;
+}
+
+export interface AiBookPlanChapter {
+  id: string;
+  title: string;
+  spreadIds: string[];
+}
+
+export interface AiBookPlan {
+  chapters: AiBookPlanChapter[];
+  designScore: number;
+  spreadPlans: AiBookPlanSpread[];
+  summary: string;
+  warnings: string[];
+}
+
+export interface GenerationRun {
+  completedAt?: string;
+  errorMessage?: string;
+  id: string;
+  modelNames: {
+    planner: string;
+    vision: string;
+    fallbackPlanner?: string;
+  };
+  progress: string[];
+  savedDraftVersionId?: string;
+  startedAt: string;
+  status: "queued" | "analyzing_photos" | "planning" | "validating" | "saved" | "failed";
+  validationWarnings: string[];
+}
+
+export interface UploadBatch {
+  id: string;
+  createdAt: string;
+  failedCount: number;
+  projectId: string;
+  status: "queued" | "uploading" | "completed" | "failed" | "partial";
+  successfulCount: number;
+  totalCount: number;
+  updatedAt: string;
+}
+
+export interface ProjectActivityEvent {
+  id: string;
+  actorEmail?: string;
+  actorId?: string;
+  createdAt: string;
+  message: string;
+  metadata?: Record<string, string | number | boolean | null>;
+  type: ProjectActivityEventType;
+}
+
+export interface ProofExportRequest {
+  draftId?: string;
+  exportedAt?: string;
+  includeBleedGuides: boolean;
+  includePrintSafeGuides: boolean;
+  projectId: string;
+  requestedByEmail?: string;
 }
 
 export interface PublishedBookDraft {
@@ -242,6 +463,12 @@ export interface Project {
   bookDraft: BookDraft;
   draftEditorState?: BookDraftEditorState;
   publishedDrafts?: PublishedBookDraft[];
+  revision?: number;
+  updatedAt?: string;
+  activity?: ProjectActivityEvent[];
+  generationQuestionnaire?: Partial<BookGenerationQuestionnaireAnswers>;
+  generationRuns?: GenerationRun[];
+  photoInsights?: Record<string, PhotoInsight>;
 }
 
 export interface CreateProjectInput {
@@ -263,6 +490,25 @@ export interface ProjectSummary {
   openTasks: number;
   acceptedInvites: number;
   pageCount: number;
+}
+
+export type BookMakingStepId = "upload" | "design" | "review" | "print";
+
+export type BookMakingStepStatus = "done" | "current" | "waiting" | "blocked";
+
+export interface BookMakingStep {
+  id: BookMakingStepId;
+  label: string;
+  actionLabel: string;
+  detail: string;
+  status: BookMakingStepStatus;
+}
+
+export interface BookMakingGuide {
+  currentStepId: BookMakingStepId;
+  nextActionLabel: string;
+  nextStepDetail: string;
+  steps: BookMakingStep[];
 }
 
 export interface AddLocalPhotoInput {

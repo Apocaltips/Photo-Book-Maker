@@ -64,7 +64,8 @@ export function ProjectPreviewPageClient({
             {previewDraft.name}
           </h1>
           <p className="mt-3 text-sm leading-7 text-[#5a4e47]">
-            Previewing the exact saved draft object, not a separate disconnected layout.
+            This is the saved book draft your family or trip group can review before
+            saving the print PDF.
           </p>
         </div>
 
@@ -73,13 +74,23 @@ export function ProjectPreviewPageClient({
             href={`/projects/${workspace.project.id}`}
             className="rounded-full border border-[#1f18141f] px-4 py-2 text-sm font-medium text-[#1f1814] transition-colors hover:bg-white/70"
           >
-            Back to proof board
+            Back to book
           </Link>
           <Link
             href={`/projects/${workspace.project.id}/editor`}
             className="rounded-full border border-[#1f18141f] bg-white/72 px-4 py-2 text-sm font-medium text-[#1f1814] transition-colors hover:bg-white"
           >
-            Open draft editor
+            Edit pages
+          </Link>
+          <Link
+            href={
+              selectedDraftId
+                ? `/projects/${workspace.project.id}/proof?draft=${selectedDraftId}`
+                : `/projects/${workspace.project.id}/proof`
+            }
+            className="rounded-full border border-[#1f18141f] bg-[#2e5c4d] px-4 py-2 text-sm font-medium text-[#f7efe7]"
+          >
+            Save/print PDF
           </Link>
           <button
             type="button"

@@ -1,8 +1,10 @@
 import { updateBookPageCopy } from "@photo-book-maker/core";
 import { NextResponse } from "next/server";
 import { authorizeProjectRequest } from "@/lib/server/auth";
+import { mutationErrorResponse } from "@/lib/server/mutation-response";
 import { updateProject } from "@/lib/server/project-store";
 import { hydrateProjectForClient } from "@/lib/server/project-response";
+import { getRequestOrigin } from "@/lib/server/request-origin";
 
 export async function PATCH(
   request: Request,
@@ -21,23 +23,39 @@ export async function PATCH(
   const body = (await request.json()) as {
     caption?: string;
     confirmed?: boolean;
+    expectedRevision?: number;
     title?: string;
   };
 
-  const project = await updateProject(projectId, (current) =>
-    updateBookPageCopy(current, pageId, {
-      title: body.title,
-      caption: body.caption,
-      confirmed: body.confirmed,
-    }),
-  );
+  try {
+    const project = await updateProject(
+      projectId,
+      (current) =>
+        updateBookPageCopy(current, pageId, {
+          title: body.title,
+          caption: body.caption,
+          confirmed: body.confirmed,
+        }),
+      {
+        expectedRevision: body.expectedRevision,
+        activity: {
+          actorEmail: auth.user.email,
+          actorId: auth.user.id,
+          message: `${auth.user.name} edited spread copy.`,
+          type: "draft_saved",
+        },
+      },
+    );
 
-  if (!project) {
-    return NextResponse.json({ message: "Project not found." }, { status: 404 });
+    if (!project) {
+      return NextResponse.json({ message: "Project not found." }, { status: 404 });
+    }
+
+    return NextResponse.json({
+      message: "Book page copy updated.",
+      project: await hydrateProjectForClient(project, getRequestOrigin(request)),
+    });
+  } catch (error) {
+    return mutationErrorResponse(error, "Unable to update this spread.");
   }
-
-  return NextResponse.json({
-    message: "Book page copy updated.",
-    project: await hydrateProjectForClient(project),
-  });
 }

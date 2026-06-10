@@ -7,6 +7,8 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
+    "test:ai:local": "node scripts/ai-generation-smoke.mjs",
+    "test:e2e": "node scripts/e2e-web-smoke.mjs",
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
@@ -14,9 +16,10 @@
     "@aws-sdk/s3-request-presigner": "^3.1019.0",
     "@photo-book-maker/core": "*",
     "@supabase/supabase-js": "^2.100.1",
-    "next": "16.2.1",
+    "next": "^16.2.7",
     "react": "19.2.4",
-    "react-dom": "19.2.4"
+    "react-dom": "19.2.4",
+    "sharp": "^0.34.5"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",

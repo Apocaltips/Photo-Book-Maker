@@ -11,6 +11,9 @@
     "dev:mobile": "npm run start -w @photo-book-maker/mobile",
     "build": "npm run build -w @photo-book-maker/web",
     "lint": "npm run lint -w @photo-book-maker/web",
-    "typecheck": "npm run typecheck -w @photo-book-maker/core && npm run typecheck -w @photo-book-maker/web && npm run typecheck -w @photo-book-maker/mobile"
+    "typecheck": "npm run typecheck -w @photo-book-maker/core && npm run typecheck -w @photo-book-maker/web && npm run typecheck -w @photo-book-maker/mobile",
+    "test": "npm run test -w @photo-book-maker/core",
+    "test:ai:local": "npm run test:ai:local -w @photo-book-maker/web",
+    "test:e2e:web": "npm run test:e2e -w @photo-book-maker/web"
   }
 }

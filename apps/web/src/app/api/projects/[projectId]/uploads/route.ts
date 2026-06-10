@@ -1,6 +1,11 @@
 import { NextResponse } from "next/server";
 import { authorizeProjectRequest } from "@/lib/server/auth";
-import { createPhotoUploadTicket, isObjectStorageConfigured } from "@/lib/server/object-storage";
+import {
+  createPhotoUploadTicket,
+  isLocalObjectStorageEnabled,
+  isObjectStorageConfigured,
+} from "@/lib/server/object-storage";
+import { getRequestOrigin } from "@/lib/server/request-origin";
 
 export async function POST(
   request: Request,
@@ -16,7 +21,7 @@ export async function POST(
     fileName?: string;
   };
 
-  if (!isObjectStorageConfigured()) {
+  if (!isObjectStorageConfigured() && !isLocalObjectStorageEnabled()) {
     return NextResponse.json(
       {
         message:
@@ -37,6 +42,7 @@ export async function POST(
     projectId,
     fileName: body.fileName,
     contentType: body.contentType,
+    origin: getRequestOrigin(request),
   });
 
   return NextResponse.json({ upload });

@@ -5,8 +5,10 @@ import {
   unauthorizedResponse,
 } from "@/lib/server/auth";
 import { findInvite, isValidInviteToken } from "@/lib/server/invites";
+import { mutationErrorResponse } from "@/lib/server/mutation-response";
 import { readProjects, updateProject } from "@/lib/server/project-store";
 import { hydrateProjectForClient } from "@/lib/server/project-response";
+import { getRequestOrigin } from "@/lib/server/request-origin";
 
 export async function POST(
   request: Request,
@@ -54,19 +56,37 @@ export async function POST(
     );
   }
 
-  const updatedProject = await updateProject(projectId, (project) => {
-    if (alreadyAccepted) {
-      return project;
-    }
+  const updatedProject = await updateProject(
+    projectId,
+    (project) => {
+      if (alreadyAccepted) {
+        return project;
+      }
 
-    return acceptProjectInvite(project, {
-      inviteId,
-      acceptedAt: new Date().toISOString(),
-      acceptedByUserId: user.id,
-      acceptedEmail: user.email,
-      acceptedName: user.name,
-    });
-  });
+      return acceptProjectInvite(project, {
+        inviteId,
+        acceptedAt: new Date().toISOString(),
+        acceptedByUserId: user.id,
+        acceptedEmail: user.email,
+        acceptedName: user.name,
+      });
+    },
+    {
+      activity: alreadyAccepted
+        ? undefined
+        : {
+            actorEmail: user.email,
+            actorId: user.id,
+            message: `${user.name} accepted the invite.`,
+            type: "invite_accepted",
+          },
+      skipRevisionAdvance: alreadyAccepted,
+    },
+  ).catch((error) => error);
+
+  if (updatedProject instanceof Error) {
+    return mutationErrorResponse(updatedProject, "Unable to accept this invite.");
+  }
 
   if (!updatedProject) {
     return NextResponse.json({ message: "Project not found." }, { status: 404 });
@@ -76,6 +96,6 @@ export async function POST(
     message: alreadyAccepted
       ? "Invite already accepted. Opening the shared book now."
       : "Invite accepted. You can edit this shared book now.",
-    project: await hydrateProjectForClient(updatedProject),
+    project: await hydrateProjectForClient(updatedProject, getRequestOrigin(request)),
   });
 }
