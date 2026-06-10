@@ -21,6 +21,7 @@ const alphaReadinessRouteUrl = new URL(
   "../src/app/api/alpha/readiness/route.ts",
   import.meta.url,
 );
+const alphaReadinessScriptPath = fileURLToPath(new URL("./alpha-readiness.mjs", import.meta.url));
 const hostedAlphaSmokePath = fileURLToPath(new URL("./hosted-alpha-smoke.mjs", import.meta.url));
 const HOSTED_ALPHA_TOKEN_SENTINEL = "proof-token-that-must-not-leak";
 const STRONG_ALPHA_READINESS_SECRET = "hosted-alpha-readiness-secret-2026-random";
@@ -101,8 +102,31 @@ function runHostedAlphaSmoke(overrides = {}) {
   });
 }
 
+function runAlphaReadiness(overrides = {}) {
+  return spawnSync(process.execPath, [alphaReadinessScriptPath], {
+    encoding: "utf8",
+    env: makeHostedAlphaSmokeEnv(overrides),
+  });
+}
+
 function getChildOutput(result) {
   return `${result.stdout ?? ""}\n${result.stderr ?? ""}`;
+}
+
+function assertAlphaReadinessFails(overrides, expectedText) {
+  const result = runAlphaReadiness(overrides);
+  const output = getChildOutput(result);
+
+  assert(
+    result.status !== 0,
+    `Alpha readiness should fail. Output: ${output}`,
+  );
+  assert(
+    output.includes(expectedText),
+    `Alpha readiness failure must mention "${expectedText}". Output: ${output}`,
+  );
+
+  return output;
 }
 
 function assertHostedAlphaSmokeFails(overrides, expectedText) {
@@ -302,6 +326,22 @@ assert(
   !failedConfiguredChecks.length,
   `Fully configured provider env should not fail: ${JSON.stringify(failedConfiguredChecks, null, 2)}`,
 );
+
+for (const modeName of ["hosted", "provider"]) {
+  const output = assertAlphaReadinessFails(
+    {
+      ALPHA_READINESS_BASE_URL: "",
+      ALPHA_READINESS_MODE: modeName,
+      ALPHA_READINESS_SECRET: STRONG_ALPHA_READINESS_SECRET,
+    },
+    "ALPHA_READINESS_BASE_URL is required for hosted/provider readiness.",
+  );
+
+  assert(
+    !output.includes("fetch failed"),
+    `${modeName} readiness should fail before route fetches when ALPHA_READINESS_BASE_URL is missing. Output: ${output}`,
+  );
+}
 
 assertHostedAlphaSmokeFails({}, "Hosted alpha smoke is missing");
 assertHostedAlphaSmokeFails(

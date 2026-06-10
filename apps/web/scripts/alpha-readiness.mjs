@@ -45,12 +45,14 @@ const requireServerReadiness =
   process.env.ALPHA_READINESS_REQUIRE_SERVER === "1" ||
   mode === "hosted" ||
   mode === "provider";
+const requireExplicitTargetUrl = mode === "hosted" || mode === "provider";
 const checkCallerEnvironment =
   process.env.ALPHA_READINESS_CHECK_CALLER_ENV === "1" ||
   (process.env.ALPHA_READINESS_CHECK_CALLER_ENV !== "0" && mode === "local");
 
 const checks = [];
 let fileStoreDir;
+let missingRequiredTargetUrl = false;
 let serverController;
 
 function isLoopbackUrl(value) {
@@ -150,6 +152,11 @@ async function stopLocalReadinessServer() {
 }
 
 async function prepareReadinessTarget() {
+  if (requireExplicitTargetUrl && !explicitBaseUrl) {
+    missingRequiredTargetUrl = true;
+    return;
+  }
+
   const existingLocalBaseUrl = await detectExistingLocalBaseUrl();
   if (existingLocalBaseUrl) {
     activeBaseUrl = existingLocalBaseUrl;
@@ -159,6 +166,25 @@ async function prepareReadinessTarget() {
   if (mode === "local" && !explicitBaseUrl) {
     await startLocalReadinessServer();
   }
+}
+
+function checkReadinessTargetConfiguration() {
+  if (missingRequiredTargetUrl) {
+    fail(
+      "readiness target URL",
+      "ALPHA_READINESS_BASE_URL is required for hosted/provider readiness. Set it to the deployed Photo Book Maker web app URL.",
+      {
+        mode,
+        variable: "ALPHA_READINESS_BASE_URL",
+      },
+    );
+    return;
+  }
+
+  pass("readiness target URL", "Readiness target URL is configured.", {
+    baseUrl: activeBaseUrl,
+    mode,
+  });
 }
 
 function addCheck(status, name, detail, evidence = {}) {
@@ -270,6 +296,13 @@ async function fetchRoute(path, init = {}) {
 }
 
 async function checkHomePage() {
+  if (missingRequiredTargetUrl) {
+    skip("web home", "Skipped because ALPHA_READINESS_BASE_URL is not configured.", {
+      mode,
+    });
+    return;
+  }
+
   try {
     const { response, text } = await fetchRoute("/");
     if (response.ok && text.includes("Photo Book Maker")) {
@@ -289,6 +322,13 @@ async function checkHomePage() {
 }
 
 async function checkTemplateCatalog() {
+  if (missingRequiredTargetUrl) {
+    skip("template catalog", "Skipped because ALPHA_READINESS_BASE_URL is not configured.", {
+      mode,
+    });
+    return;
+  }
+
   try {
     const { body, response } = await fetchRoute("/api/templates");
     const packCount = body.catalog?.bookTemplatePacks?.length ?? 0;
@@ -338,6 +378,13 @@ function importAppReadinessChecks(body) {
 }
 
 async function checkAppSideReadiness() {
+  if (missingRequiredTargetUrl) {
+    skip("app-side readiness", "Skipped because ALPHA_READINESS_BASE_URL is not configured.", {
+      mode,
+    });
+    return;
+  }
+
   const shouldCheckServerReadiness = requireServerReadiness || Boolean(readinessSecret);
 
   if (!shouldCheckServerReadiness) {
@@ -389,6 +436,13 @@ async function checkAppSideReadiness() {
 }
 
 async function checkAuthGate() {
+  if (missingRequiredTargetUrl) {
+    skip("project auth gate", "Skipped because ALPHA_READINESS_BASE_URL is not configured.", {
+      mode,
+    });
+    return;
+  }
+
   try {
     const { body, response } = await fetchRoute("/api/projects");
     if (expectAuthRequired) {
@@ -429,6 +483,13 @@ async function checkAuthGate() {
 }
 
 async function checkAiHealth() {
+  if (missingRequiredTargetUrl) {
+    skip("local AI health", "Skipped because ALPHA_READINESS_BASE_URL is not configured.", {
+      mode,
+    });
+    return;
+  }
+
   if (!requireAiHealth) {
     skip("local AI health", "AI health route is not required for this readiness mode.");
     return;
@@ -586,6 +647,7 @@ function checkProviderEnvironment() {
 
 async function main() {
   await prepareReadinessTarget();
+  checkReadinessTargetConfiguration();
 
   if (checkCallerEnvironment) {
     checkProviderEnvironment();
@@ -606,7 +668,7 @@ async function main() {
   const failCount = checks.filter((check) => check.status === "fail").length;
   const warnCount = checks.filter((check) => check.status === "warn").length;
   const summary = {
-    baseUrl: activeBaseUrl,
+    baseUrl: missingRequiredTargetUrl ? null : activeBaseUrl,
     checks,
     isolated: Boolean(serverController),
     mode,
