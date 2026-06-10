@@ -13,6 +13,9 @@ apps/**/build
 apps/**/dist
 apps/**/.gradle
 apps/**/.kotlin
+apps/web/data/projects.json
+apps/web/data/local-uploads
+apps/web/data/local-uploads/**
 packages/**/node_modules
 **/*.log
 **/.DS_Store
