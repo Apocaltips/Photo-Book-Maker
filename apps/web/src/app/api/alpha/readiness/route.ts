@@ -7,11 +7,12 @@ import { createClient } from "@supabase/supabase-js";
 import { NextResponse } from "next/server";
 import {
   collectPhaseTwoProviderChecks,
+  makeSharedSecretStrengthCheck,
   getMissingEnv,
   shouldRequirePrivateWorker,
   shouldRequireProviderInfrastructure,
 } from "@/lib/alpha-readiness-contract";
-import { getAiWorkerQueueConfig } from "@/lib/server/ai-worker-auth";
+import { getAiWorkerQueueConfig, getAiWorkerSecret } from "@/lib/server/ai-worker-auth";
 import {
   createPhotoUploadTicket,
   isLocalObjectStorageEnabled,
@@ -138,6 +139,47 @@ function addEnvGroupCheck(
 
 function addPhaseTwoProviderChecks(checks: ReadinessCheck[], mode: string) {
   for (const check of collectPhaseTwoProviderChecks({ env: process.env, mode })) {
+    addCheck(
+      checks,
+      normalizeReadinessStatus(check.status),
+      check.name,
+      check.detail,
+      check.evidence,
+    );
+  }
+}
+
+function addSharedSecretStrengthChecks(
+  checks: ReadinessCheck[],
+  mode: string,
+  requireWorker: boolean,
+) {
+  const requireHostedSecrets = mode === "hosted" || mode === "provider";
+  const readinessSecretVariable = process.env.ALPHA_READINESS_SECRET?.trim()
+    ? "ALPHA_READINESS_SECRET"
+    : "TRIGGER_SECRET_KEY";
+  const workerSecretVariable = process.env.LOCAL_AI_WORKER_SECRET?.trim()
+    ? "LOCAL_AI_WORKER_SECRET"
+    : process.env.AI_WORKER_SECRET?.trim()
+      ? "AI_WORKER_SECRET"
+      : "LOCAL_AI_WORKER_SECRET";
+
+  for (const check of [
+    makeSharedSecretStrengthCheck({
+      label: "Alpha readiness secret",
+      name: "alpha readiness secret strength",
+      required: requireHostedSecrets,
+      value: getReadinessSecret(),
+      variable: readinessSecretVariable,
+    }),
+    makeSharedSecretStrengthCheck({
+      label: "Private AI worker secret",
+      name: "private AI worker secret strength",
+      required: requireWorker,
+      value: getAiWorkerSecret(),
+      variable: workerSecretVariable,
+    }),
+  ]) {
     addCheck(
       checks,
       normalizeReadinessStatus(check.status),
@@ -636,6 +678,7 @@ export async function GET(request: Request) {
     process.env.ALPHA_READINESS_REQUIRE_GENERATION_QUEUE === "1";
   const checks: ReadinessCheck[] = [];
 
+  addSharedSecretStrengthChecks(checks, mode, requireWorker);
   addTemplateCatalogChecks(checks);
   addAuthChecks(checks, requireProviders);
   await addSupabaseDirectAccessChecks(checks, requireProviders);

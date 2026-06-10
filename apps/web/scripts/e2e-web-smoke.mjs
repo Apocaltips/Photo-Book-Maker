@@ -185,10 +185,24 @@ async function apiJsonEventually(path, init = {}, options = {}) {
       },
     });
     const text = await response.text();
-    const body = text ? JSON.parse(text) : {};
+    const parseResult = await Promise.resolve()
+      .then(() => ({
+        body: text ? JSON.parse(text) : {},
+        error: null,
+      }))
+      .catch((error) => ({
+        body: {},
+        error,
+      }));
 
     if (response.ok) {
-      return body;
+      if (parseResult.error) {
+        throw new Error(
+          `API call returned non-JSON success ${path}: ${text.slice(0, 1000)}`,
+        );
+      }
+
+      return parseResult.body;
     }
 
     lastFailure = `${response.status}\n${text.slice(0, 1000)}`;
@@ -275,8 +289,24 @@ async function assertAlphaReadinessRoute() {
     (check) => check.name === "private AI worker queue" && check.status === "pass",
   );
   const hasAiQueueCheck = checks.some((check) => check.name === "AI generation queue");
+  const hasReadinessSecretStrengthCheck = checks.some(
+    (check) => check.name === "alpha readiness secret strength" && check.status === "pass",
+  );
+  const hasWorkerSecretStrengthCheck = checks.some(
+    (check) => check.name === "private AI worker secret strength" && check.status === "pass",
+  );
+  const leakedSecretText = JSON.stringify(checks);
 
-  if (!hasTemplateCheck || !hasStoreModeCheck || !hasWorkerCheck || !hasAiQueueCheck) {
+  if (
+    !hasTemplateCheck ||
+    !hasStoreModeCheck ||
+    !hasWorkerCheck ||
+    !hasAiQueueCheck ||
+    !hasReadinessSecretStrengthCheck ||
+    !hasWorkerSecretStrengthCheck ||
+    leakedSecretText.includes(readinessSecret) ||
+    leakedSecretText.includes(workerSecret)
+  ) {
     throw new Error(
       `Alpha readiness route did not return expected checks.\n${JSON.stringify(body, null, 2)}`,
     );

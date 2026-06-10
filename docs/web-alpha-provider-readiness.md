@@ -67,6 +67,16 @@ Allowed `PRINT_PROVIDER` values are `manual_pdf`, `peecho`, `prodigi`,
 Phase 1 but fails provider alpha because direct print checkout needs a real API
 target.
 
+## Shared Secret Rules
+
+Hosted readiness and the private AI worker bridge use bearer-style shared
+secrets. For hosted/provider alpha, both `ALPHA_READINESS_SECRET` and
+`LOCAL_AI_WORKER_SECRET` must be unique random values with at least 24
+characters. Do not use copied examples such as `secret`, `test-secret`,
+`long-random-readiness-secret`, or `same-readiness-secret-as-hosted`; the
+readiness route reports only configured/length/minimum metadata and fails
+hosted/provider mode when a value is short or placeholder-like.
+
 ## Print Vendor Bake-Off
 
 Do not hard-code a final print vendor before sample orders. Evaluate:
@@ -156,7 +166,7 @@ For the hosted family/friend gate, run:
 
 ```powershell
 $env:HOSTED_ALPHA_BASE_URL="https://YOUR-WEB-APP"
-$env:ALPHA_READINESS_SECRET="same-readiness-secret-as-hosted"
+$env:ALPHA_READINESS_SECRET="the-same-24-plus-character-random-value-configured-on-the-hosted-app"
 $env:HOSTED_ALPHA_PROOF_BEARER_TOKEN="tester-account-access-token"
 $env:HOSTED_ALPHA_PROOF_PROJECT_ID="hosted-project-id-with-saved-ai-generation"
 $env:HOSTED_ALPHA_REPORT_PATH="$env:TEMP\\photo-book-hosted-alpha.json"
@@ -183,7 +193,8 @@ in local mode, stale queue state, worker bridge config, and provider env
 requirements for the selected mode. Use `ALPHA_READINESS_MODE=local` for local
 testing. For the hosted family/friend alpha gate, set
 `ALPHA_READINESS_MODE=hosted`, `ALPHA_READINESS_BASE_URL=https://...`, and
-`ALPHA_READINESS_SECRET` to the same value configured on the hosted app. Hosted
+`ALPHA_READINESS_SECRET` to the same strong value configured on the hosted app.
+Hosted
 mode skips local caller-env checks by default and relies on the protected
 app-side readiness route; set `ALPHA_READINESS_CHECK_CALLER_ENV=1` when you
 also want to verify this PC's worker-side env before inviting testers. In

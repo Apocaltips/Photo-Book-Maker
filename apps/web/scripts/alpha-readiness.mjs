@@ -4,6 +4,7 @@ import { dirname } from "node:path";
 import {
   collectPhaseTwoProviderChecks,
   getMissingEnv,
+  makeSharedSecretStrengthCheck,
   shouldRequirePrivateWorker,
   shouldRequireProviderInfrastructure,
 } from "../src/lib/alpha-readiness-contract.js";
@@ -106,6 +107,39 @@ async function writeReport(summary) {
 
 function checkPhaseTwoProviderEnvironment() {
   for (const check of collectPhaseTwoProviderChecks({ env: process.env, mode })) {
+    addCheck(check.status, check.name, check.detail, check.evidence);
+  }
+}
+
+function checkSharedSecretEnvironment() {
+  const requireHostedSecrets = mode === "hosted" || mode === "provider";
+  const readinessSecretVariable = process.env.ALPHA_READINESS_SECRET?.trim()
+    ? "ALPHA_READINESS_SECRET"
+    : "TRIGGER_SECRET_KEY";
+  const workerSecret =
+    process.env.LOCAL_AI_WORKER_SECRET ?? process.env.AI_WORKER_SECRET ?? "";
+  const workerSecretVariable = process.env.LOCAL_AI_WORKER_SECRET?.trim()
+    ? "LOCAL_AI_WORKER_SECRET"
+    : process.env.AI_WORKER_SECRET?.trim()
+      ? "AI_WORKER_SECRET"
+      : "LOCAL_AI_WORKER_SECRET";
+
+  for (const check of [
+    makeSharedSecretStrengthCheck({
+      label: "Alpha readiness secret",
+      name: "alpha readiness secret strength",
+      required: requireHostedSecrets,
+      value: readinessSecret,
+      variable: readinessSecretVariable,
+    }),
+    makeSharedSecretStrengthCheck({
+      label: "Private AI worker secret",
+      name: "private AI worker secret strength",
+      required: requireWorker,
+      value: workerSecret,
+      variable: workerSecretVariable,
+    }),
+  ]) {
     addCheck(check.status, check.name, check.detail, check.evidence);
   }
 }
@@ -359,6 +393,8 @@ async function checkAiHealth() {
 }
 
 function checkProviderEnvironment() {
+  checkSharedSecretEnvironment();
+
   requireEnvGroup(
     "Supabase",
     [

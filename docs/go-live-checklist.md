@@ -63,7 +63,7 @@ LOCAL_AI_PRIMARY_PLANNER_TIMEOUT_MS=120000
 LOCAL_AI_FALLBACK_PLANNER_TIMEOUT_MS=180000
 LOCAL_AI_PRIMARY_PLANNER_NUM_PREDICT=1200
 LOCAL_AI_FALLBACK_PLANNER_NUM_PREDICT=1200
-ALPHA_READINESS_SECRET=long-random-readiness-secret
+ALPHA_READINESS_SECRET=<generate-a-24-plus-character-random-secret>
 ALPHA_READINESS_REPORT_PATH=
 OPENAI_API_KEY=
 HOSTED_ALPHA_BASE_URL=
@@ -121,6 +121,10 @@ The authoritative API for v1 is the Next.js app in `apps/web`.
 4. Confirm `https://YOUR-WEB-APP/api/templates` returns at least 12 book template packs and 64 spread templates.
 5. In local/staging, confirm `/ai-health` shows the local AI models are ready, queue health is clean, and the latest saved generation has an acceptable quality score before using AI Designer with testers.
 6. For hosted web alpha, configure `LOCAL_AI_WORKER_SECRET` and `LOCAL_AI_WORKER_ENABLED=1` on the hosted app. Keep `LOCAL_AI_DIRECT_IN_PRODUCTION=0` so Vercel never tries to call local Ollama directly.
+   Use unique random values of at least 24 characters for both
+   `LOCAL_AI_WORKER_SECRET` and `ALPHA_READINESS_SECRET`; hosted/provider
+   readiness fails short or placeholder-like shared secrets and never returns
+   the secret value in its evidence.
 7. On the private PC, run `npm run test:worker:preflight`, then
    `npm run test:worker:e2e`, then run the local web app with Ollama and
    storage credentials and run `npm run worker:ai:local` with
@@ -274,7 +278,7 @@ pass:
 ```powershell
 $env:ALPHA_READINESS_MODE="provider"
 $env:ALPHA_READINESS_BASE_URL="https://YOUR-WEB-APP"
-$env:ALPHA_READINESS_SECRET="same-readiness-secret-as-hosted"
+$env:ALPHA_READINESS_SECRET="the-same-24-plus-character-random-value-configured-on-the-hosted-app"
 npm run test:provider:readiness
 ```
 

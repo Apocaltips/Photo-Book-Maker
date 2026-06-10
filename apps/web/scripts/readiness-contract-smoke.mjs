@@ -2,8 +2,10 @@
 import { readFile } from "node:fs/promises";
 import {
   ALLOWED_PRINT_PROVIDERS,
+  MIN_HOSTED_SHARED_SECRET_LENGTH,
   collectPhaseTwoProviderChecks,
   getReadinessContractEnvNames,
+  makeSharedSecretStrengthCheck,
   shouldCheckPhaseTwoProviders,
   shouldRequirePrivateWorker,
   shouldRequireProviderInfrastructure,
@@ -115,6 +117,14 @@ assert(
   alphaReadinessRoute.includes("photo upload ticket signing"),
   "Alpha readiness route must prove object storage can mint a photo upload ticket.",
 );
+assert(
+  alphaReadinessRoute.includes("alpha readiness secret strength"),
+  "Alpha readiness route must report readiness shared-secret strength.",
+);
+assert(
+  alphaReadinessRoute.includes("private AI worker secret strength"),
+  "Alpha readiness route must report private worker shared-secret strength.",
+);
 
 assert(!shouldRequireProviderInfrastructure("local", {}), "local mode must not require providers");
 assert(shouldRequireProviderInfrastructure("hosted", {}), "hosted mode must require providers");
@@ -124,6 +134,58 @@ assert(shouldRequirePrivateWorker("hosted", {}), "hosted mode must require a pri
 assert(!shouldCheckPhaseTwoProviders("local", {}), "local mode must skip Phase 2 providers");
 assert(shouldCheckPhaseTwoProviders("hosted", {}), "hosted mode must warn on Phase 2 providers");
 assert(shouldCheckPhaseTwoProviders("provider", {}), "provider mode must require Phase 2 providers");
+
+const missingLocalReadinessSecretCheck = makeSharedSecretStrengthCheck({
+  label: "Alpha readiness secret",
+  name: "alpha readiness secret strength",
+  required: false,
+  value: "",
+  variable: "ALPHA_READINESS_SECRET",
+});
+assert(
+  missingLocalReadinessSecretCheck.status === "skip",
+  "Optional local readiness secret strength must skip when no secret is configured.",
+);
+
+const shortHostedReadinessSecretCheck = makeSharedSecretStrengthCheck({
+  label: "Alpha readiness secret",
+  name: "alpha readiness secret strength",
+  required: true,
+  value: "short-secret",
+  variable: "ALPHA_READINESS_SECRET",
+});
+assert(
+  shortHostedReadinessSecretCheck.status === "fail",
+  "Hosted readiness secret strength must fail short shared secrets.",
+);
+assert(
+  shortHostedReadinessSecretCheck.evidence?.minLength === MIN_HOSTED_SHARED_SECRET_LENGTH,
+  "Hosted readiness secret strength evidence must include the minimum length.",
+);
+
+const placeholderWorkerSecretCheck = makeSharedSecretStrengthCheck({
+  label: "Private AI worker secret",
+  name: "private AI worker secret strength",
+  required: true,
+  value: "same-readiness-secret-as-hosted",
+  variable: "LOCAL_AI_WORKER_SECRET",
+});
+assert(
+  placeholderWorkerSecretCheck.status === "fail",
+  "Private worker secret strength must fail placeholder-looking secrets.",
+);
+
+const strongWorkerSecretCheck = makeSharedSecretStrengthCheck({
+  label: "Private AI worker secret",
+  name: "private AI worker secret strength",
+  required: true,
+  value: "photo-book-alpha-worker-2026-very-long-random-secret",
+  variable: "LOCAL_AI_WORKER_SECRET",
+});
+assert(
+  strongWorkerSecretCheck.status === "pass",
+  "Private worker secret strength must pass long non-placeholder secrets.",
+);
 
 const localChecks = collectPhaseTwoProviderChecks({
   env: {},

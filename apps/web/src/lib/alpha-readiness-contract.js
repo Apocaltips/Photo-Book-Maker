@@ -8,6 +8,24 @@ export const ALLOWED_PRINT_PROVIDERS = Object.freeze([
   "gelato",
 ]);
 
+export const MIN_HOSTED_SHARED_SECRET_LENGTH = 24;
+
+const PLACEHOLDER_SECRET_PATTERNS = Object.freeze([
+  /^change[-_ ]?me$/i,
+  /^dev[-_ ]?secret$/i,
+  /^example$/i,
+  /^local[-_ ]?secret$/i,
+  /^password$/i,
+  /^same[-_ ]?(readiness[-_ ]?)?secret[-_ ]?as[-_ ]?hosted$/i,
+  /^secret$/i,
+  /^test[-_ ]?secret$/i,
+  /^worker[-_ ]?secret$/i,
+  /^long[-_ ]?random[-_ ]?(readiness[-_ ]?)?secret$/i,
+  /^your[-_ ].+/i,
+  /placeholder/i,
+  /replace[-_ ]?me/i,
+]);
+
 export const READINESS_ENV_GROUPS = Object.freeze({
   objectStorage: Object.freeze([
     "PHOTO_STORAGE_BUCKET",
@@ -68,6 +86,75 @@ export const READINESS_CONTROL_ENV_NAMES = Object.freeze([
 
 export function hasReadinessEnvValue(env, name) {
   return Boolean(env[name]?.trim());
+}
+
+export function getSharedSecretStrengthIssue(
+  value,
+  { label = "Shared secret", minLength = MIN_HOSTED_SHARED_SECRET_LENGTH } = {},
+) {
+  const secret = String(value ?? "").trim();
+
+  if (!secret) {
+    return `${label} is missing.`;
+  }
+
+  if (secret.length < minLength) {
+    return `${label} must be at least ${minLength} characters.`;
+  }
+
+  if (/^(.)\1+$/.test(secret)) {
+    return `${label} cannot be one repeated character.`;
+  }
+
+  if (PLACEHOLDER_SECRET_PATTERNS.some((pattern) => pattern.test(secret))) {
+    return `${label} looks like a placeholder.`;
+  }
+
+  return null;
+}
+
+export function makeSharedSecretStrengthCheck({
+  label,
+  minLength = MIN_HOSTED_SHARED_SECRET_LENGTH,
+  name,
+  required = false,
+  value,
+  variable,
+}) {
+  const secret = String(value ?? "").trim();
+  const issue = getSharedSecretStrengthIssue(secret, { label, minLength });
+  const evidence = {
+    configured: Boolean(secret),
+    length: secret.length,
+    minLength,
+    required,
+    variable,
+  };
+
+  if (!issue) {
+    return {
+      detail: `${label} is configured with enough entropy for hosted alpha shared-secret auth.`,
+      evidence,
+      name,
+      status: "pass",
+    };
+  }
+
+  if (!required && !secret) {
+    return {
+      detail: `${label} is not required for this readiness mode.`,
+      evidence,
+      name,
+      status: "skip",
+    };
+  }
+
+  return {
+    detail: issue,
+    evidence,
+    name,
+    status: required ? "fail" : "warn",
+  };
 }
 
 export function getMissingEnv(env, variables) {
