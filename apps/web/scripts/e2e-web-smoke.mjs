@@ -34,6 +34,8 @@ const devAuthHeaders = {
   "X-Photo-Book-Dev-Name": "Android Tester",
 };
 const workerSecret = "photo-book-e2e-worker-secret";
+const readinessSecret =
+  process.env.E2E_ALPHA_READINESS_SECRET ?? "photo-book-e2e-readiness-secret";
 const otherDevAuthHeaders = {
   "X-Photo-Book-Dev-Email": "family-friend@example.com",
   "X-Photo-Book-Dev-Id": "family-friend",
@@ -75,6 +77,7 @@ const server = reuseExistingServer
           LOCAL_AI_WORKER_MAX_ATTEMPTS: "2",
           LOCAL_AI_WORKER_MIN_LEASE_SECONDS: "1",
           LOCAL_AI_WORKER_SECRET: workerSecret,
+          ALPHA_READINESS_SECRET: readinessSecret,
         },
         shell: true,
         stdio: ["ignore", "pipe", "pipe"],
@@ -91,6 +94,7 @@ const server = reuseExistingServer
           LOCAL_AI_WORKER_MAX_ATTEMPTS: "2",
           LOCAL_AI_WORKER_MIN_LEASE_SECONDS: "1",
           LOCAL_AI_WORKER_SECRET: workerSecret,
+          ALPHA_READINESS_SECRET: readinessSecret,
         },
         stdio: ["ignore", "pipe", "pipe"],
       });
@@ -213,6 +217,47 @@ async function workerApiJson(path, init = {}) {
   }
 
   return body;
+}
+
+async function assertAlphaReadinessRoute() {
+  if (reuseExistingServer && !process.env.E2E_ALPHA_READINESS_SECRET) {
+    return;
+  }
+
+  const unauthorized = await fetchWithTimeout(`${baseUrl}/api/alpha/readiness?mode=local`);
+  if (unauthorized.status !== 401) {
+    throw new Error(`Alpha readiness route did not reject missing secret: ${unauthorized.status}`);
+  }
+
+  const response = await fetchWithTimeout(`${baseUrl}/api/alpha/readiness?mode=local`, {
+    headers: {
+      "Authorization": `Bearer ${readinessSecret}`,
+    },
+  });
+  const body = await response.json().catch(() => ({}));
+
+  if (!response.ok) {
+    throw new Error(
+      `Alpha readiness route failed authorized request: ${response.status}\n${JSON.stringify(
+        body,
+      )}`,
+    );
+  }
+
+  const checks = Array.isArray(body.checks) ? body.checks : [];
+  const hasTemplateCheck = checks.some(
+    (check) => check.name === "template catalog" && check.status === "pass",
+  );
+  const hasStoreModeCheck = checks.some((check) => check.name === "project store mode");
+  const hasWorkerCheck = checks.some(
+    (check) => check.name === "private AI worker queue" && check.status === "pass",
+  );
+
+  if (!hasTemplateCheck || !hasStoreModeCheck || !hasWorkerCheck) {
+    throw new Error(
+      `Alpha readiness route did not return expected checks.\n${JSON.stringify(body, null, 2)}`,
+    );
+  }
 }
 
 async function runProjectE2E() {
@@ -704,6 +749,8 @@ try {
       typeof body.queue?.staleRuns === "number"
     );
   }, "local AI health route smoke");
+
+  await assertAlphaReadinessRoute();
 
   await assertRoute(
     "/api/projects/nonexistent/proof",

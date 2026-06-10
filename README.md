@@ -65,9 +65,9 @@ fallback can be acceptable for local alpha when the quality score passes, but
 it should stay visible instead of being treated like a primary-model success.
 
 For hosted web alpha with local AI, do not expose Ollama. Configure
-`LOCAL_AI_WORKER_SECRET` on the hosted web app and this PC, set
-`LOCAL_AI_WORKER_ENABLED=1` on the hosted app, then run the private worker from
-this checkout:
+`LOCAL_AI_WORKER_SECRET` and `ALPHA_READINESS_SECRET` on the hosted web app,
+configure the same worker secret on this PC, set `LOCAL_AI_WORKER_ENABLED=1` on
+the hosted app, then run the private worker from this checkout:
 
 ```powershell
 $env:LOCAL_AI_WORKER_SECRET="same-secret-as-hosted"
@@ -100,8 +100,17 @@ For a hosted alpha URL, require real auth/provider/worker gates:
 ```powershell
 $env:ALPHA_READINESS_MODE="hosted"
 $env:ALPHA_READINESS_BASE_URL="https://YOUR-WEB-APP"
+$env:ALPHA_READINESS_SECRET="same-readiness-secret-as-hosted"
 npm run test:alpha:readiness
 ```
+
+Hosted readiness calls the protected `/api/alpha/readiness` route so the
+deployed app reports its own Supabase, R2, project-store, template-catalog, and
+private-worker configuration. The route returns only booleans, counts, mode
+names, and missing variable names; it never returns secret values. In hosted
+mode the CLI skips caller-env checks by default because the local shell may not
+match Vercel. Set `ALPHA_READINESS_CHECK_CALLER_ENV=1` when you also want to
+verify this PC's worker-side environment before a tester session.
 
 6. In a second terminal, start Expo:
 

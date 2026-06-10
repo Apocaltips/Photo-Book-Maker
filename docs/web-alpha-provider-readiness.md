@@ -59,6 +59,10 @@ For hosted web testing before a dedicated AI provider exists, never expose Ollam
 Worker bridge v1:
 
 - Hosted web/API: set `LOCAL_AI_WORKER_ENABLED=1` and `LOCAL_AI_WORKER_SECRET`.
+- Hosted readiness: also set `ALPHA_READINESS_SECRET` on the hosted app. The
+  readiness CLI uses this secret to call `/api/alpha/readiness` and verify the
+  deployed server's own Supabase, R2, project-store, template-catalog, and
+  private-worker configuration without returning secret values.
 - Private PC processor: run the local web app with Ollama and storage credentials available.
 - Private PC worker: set `LOCAL_AI_WORKER_HOSTED_BASE_URL` to the hosted app,
   `LOCAL_AI_WORKER_PROCESSOR_BASE_URL` to the local app, and run
@@ -96,12 +100,17 @@ npm run test:ai:health
 ```
 
 `npm run test:alpha:readiness` is read-only. It expects the web app to be
-running and checks the home page, auth gate, template catalog, local AI health,
-stale queue state, worker bridge config, and provider env requirements for the
-selected mode. Use `ALPHA_READINESS_MODE=local` for local testing and
-`ALPHA_READINESS_MODE=hosted` plus `ALPHA_READINESS_BASE_URL=https://...` for
-the hosted family/friend alpha gate. `npm run test:ai:health` expects the web
-app to be running and Ollama to have the required models installed.
+running and checks the home page, auth gate, template catalog, local AI health
+in local mode, stale queue state, worker bridge config, and provider env
+requirements for the selected mode. Use `ALPHA_READINESS_MODE=local` for local
+testing. For the hosted family/friend alpha gate, set
+`ALPHA_READINESS_MODE=hosted`, `ALPHA_READINESS_BASE_URL=https://...`, and
+`ALPHA_READINESS_SECRET` to the same value configured on the hosted app. Hosted
+mode skips local caller-env checks by default and relies on the protected
+app-side readiness route; set `ALPHA_READINESS_CHECK_CALLER_ENV=1` when you
+also want to verify this PC's worker-side env before inviting testers.
+`npm run test:ai:health` expects the web app to be running and Ollama to have
+the required models installed.
 `npm run test:ai:local` expects a reachable Cap Cana-style test project unless
 `AI_GENERATION_PROJECT_ID` points at another test project.
 `npm run test:ai:benchmark` is isolated by default: it copies the current local

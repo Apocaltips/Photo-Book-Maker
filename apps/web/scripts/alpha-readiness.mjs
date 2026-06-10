@@ -13,7 +13,9 @@ const minSpreadTemplates = Number.parseInt(
 );
 const minQualityScore = Number.parseInt(process.env.ALPHA_READINESS_MIN_QUALITY_SCORE ?? "75", 10);
 const requireSavedRun = process.env.ALPHA_READINESS_REQUIRE_SAVED_RUN !== "0";
-const requireAiHealth = process.env.ALPHA_READINESS_REQUIRE_AI_HEALTH !== "0";
+const rawRequireAiHealth = process.env.ALPHA_READINESS_REQUIRE_AI_HEALTH;
+const requireAiHealth =
+  rawRequireAiHealth === "1" || (rawRequireAiHealth !== "0" && mode === "local");
 const requireProviders =
   process.env.ALPHA_READINESS_REQUIRE_PROVIDERS === "1" ||
   mode === "hosted" ||
@@ -26,6 +28,15 @@ const expectAuthRequired =
   process.env.ALPHA_READINESS_EXPECT_AUTH_REQUIRED === "1" ||
   mode === "hosted" ||
   mode === "provider";
+const readinessSecret =
+  process.env.ALPHA_READINESS_SECRET ?? process.env.TRIGGER_SECRET_KEY ?? "";
+const requireServerReadiness =
+  process.env.ALPHA_READINESS_REQUIRE_SERVER === "1" ||
+  mode === "hosted" ||
+  mode === "provider";
+const checkCallerEnvironment =
+  process.env.ALPHA_READINESS_CHECK_CALLER_ENV === "1" ||
+  (process.env.ALPHA_READINESS_CHECK_CALLER_ENV !== "0" && mode === "local");
 
 const checks = [];
 
@@ -149,6 +160,78 @@ async function checkTemplateCatalog() {
   }
 }
 
+function importAppReadinessChecks(body) {
+  if (!Array.isArray(body.checks)) {
+    fail("app-side readiness", "Readiness route did not return a checks array.", {
+      body,
+    });
+    return;
+  }
+
+  for (const check of body.checks) {
+    const status = ["fail", "pass", "skip", "warn"].includes(check?.status)
+      ? check.status
+      : "fail";
+    addCheck(
+      status,
+      `app-side ${check?.name ?? "readiness check"}`,
+      check?.detail ?? "Readiness route returned a malformed check.",
+      check?.evidence ?? {},
+    );
+  }
+}
+
+async function checkAppSideReadiness() {
+  const shouldCheckServerReadiness = requireServerReadiness || Boolean(readinessSecret);
+
+  if (!shouldCheckServerReadiness) {
+    skip(
+      "app-side readiness",
+      "Protected app-side readiness route is not required for this mode.",
+    );
+    return;
+  }
+
+  if (!readinessSecret) {
+    fail(
+      "app-side readiness secret",
+      "ALPHA_READINESS_SECRET is required to verify the deployed app environment.",
+    );
+    return;
+  }
+
+  try {
+    const { body, response } = await fetchRoute(
+      `/api/alpha/readiness?mode=${encodeURIComponent(mode)}`,
+      {
+        headers: {
+          "Authorization": `Bearer ${readinessSecret}`,
+        },
+      },
+    );
+
+    if (!response.ok) {
+      fail("app-side readiness", `Readiness route returned ${response.status}.`, {
+        body,
+        status: response.status,
+      });
+      return;
+    }
+
+    pass("app-side readiness", "Protected readiness route is reachable.", {
+      appStatus: body.status ?? null,
+      status: response.status,
+      totals: body.totals ?? null,
+    });
+    importAppReadinessChecks(body);
+  } catch (error) {
+    fail(
+      "app-side readiness",
+      error instanceof Error ? error.message : "App-side readiness check failed.",
+    );
+  }
+}
+
 async function checkAuthGate() {
   try {
     const { body, response } = await fetchRoute("/api/projects");
@@ -268,8 +351,8 @@ function checkProviderEnvironment() {
       "SUPABASE_URL",
       "SUPABASE_SERVICE_ROLE_KEY",
       "SUPABASE_PROJECTS_TABLE",
-      "EXPO_PUBLIC_SUPABASE_URL",
-      "EXPO_PUBLIC_SUPABASE_ANON_KEY",
+      "NEXT_PUBLIC_SUPABASE_URL",
+      "NEXT_PUBLIC_SUPABASE_ANON_KEY",
     ],
     requireProviders,
   );
@@ -342,7 +425,17 @@ function checkProviderEnvironment() {
 }
 
 async function main() {
-  checkProviderEnvironment();
+  if (checkCallerEnvironment) {
+    checkProviderEnvironment();
+  } else {
+    skip(
+      "caller environment",
+      "Caller environment checks are skipped; app-side readiness validates the deployed server.",
+      { mode },
+    );
+  }
+
+  await checkAppSideReadiness();
   await checkHomePage();
   await checkTemplateCatalog();
   await checkAuthGate();

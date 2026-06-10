@@ -33,6 +33,8 @@ Copy `.env.example` to `.env.local` and fill in:
 ```bash
 NEXT_PUBLIC_API_BASE_URL=https://YOUR-WEB-APP/api
 EXPO_PUBLIC_API_BASE_URL=https://YOUR-WEB-APP/api
+NEXT_PUBLIC_SUPABASE_URL=https://YOUR-SUPABASE-PROJECT.supabase.co
+NEXT_PUBLIC_SUPABASE_ANON_KEY=YOUR-SUPABASE-ANON-KEY
 EXPO_PUBLIC_SUPABASE_URL=https://YOUR-SUPABASE-PROJECT.supabase.co
 EXPO_PUBLIC_SUPABASE_ANON_KEY=YOUR-SUPABASE-ANON-KEY
 
@@ -58,6 +60,7 @@ LOCAL_AI_PRIMARY_PLANNER_TIMEOUT_MS=120000
 LOCAL_AI_FALLBACK_PLANNER_TIMEOUT_MS=180000
 LOCAL_AI_PRIMARY_PLANNER_NUM_PREDICT=1200
 LOCAL_AI_FALLBACK_PLANNER_NUM_PREDICT=1200
+ALPHA_READINESS_SECRET=long-random-readiness-secret
 OPENAI_API_KEY=
 ```
 
@@ -90,7 +93,14 @@ The authoritative API for v1 is the Next.js app in `apps/web`.
 7. On the private PC, run the local web app with Ollama and storage credentials, then run `npm run worker:ai:local` with `LOCAL_AI_WORKER_HOSTED_BASE_URL` pointed at the hosted app and `LOCAL_AI_WORKER_PROCESSOR_BASE_URL` pointed at the local app. Leave `LOCAL_AI_WORKER_HEARTBEAT_MS=60000`, `LOCAL_AI_WORKER_MAX_ATTEMPTS=3`, and the 60-3600 second lease window unless a benchmark proves the hosted queue needs different values.
 8. Run the local AI benchmark and keep the generated report path with tester-session notes. If the benchmark used the fallback planner or deterministic safe fallback, record that explicitly instead of treating it as a primary-planner pass.
 9. Before inviting testers, confirm `/ai-health` shows `Stale runs = 0`; any run that exceeds `LOCAL_AI_WORKER_MAX_ATTEMPTS` should appear as failed instead of staying active.
-10. Run `npm run test:alpha:readiness` in local mode, then rerun it with `ALPHA_READINESS_MODE=hosted` and `ALPHA_READINESS_BASE_URL=https://YOUR-WEB-APP` after deployment. Treat any failed check as a no-go for family/friend testers.
+10. Configure `ALPHA_READINESS_SECRET` on the hosted app, then run
+    `npm run test:alpha:readiness` in local mode. After deployment, rerun it
+    with `ALPHA_READINESS_MODE=hosted`,
+    `ALPHA_READINESS_BASE_URL=https://YOUR-WEB-APP`, and
+    `ALPHA_READINESS_SECRET` set in the local shell. Hosted mode calls the
+    protected `/api/alpha/readiness` route so the deployed app proves its own
+    Supabase, R2, project-store, template-catalog, and private-worker setup.
+    Treat any failed check as a no-go for family/friend testers.
 
 ## 5. Point Mobile At The Hosted API
 
