@@ -61,6 +61,7 @@ LOCAL_AI_FALLBACK_PLANNER_TIMEOUT_MS=180000
 LOCAL_AI_PRIMARY_PLANNER_NUM_PREDICT=1200
 LOCAL_AI_FALLBACK_PLANNER_NUM_PREDICT=1200
 ALPHA_READINESS_SECRET=long-random-readiness-secret
+ALPHA_READINESS_REPORT_PATH=
 OPENAI_API_KEY=
 HOSTED_ALPHA_BASE_URL=
 HOSTED_ALPHA_PROOF_BEARER_TOKEN=
@@ -69,6 +70,7 @@ HOSTED_ALPHA_PROOF_PROJECT_TITLE=
 HOSTED_ALPHA_REQUIRE_PROOF=1
 HOSTED_ALPHA_DRY_RUN=0
 HOSTED_ALPHA_ALLOW_LOCAL_BASE_URL=0
+HOSTED_ALPHA_REPORT_PATH=
 
 STRIPE_SECRET_KEY=
 NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY=
@@ -143,7 +145,9 @@ The authoritative API for v1 is the Next.js app in `apps/web`.
     `ALPHA_READINESS_SECRET`, `HOSTED_ALPHA_PROOF_BEARER_TOKEN`, and
     `HOSTED_ALPHA_PROOF_PROJECT_ID` or `HOSTED_ALPHA_PROOF_PROJECT_TITLE`.
     This is the outside-tester gate because it proves the deployed app can both
-    report readiness and render a real authenticated proof.
+    report readiness and render a real authenticated proof. Keep the combined
+    `HOSTED_ALPHA_REPORT_PATH` report and its readiness/proof-quality companion
+    reports with the tester-session notes.
 12. Leave `PRINT_PROVIDER=manual_pdf` for Phase 1. When direct print checkout
     starts, set `PRINT_PROVIDER` to the selected API candidate, configure the
     Stripe/email/monitoring/print adapter variables, confirm a reviewed sample

@@ -141,12 +141,16 @@ $env:HOSTED_ALPHA_BASE_URL="https://YOUR-WEB-APP"
 $env:ALPHA_READINESS_SECRET="same-readiness-secret-as-hosted"
 $env:HOSTED_ALPHA_PROOF_BEARER_TOKEN="tester-account-access-token"
 $env:HOSTED_ALPHA_PROOF_PROJECT_ID="hosted-project-id-with-saved-ai-generation"
+$env:HOSTED_ALPHA_REPORT_PATH="$env:TEMP\\photo-book-hosted-alpha.json"
 npm run test:hosted:alpha
 ```
 
 This wraps the protected hosted readiness route and the proof-quality gate.
 Set `HOSTED_ALPHA_REQUIRE_PROOF=0` only for a deployment smoke before a hosted
 tester project exists; the outside-tester gate should include proof quality.
+The hosted alpha smoke writes a combined report plus companion readiness and
+proof-quality reports next to `HOSTED_ALPHA_REPORT_PATH`, or to the system temp
+directory when no path is provided.
 
 Phase 2 direct-print readiness has a separate cross-platform command:
 

@@ -1,9 +1,12 @@
 /* global AbortSignal, URL, console, fetch, process */
+import { mkdir, writeFile } from "node:fs/promises";
+import { dirname } from "node:path";
 
 const baseUrl = (process.env.ALPHA_READINESS_BASE_URL ?? "http://127.0.0.1:3000").replace(
   /\/$/,
   "",
 );
+const reportPath = process.env.ALPHA_READINESS_REPORT_PATH;
 const mode = (process.env.ALPHA_READINESS_MODE ?? "local").toLowerCase();
 const strict = process.env.ALPHA_READINESS_STRICT !== "0";
 const minTemplatePacks = Number.parseInt(process.env.ALPHA_READINESS_MIN_TEMPLATE_PACKS ?? "12", 10);
@@ -94,6 +97,15 @@ function requireEnvGroup(name, variables, required) {
   } else {
     warn(`${name} env`, detail, { missing, variables });
   }
+}
+
+async function writeReport(summary) {
+  if (!reportPath) {
+    return;
+  }
+
+  await mkdir(dirname(reportPath), { recursive: true });
+  await writeFile(reportPath, `${JSON.stringify(summary, null, 2)}\n`, "utf8");
 }
 
 function shouldCheckPhaseTwoProviders() {
@@ -631,6 +643,7 @@ async function main() {
   };
 
   console.log(JSON.stringify(summary, null, 2));
+  await writeReport(summary);
 
   if (strict && failCount) {
     throw new Error(`Alpha readiness failed ${failCount} check(s).`);

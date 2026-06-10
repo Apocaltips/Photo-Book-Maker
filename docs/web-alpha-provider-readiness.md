@@ -153,6 +153,7 @@ $env:HOSTED_ALPHA_BASE_URL="https://YOUR-WEB-APP"
 $env:ALPHA_READINESS_SECRET="same-readiness-secret-as-hosted"
 $env:HOSTED_ALPHA_PROOF_BEARER_TOKEN="tester-account-access-token"
 $env:HOSTED_ALPHA_PROOF_PROJECT_ID="hosted-project-id-with-saved-ai-generation"
+$env:HOSTED_ALPHA_REPORT_PATH="$env:TEMP\\photo-book-hosted-alpha.json"
 npm run test:hosted:alpha
 ```
 
@@ -160,7 +161,9 @@ npm run test:hosted:alpha
 hosted mode, then runs proof-quality against the same hosted base URL using the
 provided bearer token and project id/title. Use
 `HOSTED_ALPHA_REQUIRE_PROOF=0` only for a temporary deployment smoke before the
-first hosted generated project exists.
+first hosted generated project exists. The command writes a combined hosted
+alpha report plus `*-readiness.json` and `*-proof-quality.json` companions next
+to `HOSTED_ALPHA_REPORT_PATH`, or to the system temp directory by default.
 
 For the Phase 2 direct-print gate, run:
 
