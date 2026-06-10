@@ -124,14 +124,21 @@ cd apps/mobile && npx expo-doctor
 ```
 
 `npm run test:ai:benchmark` runs the health gate and a full local generation
-smoke, then writes a JSON benchmark report to the system temp directory unless
-`AI_GENERATION_REPORT_PATH` is set. The report records elapsed time, prompt
-pressure, planner/fallback mode, quality score, photo usage, template support,
-and acceptance failures. Because it saves a generation run to the current local
-project, it requires an explicit opt-in:
+smoke against an isolated temporary copy of `apps/web/data/projects.json` and
+`apps/web/data/local-uploads`, then writes a JSON benchmark report to the system
+temp directory unless `AI_GENERATION_REPORT_PATH` is set. The report records
+elapsed time, prompt pressure, planner/fallback mode, quality score, photo
+usage, template support, and acceptance failures. Stop any running local Next
+dev server first; Next cannot run two dev servers for this app directory. To
+intentionally target a running app/store instead, set `AI_BENCHMARK_ISOLATED=0`
+and opt into live-store mutation.
+
+`npm run test:ai:local` still targets the current app and requires explicit
+opt-in because it saves a generation run to the selected project:
 
 ```powershell
-$env:AI_GENERATION_ALLOW_EXISTING_STORE="1"; npm run test:ai:benchmark
+npm run test:ai:benchmark
+$env:AI_BENCHMARK_ISOLATED="0"; $env:AI_GENERATION_ALLOW_EXISTING_STORE="1"; npm run test:ai:benchmark
 $env:AI_GENERATION_ALLOW_EXISTING_STORE="1"; npm run test:ai:local
 ```
 

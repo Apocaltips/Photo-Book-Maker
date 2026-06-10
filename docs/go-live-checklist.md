@@ -212,11 +212,20 @@ npm run typecheck -w @photo-book-maker/mobile
 cd apps/mobile && npx expo-doctor
 ```
 
-For the mutating local AI acceptance run, opt into the current local project
-store explicitly and keep the benchmark report path with tester-session notes:
+The local AI benchmark is isolated by default: it copies the current local
+project store and local uploads into a temp directory, starts its own local web
+server, runs generation, writes the report, and removes the temp store. Keep the
+benchmark report path with tester-session notes:
 
 ```powershell
-$env:AI_GENERATION_ALLOW_EXISTING_STORE="1"; npm run test:ai:benchmark
+npm run test:ai:benchmark
+```
+
+Only opt into the current local project store when you intentionally want the
+validation run saved back into the live project data:
+
+```powershell
+$env:AI_BENCHMARK_ISOLATED="0"; $env:AI_GENERATION_ALLOW_EXISTING_STORE="1"; npm run test:ai:benchmark
 $env:AI_GENERATION_ALLOW_EXISTING_STORE="1"; npm run test:ai:local
 ```
 

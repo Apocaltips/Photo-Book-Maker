@@ -91,13 +91,18 @@ npm run test:ai:health
 ```
 
 `npm run test:ai:health` expects the web app to be running and Ollama to have the required models installed. `npm run test:ai:local` expects a reachable Cap Cana-style test project unless `AI_GENERATION_PROJECT_ID` points at another test project.
-`npm run test:ai:benchmark` and `npm run test:ai:local` also run a generation
-and therefore mutate the selected project by saving a new generation run. They
-refuse to target the default local app store unless you opt in:
+`npm run test:ai:benchmark` is isolated by default: it copies the current local
+project store and local uploads into a temp directory, starts a private Next
+server, runs generation, writes the report, and deletes the temp store. Stop any
+running local Next dev server before using it because Next cannot run two dev
+servers for this app directory.
+
+Use live-store mutation only when explicitly needed:
 
 ```powershell
-$env:AI_GENERATION_ALLOW_EXISTING_STORE="1"; npm run test:ai:benchmark
+$env:AI_BENCHMARK_ISOLATED="0"; $env:AI_GENERATION_ALLOW_EXISTING_STORE="1"; npm run test:ai:benchmark
 $env:AI_GENERATION_ALLOW_EXISTING_STORE="1"; npm run test:ai:local
 ```
 
-Do not commit `apps/web/data/projects.json` after benchmark-only local runs.
+Do not commit `apps/web/data/projects.json` after intentionally mutating local
+AI runs.
