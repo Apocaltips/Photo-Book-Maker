@@ -482,8 +482,8 @@ function assessProof(project, templateIds, proofHtml) {
   if (approvedPhotos.length <= 25 && (pages.length < 6 || pages.length > 10)) {
     failures.push(`Small-batch proof has ${pages.length} pages; expected 6-10 well-filled spreads.`);
   }
-  if (approvedPhotos.length >= 26 && approvedPhotos.length <= 60 && (pages.length < 10 || pages.length > 16)) {
-    failures.push(`60-photo proof has ${pages.length} pages; expected 10-16 curated spreads.`);
+  if (approvedPhotos.length >= 26 && approvedPhotos.length <= 60 && (pages.length < 10 || pages.length > 14)) {
+    failures.push(`60-photo proof has ${pages.length} pages; expected 10-14 curated spreads.`);
   }
   if (pages.length >= 6 && new Set(captionPositions).size < 3) {
     failures.push("Caption placement is too repetitive; expected at least three proof positions.");

@@ -203,6 +203,118 @@ async function readJsonReport(path) {
   return JSON.parse(await readFile(path, "utf8"));
 }
 
+function getDuplicatePairCount(duplicatePairs) {
+  return Array.isArray(duplicatePairs) ? duplicatePairs.length : null;
+}
+
+function getDuplicateRate(duplicateCount, denominator) {
+  if (duplicateCount === null || !denominator) {
+    return null;
+  }
+
+  return duplicateCount / denominator;
+}
+
+function summarizeGenerationReport(generationReport) {
+  const acceptance = generationReport.acceptance ?? {};
+  const qualityReport = generationReport.qualityReport ?? {};
+  const approvedPhotoCount =
+    qualityReport.approvedPhotoCount ?? generationReport.approvedPhotoCount ?? null;
+  const duplicatePairCount = getDuplicatePairCount(acceptance.duplicatePairs);
+  const duplicateDraftPhotoCount = Array.isArray(qualityReport.duplicatePhotoIds)
+    ? qualityReport.duplicatePhotoIds.length
+    : null;
+  const unsupportedTemplateCount = Array.isArray(acceptance.unsupportedTemplates)
+    ? acceptance.unsupportedTemplates.length
+    : Array.isArray(qualityReport.unsupportedTemplateIds)
+      ? qualityReport.unsupportedTemplateIds.length
+      : null;
+  const acceptanceFailures = acceptance.failures ?? [];
+  const validationWarnings = generationReport.validationWarnings ?? [];
+
+  return {
+    acceptance: {
+      duplicatePairCount,
+      duplicateRate: getDuplicateRate(duplicatePairCount, approvedPhotoCount),
+      failures: acceptanceFailures,
+      hasDetailGrid: acceptance.hasDetailGrid ?? null,
+      hasHero: acceptance.hasHero ?? null,
+      hasQuietCaption: acceptance.hasQuietCaption ?? null,
+      hasTripContext: acceptance.hasTripContext ?? null,
+      pageCount: acceptance.pageCount ?? qualityReport.pageCount ?? null,
+      tripContextTerms: acceptance.tripContextTerms ?? [],
+      unsupportedTemplateCount,
+      unsupportedTemplates: acceptance.unsupportedTemplates ?? [],
+      usedPhotoCount: acceptance.usedPhotoCount ?? qualityReport.usedPhotoCount ?? null,
+      usedPhotoPercent: acceptance.usagePercent ?? qualityReport.usedPhotoPercent ?? null,
+    },
+    acceptanceFailures: acceptanceFailures.length,
+    approxPromptPressureTokens: generationReport.approxPromptPressureTokens ?? null,
+    captionQuality: {
+      hasPlaceholderCopy: qualityReport.hasPlaceholderCopy ?? null,
+      hasTripContext: qualityReport.hasTripContext ?? acceptance.hasTripContext ?? null,
+      warnings: qualityReport.warnings ?? [],
+    },
+    duplicateRate: getDuplicateRate(duplicatePairCount, approvedPhotoCount),
+    deterministicFallbackUsed: generationReport.deterministicFallbackUsed ?? null,
+    elapsedMs: generationReport.elapsedMs ?? null,
+    fallbackUsed: generationReport.fallbackUsed ?? null,
+    localPlannerJsonAccepted: generationReport.localPlannerJsonAccepted ?? null,
+    modelNames: generationReport.modelNames ?? null,
+    plannerMode: generationReport.plannerMode ?? null,
+    plannerProgress: {
+      candidateProgress: generationReport.plannerCandidateProgress ?? null,
+      photoSelectionProgress: generationReport.plannerPhotoSelectionProgress ?? null,
+      unknownPhotoProgress: generationReport.plannerUnknownPhotoProgress ?? null,
+    },
+    qualityGate: {
+      duplicateDraftPhotoCount,
+      failures: acceptanceFailures,
+      passed: acceptanceFailures.length === 0 && generationReport.runStatus === "saved",
+      score: qualityReport.score ?? null,
+      unsupportedTemplateCount,
+      warnings: [...(qualityReport.warnings ?? []), ...validationWarnings],
+    },
+    qualityScore: qualityReport.score ?? null,
+    runStatus: generationReport.runStatus ?? null,
+    unsupportedTemplateCount,
+    usedPhotoPercent: acceptance.usagePercent ?? qualityReport.usedPhotoPercent ?? null,
+    validationWarnings,
+  };
+}
+
+function summarizeProofReport(proofReport) {
+  const assessment = proofReport.assessment ?? {};
+  const imageCheck = proofReport.imageCheck ?? {};
+  const failures = assessment.failures ?? [];
+  const imageFailures = imageCheck.failures ?? [];
+  const duplicateUsedPhotoCount = Array.isArray(assessment.duplicateUsedPhotoIds)
+    ? assessment.duplicateUsedPhotoIds.length
+    : null;
+  const unsupportedTemplateCount = Array.isArray(assessment.unsupportedTemplateIds)
+    ? assessment.unsupportedTemplateIds.length
+    : null;
+
+  return {
+    captionPositionCounts: assessment.captionPositionCounts ?? {},
+    failures: failures.length,
+    failuresDetail: failures,
+    imageFailures: imageFailures.length,
+    imageFailuresDetail: imageFailures,
+    layoutCount: assessment.layoutCount ?? null,
+    pageCount: assessment.pageCount ?? null,
+    passed: failures.length === 0 && imageFailures.length === 0,
+    proofRevision: proofReport.proofRevision ?? null,
+    renderedPhotoCount: assessment.renderedPhotoCount ?? null,
+    unsupportedTemplateCount,
+    usedPhotoCount: assessment.usedPhotoCount ?? null,
+    usedPhotoDuplicateCount: duplicateUsedPhotoCount,
+    usedPhotoPercent: assessment.usedPhotoPercent ?? null,
+    warnings: (assessment.warnings ?? []).length,
+    warningsDetail: assessment.warnings ?? [],
+  };
+}
+
 try {
   const existingLocalServer = isolated ? await detectExistingLocalServer() : null;
   if (existingLocalServer) {
@@ -262,26 +374,24 @@ try {
     await runNode("proof-quality-smoke.mjs", proofEnv);
     const generationReport = await readJsonReport(targetReportPath);
     const proofReport = await readJsonReport(proofReportPath);
+    const generationSummary = summarizeGenerationReport(generationReport);
+    const proofSummary = summarizeProofReport(proofReport);
     reports.push({
-      generation: {
-        deterministicFallbackUsed: generationReport.deterministicFallbackUsed ?? null,
-        elapsedMs: generationReport.elapsedMs ?? null,
-        plannerMode: generationReport.plannerMode ?? null,
-        qualityScore: generationReport.qualityReport?.score ?? null,
-        runStatus: generationReport.runStatus ?? null,
-        usedPhotoPercent: generationReport.acceptance?.usagePercent ?? null,
-      },
+      generation: generationSummary,
       projectId: target.projectId ?? null,
       projectTitle: target.projectTitle ?? null,
-      proof: {
-        failures: proofReport.assessment?.failures?.length ?? null,
-        imageFailures: proofReport.imageCheck?.failures?.length ?? null,
-        layoutCount: proofReport.assessment?.layoutCount ?? null,
-        pageCount: proofReport.assessment?.pageCount ?? null,
-        proofRevision: proofReport.proofRevision ?? null,
-        renderedPhotoCount: proofReport.assessment?.renderedPhotoCount ?? null,
-        usedPhotoPercent: proofReport.assessment?.usedPhotoPercent ?? null,
-        warnings: proofReport.assessment?.warnings?.length ?? null,
+      proof: proofSummary,
+      qualityGate: {
+        failures: [
+          ...generationSummary.qualityGate.failures,
+          ...proofSummary.failuresDetail.map((failure) => `proof failure: ${failure}`),
+          ...proofSummary.imageFailuresDetail.map((failure) => `proof image failure: ${failure}`),
+        ],
+        passed: generationSummary.qualityGate.passed && proofSummary.passed,
+        warnings: [
+          ...generationSummary.qualityGate.warnings,
+          ...proofSummary.warningsDetail.map((warning) => `proof warning: ${warning}`),
+        ],
       },
       proofReportPath,
       reportPath: targetReportPath,
