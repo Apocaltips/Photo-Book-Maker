@@ -49,6 +49,7 @@ Phase 2 fails until real provider accounts are configured.
 | --- | --- | --- | --- |
 | Local AI alpha | `npm run test:alpha:readiness` with `ALPHA_READINESS_MODE=local` | broken app shell, template catalog, local AI health, stale queue, required local checks | Used before internal device testing and Cap Cana/60-photo proof validation. |
 | Hosted web alpha | `npm run test:alpha:readiness` with `ALPHA_READINESS_MODE=hosted` | missing hosted Supabase/R2/private-worker config, bad auth gate, stale queue, missing saved quality score | Commerce, email, monitoring, and direct print provider gaps are warnings unless explicitly required. |
+| Hosted proof alpha | `npm run test:hosted:alpha` | failed hosted readiness, missing tester bearer token, missing hosted project id/title, proof-quality failures | Final gate before family/friend testers because it proves a real hosted generated proof can render with authenticated project access. |
 | Provider alpha | `npm run test:provider:readiness` | missing Stripe, email, Sentry/PostHog, direct print provider adapter, or sample-order confirmation | Used only after PDF quality is proven and the first print-provider sandbox/sample path is being wired. |
 
 Provider-alpha environment groups:
@@ -144,6 +145,22 @@ npm run test:ai:health
 npm run test:worker:preflight
 npm run test:proof:quality
 ```
+
+For the hosted family/friend gate, run:
+
+```powershell
+$env:HOSTED_ALPHA_BASE_URL="https://YOUR-WEB-APP"
+$env:ALPHA_READINESS_SECRET="same-readiness-secret-as-hosted"
+$env:HOSTED_ALPHA_PROOF_BEARER_TOKEN="tester-account-access-token"
+$env:HOSTED_ALPHA_PROOF_PROJECT_ID="hosted-project-id-with-saved-ai-generation"
+npm run test:hosted:alpha
+```
+
+`npm run test:hosted:alpha` calls the protected app-side readiness route in
+hosted mode, then runs proof-quality against the same hosted base URL using the
+provided bearer token and project id/title. Use
+`HOSTED_ALPHA_REQUIRE_PROOF=0` only for a temporary deployment smoke before the
+first hosted generated project exists.
 
 For the Phase 2 direct-print gate, run:
 

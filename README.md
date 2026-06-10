@@ -133,6 +133,21 @@ because the local shell may not match Vercel. Set
 `ALPHA_READINESS_CHECK_CALLER_ENV=1` when you also want to verify this PC's
 worker-side environment before a tester session.
 
+Before inviting outside testers, also run the hosted alpha smoke against a real
+generated proof from the hosted project store:
+
+```powershell
+$env:HOSTED_ALPHA_BASE_URL="https://YOUR-WEB-APP"
+$env:ALPHA_READINESS_SECRET="same-readiness-secret-as-hosted"
+$env:HOSTED_ALPHA_PROOF_BEARER_TOKEN="tester-account-access-token"
+$env:HOSTED_ALPHA_PROOF_PROJECT_ID="hosted-project-id-with-saved-ai-generation"
+npm run test:hosted:alpha
+```
+
+This wraps the protected hosted readiness route and the proof-quality gate.
+Set `HOSTED_ALPHA_REQUIRE_PROOF=0` only for a deployment smoke before a hosted
+tester project exists; the outside-tester gate should include proof quality.
+
 Phase 2 direct-print readiness has a separate cross-platform command:
 
 ```powershell

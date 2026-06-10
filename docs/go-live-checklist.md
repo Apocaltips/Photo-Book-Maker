@@ -62,6 +62,13 @@ LOCAL_AI_PRIMARY_PLANNER_NUM_PREDICT=1200
 LOCAL_AI_FALLBACK_PLANNER_NUM_PREDICT=1200
 ALPHA_READINESS_SECRET=long-random-readiness-secret
 OPENAI_API_KEY=
+HOSTED_ALPHA_BASE_URL=
+HOSTED_ALPHA_PROOF_BEARER_TOKEN=
+HOSTED_ALPHA_PROOF_PROJECT_ID=
+HOSTED_ALPHA_PROOF_PROJECT_TITLE=
+HOSTED_ALPHA_REQUIRE_PROOF=1
+HOSTED_ALPHA_DRY_RUN=0
+HOSTED_ALPHA_ALLOW_LOCAL_BASE_URL=0
 
 STRIPE_SECRET_KEY=
 NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY=
@@ -131,7 +138,13 @@ The authoritative API for v1 is the Next.js app in `apps/web`.
     Supabase, R2, project-store, template-catalog, private-worker setup,
     clean generation queue state, and latest saved AI generation quality score.
     Treat any failed check as a no-go for family/friend testers.
-11. Leave `PRINT_PROVIDER=manual_pdf` for Phase 1. When direct print checkout
+11. After one hosted tester project has a saved AI generation, run
+    `npm run test:hosted:alpha` with `HOSTED_ALPHA_BASE_URL`,
+    `ALPHA_READINESS_SECRET`, `HOSTED_ALPHA_PROOF_BEARER_TOKEN`, and
+    `HOSTED_ALPHA_PROOF_PROJECT_ID` or `HOSTED_ALPHA_PROOF_PROJECT_TITLE`.
+    This is the outside-tester gate because it proves the deployed app can both
+    report readiness and render a real authenticated proof.
+12. Leave `PRINT_PROVIDER=manual_pdf` for Phase 1. When direct print checkout
     starts, set `PRINT_PROVIDER` to the selected API candidate, configure the
     Stripe/email/monitoring/print adapter variables, confirm a reviewed sample
     order with `PRINT_PROVIDER_SAMPLE_ORDER_CONFIRMED=1`, then run
@@ -276,6 +289,10 @@ npm run build
 npm run typecheck -w @photo-book-maker/mobile
 cd apps/mobile && npx expo-doctor
 ```
+
+For hosted outside-tester validation, run `npm run test:hosted:alpha` after
+setting the hosted URL, readiness secret, proof bearer token, and hosted
+project id/title. It intentionally fails without those hosted values.
 
 The local AI benchmark is isolated by default: it copies the current local
 project store and local uploads into a temp directory, starts its own local web
