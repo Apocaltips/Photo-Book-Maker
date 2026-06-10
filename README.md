@@ -123,7 +123,7 @@ For a hosted alpha URL, require real auth/provider/worker gates:
 ```powershell
 $env:ALPHA_READINESS_MODE="hosted"
 $env:ALPHA_READINESS_BASE_URL="https://YOUR-WEB-APP"
-$env:ALPHA_READINESS_SECRET="same-readiness-secret-as-hosted"
+$env:ALPHA_READINESS_SECRET="placeholder-readiness-secret"
 npm run test:alpha:readiness
 ```
 
@@ -140,30 +140,38 @@ because the local shell may not match Vercel. Set
 `ALPHA_READINESS_CHECK_CALLER_ENV=1` when you also want to verify this PC's
 worker-side environment before a tester session.
 
-Before inviting outside testers, also run the hosted alpha smoke against a real
-generated proof from the hosted project store:
+Before inviting outside testers, run the hosted alpha acceptance gate against a
+real generated proof from the hosted project store and the private worker on
+this PC:
 
 ```powershell
 $env:HOSTED_ALPHA_BASE_URL="https://YOUR-WEB-APP"
-$env:ALPHA_READINESS_SECRET="same-readiness-secret-as-hosted"
+$env:ALPHA_READINESS_SECRET="placeholder-readiness-secret"
 $env:HOSTED_ALPHA_PROOF_BEARER_TOKEN="tester-account-access-token"
 $env:HOSTED_ALPHA_PROOF_PROJECT_ID="hosted-project-id-with-saved-ai-generation"
-$env:HOSTED_ALPHA_REPORT_PATH="$env:TEMP\\photo-book-hosted-alpha.json"
-npm run test:hosted:alpha
+$env:LOCAL_AI_WORKER_SECRET="placeholder-worker-secret"
+$env:LOCAL_AI_WORKER_PROCESSOR_BASE_URL="http://127.0.0.1:3000"
+$env:HOSTED_ALPHA_ACCEPTANCE_REPORT_PATH="$env:TEMP\\photo-book-hosted-alpha-acceptance.json"
+npm run test:alpha:hosted
 ```
 
-This wraps the protected hosted readiness route and the proof-quality gate.
-Set `HOSTED_ALPHA_REQUIRE_PROOF=0` only for a deployment smoke before a hosted
+This runs the readiness contract, the protected hosted readiness route, hosted
+proof-quality, and a private local-worker preflight in sequence. Set
+`HOSTED_ALPHA_REQUIRE_PROOF=0` only for a deployment smoke before a hosted
 tester project exists; the outside-tester gate should include proof quality.
-The hosted alpha smoke writes a combined report plus companion readiness and
-proof-quality reports next to `HOSTED_ALPHA_REPORT_PATH`, or to the system temp
-directory when no path is provided.
+Replace the placeholder secret values with real 24+ character random shared
+secrets from the hosted app and private worker; the gate intentionally rejects
+placeholder-looking values.
+Set `HOSTED_ALPHA_ACCEPTANCE_DRY_RUN=1` only to verify environment shape
+without touching the hosted app or local processor. The lower-level
+`npm run test:hosted:alpha` command remains available when diagnosing hosted
+readiness or proof failures without the worker preflight.
 
 Phase 2 direct-print readiness has a separate cross-platform command:
 
 ```powershell
 $env:ALPHA_READINESS_BASE_URL="https://YOUR-WEB-APP"
-$env:ALPHA_READINESS_SECRET="same-readiness-secret-as-hosted"
+$env:ALPHA_READINESS_SECRET="placeholder-readiness-secret"
 npm run test:provider:readiness
 ```
 
@@ -204,6 +212,7 @@ See:
 ```bash
 npm run test
 npm run test:alpha:local
+npm run test:alpha:hosted
 npm run test:e2e:web
 npm run test:readiness:contract
 npm run test:ai:health

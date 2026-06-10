@@ -22,8 +22,12 @@ const alphaReadinessRouteUrl = new URL(
   import.meta.url,
 );
 const alphaReadinessScriptPath = fileURLToPath(new URL("./alpha-readiness.mjs", import.meta.url));
+const hostedAlphaAcceptancePath = fileURLToPath(
+  new URL("./hosted-alpha-acceptance.mjs", import.meta.url),
+);
 const hostedAlphaSmokePath = fileURLToPath(new URL("./hosted-alpha-smoke.mjs", import.meta.url));
 const HOSTED_ALPHA_TOKEN_SENTINEL = "proof-token-that-must-not-leak";
+const HOSTED_ALPHA_WORKER_SECRET_SENTINEL = "worker-secret-that-must-not-leak-2026";
 const STRONG_ALPHA_READINESS_SECRET = "hosted-alpha-readiness-secret-2026-random";
 
 function assert(condition, message) {
@@ -102,6 +106,13 @@ function runHostedAlphaSmoke(overrides = {}) {
   });
 }
 
+function runHostedAlphaAcceptance(overrides = {}) {
+  return spawnSync(process.execPath, [hostedAlphaAcceptancePath], {
+    encoding: "utf8",
+    env: makeHostedAlphaSmokeEnv(overrides),
+  });
+}
+
 function runAlphaReadiness(overrides = {}) {
   return spawnSync(process.execPath, [alphaReadinessScriptPath], {
     encoding: "utf8",
@@ -145,6 +156,22 @@ function assertHostedAlphaSmokeFails(overrides, expectedText) {
   return output;
 }
 
+function assertHostedAlphaAcceptanceFails(overrides, expectedText) {
+  const result = runHostedAlphaAcceptance(overrides);
+  const output = getChildOutput(result);
+
+  assert(
+    result.status !== 0,
+    `Hosted alpha acceptance should fail. Output: ${output}`,
+  );
+  assert(
+    output.includes(expectedText),
+    `Hosted alpha acceptance failure must mention "${expectedText}". Output: ${output}`,
+  );
+
+  return output;
+}
+
 const envExample = await readFile(envExampleUrl, "utf8");
 const supabaseSchema = normalizeSql(await readFile(supabaseSchemaUrl, "utf8"));
 const alphaReadinessRoute = await readFile(alphaReadinessRouteUrl, "utf8");
@@ -155,6 +182,15 @@ assert(
   !missingEnvExampleKeys.length,
   `.env.example is missing readiness contract variable(s): ${missingEnvExampleKeys.join(", ")}`,
 );
+for (const key of [
+  "HOSTED_ALPHA_ACCEPTANCE_REPORT_PATH",
+  "HOSTED_ALPHA_ACCEPTANCE_HOSTED_REPORT_PATH",
+  "HOSTED_ALPHA_ACCEPTANCE_DRY_RUN",
+  "HOSTED_ALPHA_ACCEPTANCE_SKIP_CONTRACT",
+  "HOSTED_ALPHA_ACCEPTANCE_SKIP_WORKER_PREFLIGHT",
+]) {
+  assert(envKeys.has(key), `.env.example is missing hosted alpha acceptance variable: ${key}`);
+}
 
 assert(
   ALLOWED_PRINT_PROVIDERS.includes("manual_pdf") && ALLOWED_PRINT_PROVIDERS.includes("peecho"),
@@ -253,6 +289,17 @@ const placeholderWorkerSecretCheck = makeSharedSecretStrengthCheck({
 assert(
   placeholderWorkerSecretCheck.status === "fail",
   "Private worker secret strength must fail placeholder-looking secrets.",
+);
+const hostedWorkerPlaceholderSecretCheck = makeSharedSecretStrengthCheck({
+  label: "Private AI worker secret",
+  name: "private AI worker secret strength",
+  required: true,
+  value: "same-worker-secret-as-hosted",
+  variable: "LOCAL_AI_WORKER_SECRET",
+});
+assert(
+  hostedWorkerPlaceholderSecretCheck.status === "fail",
+  "Private worker secret strength must fail hosted worker placeholder secrets.",
 );
 
 const strongWorkerSecretCheck = makeSharedSecretStrengthCheck({
@@ -365,6 +412,21 @@ assertHostedAlphaSmokeFails(
   },
   `Alpha readiness secret must be at least ${MIN_HOSTED_SHARED_SECRET_LENGTH} characters.`,
 );
+assertHostedAlphaAcceptanceFails({}, "Hosted alpha acceptance is missing");
+assertHostedAlphaAcceptanceFails(
+  {
+    ALPHA_READINESS_SECRET: "short-secret",
+    HOSTED_ALPHA_ACCEPTANCE_DRY_RUN: "1",
+    HOSTED_ALPHA_ACCEPTANCE_SKIP_CONTRACT: "1",
+    HOSTED_ALPHA_ALLOW_LOCAL_BASE_URL: "1",
+    HOSTED_ALPHA_BASE_URL: "http://127.0.0.1:3000",
+    HOSTED_ALPHA_PROOF_BEARER_TOKEN: HOSTED_ALPHA_TOKEN_SENTINEL,
+    HOSTED_ALPHA_PROOF_PROJECT_ID: "alpha-proof-project",
+    LOCAL_AI_WORKER_PROCESSOR_BASE_URL: "http://127.0.0.1:3000",
+    LOCAL_AI_WORKER_SECRET: HOSTED_ALPHA_WORKER_SECRET_SENTINEL,
+  },
+  `Alpha readiness secret must be at least ${MIN_HOSTED_SHARED_SECRET_LENGTH} characters.`,
+);
 
 const hostedAlphaSmokeTmpDir = await mkdtemp(
   join(tmpdir(), "photo-book-hosted-alpha-contract-"),
@@ -394,6 +456,63 @@ try {
   assert(summary.requireProof === true, "Hosted alpha smoke report must keep proof required by default.");
 } finally {
   await rm(hostedAlphaSmokeTmpDir, { force: true, recursive: true });
+}
+
+const hostedAlphaAcceptanceTmpDir = await mkdtemp(
+  join(tmpdir(), "photo-book-hosted-alpha-acceptance-contract-"),
+);
+try {
+  const reportPath = join(
+    hostedAlphaAcceptanceTmpDir,
+    "hosted-alpha-acceptance-report.json",
+  );
+  const result = runHostedAlphaAcceptance({
+    ALPHA_READINESS_SECRET: STRONG_ALPHA_READINESS_SECRET,
+    HOSTED_ALPHA_ACCEPTANCE_DRY_RUN: "1",
+    HOSTED_ALPHA_ACCEPTANCE_SKIP_CONTRACT: "1",
+    HOSTED_ALPHA_ALLOW_LOCAL_BASE_URL: "1",
+    HOSTED_ALPHA_BASE_URL: "http://127.0.0.1:3000",
+    HOSTED_ALPHA_PROOF_BEARER_TOKEN: HOSTED_ALPHA_TOKEN_SENTINEL,
+    HOSTED_ALPHA_PROOF_PROJECT_ID: "alpha-proof-project",
+    HOSTED_ALPHA_ACCEPTANCE_REPORT_PATH: reportPath,
+    LOCAL_AI_WORKER_PROCESSOR_BASE_URL: "http://127.0.0.1:3000",
+    LOCAL_AI_WORKER_SECRET: HOSTED_ALPHA_WORKER_SECRET_SENTINEL,
+  });
+  const output = getChildOutput(result);
+
+  assert(result.status === 0, `Hosted alpha acceptance dry run should pass. Output: ${output}`);
+  for (const secret of [
+    HOSTED_ALPHA_TOKEN_SENTINEL,
+    HOSTED_ALPHA_WORKER_SECRET_SENTINEL,
+    STRONG_ALPHA_READINESS_SECRET,
+  ]) {
+    assert(!output.includes(secret), `Hosted alpha acceptance output leaked a secret: ${secret}`);
+  }
+
+  const report = await readFile(reportPath, "utf8");
+  for (const secret of [
+    HOSTED_ALPHA_TOKEN_SENTINEL,
+    HOSTED_ALPHA_WORKER_SECRET_SENTINEL,
+    STRONG_ALPHA_READINESS_SECRET,
+  ]) {
+    assert(!report.includes(secret), `Hosted alpha acceptance report leaked a secret: ${secret}`);
+  }
+
+  const summary = JSON.parse(report);
+  assert(
+    summary.status === "hosted alpha acceptance dry run passed",
+    "Hosted alpha acceptance report must record dry-run pass status.",
+  );
+  assert(
+    summary.hostedAlpha?.status === "hosted alpha smoke dry run passed",
+    "Hosted alpha acceptance report must include hosted alpha smoke digest.",
+  );
+  assert(
+    summary.config?.workerSecretConfigured === true,
+    "Hosted alpha acceptance report must record worker secret presence without leaking it.",
+  );
+} finally {
+  await rm(hostedAlphaAcceptanceTmpDir, { force: true, recursive: true });
 }
 
 console.log("readiness contract smoke passed");

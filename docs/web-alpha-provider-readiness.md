@@ -54,7 +54,7 @@ Phase 2 fails until real provider accounts are configured.
 | --- | --- | --- | --- |
 | Local AI alpha | `npm run test:alpha:readiness` with `ALPHA_READINESS_MODE=local` | broken app shell, template catalog, local AI health, stale queue, required local checks | Used before internal device testing and Cap Cana/60-photo proof validation. |
 | Hosted web alpha | `npm run test:alpha:readiness` with `ALPHA_READINESS_MODE=hosted` | missing hosted Supabase/R2/private-worker config, bad auth gate, direct Supabase project-table exposure, failed photo upload-ticket signing, stale queue, missing saved quality score | Commerce, email, monitoring, and direct print provider gaps are warnings unless explicitly required. |
-| Hosted proof alpha | `npm run test:hosted:alpha` | failed hosted readiness, missing tester bearer token, missing hosted project id/title, proof-quality failures | Final gate before family/friend testers because it proves a real hosted generated proof can render with authenticated project access. |
+| Hosted proof alpha | `npm run test:alpha:hosted` | failed hosted readiness, missing tester bearer token, missing hosted project id/title, proof-quality failures, failed private-worker preflight | Final gate before family/friend testers because it proves a real hosted generated proof can render with authenticated project access and the private worker is reachable. |
 | Provider alpha | `npm run test:provider:readiness` | missing Stripe, email, Sentry/PostHog, direct print provider adapter, or sample-order confirmation | Used only after PDF quality is proven and the first print-provider sandbox/sample path is being wired. |
 
 Provider-alpha environment groups:
@@ -175,6 +175,7 @@ npm run typecheck
 npm run lint
 npm run build
 npm run test:alpha:local
+npm run test:alpha:hosted
 npm run test:readiness:contract
 npm run test:alpha:readiness
 npm run test:e2e:web
@@ -193,20 +194,26 @@ For the hosted family/friend gate, run:
 
 ```powershell
 $env:HOSTED_ALPHA_BASE_URL="https://YOUR-WEB-APP"
-$env:ALPHA_READINESS_SECRET="the-same-24-plus-character-random-value-configured-on-the-hosted-app"
+$env:ALPHA_READINESS_SECRET="placeholder-readiness-secret"
 $env:HOSTED_ALPHA_PROOF_BEARER_TOKEN="tester-account-access-token"
 $env:HOSTED_ALPHA_PROOF_PROJECT_ID="hosted-project-id-with-saved-ai-generation"
-$env:HOSTED_ALPHA_REPORT_PATH="$env:TEMP\\photo-book-hosted-alpha.json"
-npm run test:hosted:alpha
+$env:LOCAL_AI_WORKER_SECRET="placeholder-worker-secret"
+$env:LOCAL_AI_WORKER_PROCESSOR_BASE_URL="http://127.0.0.1:3000"
+$env:HOSTED_ALPHA_ACCEPTANCE_REPORT_PATH="$env:TEMP\\photo-book-hosted-alpha-acceptance.json"
+npm run test:alpha:hosted
 ```
 
-`npm run test:hosted:alpha` calls the protected app-side readiness route in
-hosted mode, then runs proof-quality against the same hosted base URL using the
-provided bearer token and project id/title. Use
+`npm run test:alpha:hosted` is the one-command hosted outside-tester gate. It
+runs the readiness contract, hosted readiness/proof smoke, and a private
+local-worker preflight, then writes a combined report. Use
 `HOSTED_ALPHA_REQUIRE_PROOF=0` only for a temporary deployment smoke before the
-first hosted generated project exists. The command writes a combined hosted
-alpha report plus `*-readiness.json` and `*-proof-quality.json` companions next
-to `HOSTED_ALPHA_REPORT_PATH`, or to the system temp directory by default.
+first hosted generated project exists. Use
+`HOSTED_ALPHA_ACCEPTANCE_DRY_RUN=1` only to validate environment shape without
+network/processor checks. The lower-level `npm run test:hosted:alpha` command
+still calls only the protected hosted readiness route plus proof-quality and is
+useful when diagnosing a hosted proof failure.
+Replace the placeholder secret values above with real 24+ character random
+shared secrets; the gate rejects placeholder-looking values on purpose.
 
 For the Phase 2 direct-print gate, run:
 

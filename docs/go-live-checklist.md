@@ -74,6 +74,11 @@ HOSTED_ALPHA_REQUIRE_PROOF=1
 HOSTED_ALPHA_DRY_RUN=0
 HOSTED_ALPHA_ALLOW_LOCAL_BASE_URL=0
 HOSTED_ALPHA_REPORT_PATH=
+HOSTED_ALPHA_ACCEPTANCE_REPORT_PATH=
+HOSTED_ALPHA_ACCEPTANCE_HOSTED_REPORT_PATH=
+HOSTED_ALPHA_ACCEPTANCE_DRY_RUN=0
+HOSTED_ALPHA_ACCEPTANCE_SKIP_CONTRACT=0
+HOSTED_ALPHA_ACCEPTANCE_SKIP_WORKER_PREFLIGHT=0
 
 STRIPE_SECRET_KEY=
 NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY=
@@ -156,13 +161,14 @@ The authoritative API for v1 is the Next.js app in `apps/web`.
     quality score.
     Treat any failed check as a no-go for family/friend testers.
 11. After one hosted tester project has a saved AI generation, run
-    `npm run test:hosted:alpha` with `HOSTED_ALPHA_BASE_URL`,
-    `ALPHA_READINESS_SECRET`, `HOSTED_ALPHA_PROOF_BEARER_TOKEN`, and
-    `HOSTED_ALPHA_PROOF_PROJECT_ID` or `HOSTED_ALPHA_PROOF_PROJECT_TITLE`.
-    This is the outside-tester gate because it proves the deployed app can both
-    report readiness and render a real authenticated proof. Keep the combined
-    `HOSTED_ALPHA_REPORT_PATH` report and its readiness/proof-quality companion
-    reports with the tester-session notes.
+    `npm run test:alpha:hosted` with `HOSTED_ALPHA_BASE_URL`,
+    `ALPHA_READINESS_SECRET`, `HOSTED_ALPHA_PROOF_BEARER_TOKEN`,
+    `HOSTED_ALPHA_PROOF_PROJECT_ID` or `HOSTED_ALPHA_PROOF_PROJECT_TITLE`,
+    `LOCAL_AI_WORKER_SECRET`, and `LOCAL_AI_WORKER_PROCESSOR_BASE_URL`.
+    This is the outside-tester gate because it proves the deployed app can
+    report readiness, render a real authenticated proof, and reach the private
+    worker processor. Keep the combined `HOSTED_ALPHA_ACCEPTANCE_REPORT_PATH`
+    report and its companion hosted-alpha reports with the tester-session notes.
 12. Leave `PRINT_PROVIDER=manual_pdf` for Phase 1. When direct print checkout
     starts, set `PRINT_PROVIDER` to the selected API candidate, configure the
     Stripe/email/monitoring/print adapter variables, confirm a reviewed sample
@@ -283,7 +289,7 @@ pass:
 ```powershell
 $env:ALPHA_READINESS_MODE="provider"
 $env:ALPHA_READINESS_BASE_URL="https://YOUR-WEB-APP"
-$env:ALPHA_READINESS_SECRET="the-same-24-plus-character-random-value-configured-on-the-hosted-app"
+$env:ALPHA_READINESS_SECRET="placeholder-readiness-secret"
 npm run test:provider:readiness
 ```
 
@@ -298,6 +304,7 @@ and `PRINT_PROVIDER_SAMPLE_ORDER_CONFIRMED=1`.
 npm ci
 npm run test
 npm run test:alpha:local
+npm run test:alpha:hosted
 npm run test:readiness:contract
 npm run test:alpha:readiness
 npm run test:e2e:web
@@ -311,15 +318,22 @@ npm run typecheck -w @photo-book-maker/mobile
 cd apps/mobile && npx expo-doctor
 ```
 
-For hosted outside-tester validation, run `npm run test:hosted:alpha` after
-setting the hosted URL, readiness secret, proof bearer token, and hosted
-project id/title. It intentionally fails without those hosted values.
+For hosted outside-tester validation, run `npm run test:alpha:hosted` after
+setting the hosted URL, readiness secret, proof bearer token, hosted project
+id/title, worker secret, and local processor URL. It intentionally fails
+without those hosted and private-worker values.
 
 The local alpha readiness command is the preferred local pre-tester gate:
 `npm run test:alpha:local` runs readiness contract, local readiness, local AI
 health, worker preflight, and the Cap Cana plus 50-70 photo alpha benchmark in
 sequence and writes a combined report. Use
 `LOCAL_ALPHA_ACCEPTANCE_REPORT_PATH` to keep the report with tester-session
+notes.
+
+The hosted alpha readiness command is the preferred hosted pre-tester gate:
+`npm run test:alpha:hosted` runs readiness contract, hosted readiness/proof
+smoke, and private worker preflight in sequence and writes a combined report.
+Use `HOSTED_ALPHA_ACCEPTANCE_REPORT_PATH` to keep the report with deployment
 notes.
 
 The local AI alpha benchmark is isolated by default: it copies the current local
