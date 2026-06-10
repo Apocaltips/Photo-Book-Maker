@@ -86,6 +86,11 @@ claim a hosted job before local Ollama and the required models are reachable.
 Run `npm run test:worker:preflight` when changing worker environment handling;
 it checks the no-network preflight path, required secret, private processor URL
 guard, and the explicit hosted-processor override.
+Run `npm run test:worker:e2e` before outside tester sessions. It boots an
+isolated temp project store, queues a generation job with the worker bridge
+enabled, runs the real local worker once against the local processor route,
+verifies the completed run and quality report, then runs proof-quality against
+the saved draft.
 Use `LOCAL_AI_WORKER_LOOP=1` for continuous polling after preflight passes. The
 hosted app queues the job; the private worker claims it, runs local Ollama
 through the local processor app, heartbeats while the local models are running,
@@ -199,6 +204,7 @@ npm run test
 npm run test:e2e:web
 npm run test:ai:health
 npm run test:worker:preflight
+npm run test:worker:e2e
 npm run test:proof:quality
 npm run typecheck
 npm run lint

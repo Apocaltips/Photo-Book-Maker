@@ -14,6 +14,7 @@
     "test:ai:alpha-benchmark": "node scripts/local-ai-alpha-benchmark.mjs",
     "test:ai:benchmark": "node scripts/local-ai-benchmark.mjs",
     "test:ai:local": "node scripts/ai-generation-smoke.mjs",
+    "test:worker:e2e": "node scripts/local-ai-worker-e2e-smoke.mjs",
     "test:worker:preflight": "node scripts/local-ai-worker-preflight-smoke.mjs",
     "test:proof:quality": "node scripts/proof-quality-smoke.mjs",
     "test:e2e": "node scripts/e2e-web-smoke.mjs",

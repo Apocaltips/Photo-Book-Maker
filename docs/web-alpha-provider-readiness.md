@@ -104,6 +104,11 @@ Worker bridge v1:
   worker secret handling, loopback/LAN processor acceptance, public processor
   rejection, and the explicit `LOCAL_AI_WORKER_ALLOW_HOSTED_PROCESSOR=1`
   override path.
+- Run `npm run test:worker:e2e` before outside tester sessions. It boots an
+  isolated temp project store, queues a generation job with the worker bridge
+  enabled, runs the real worker CLI once against the local processor route,
+  verifies the completed saved run and quality report, then runs proof-quality
+  against the worker-generated draft.
 - The worker calls `/api/ai/worker/generation/claim`, processes the payload
   through `/api/ai/worker/generation/process` on the private PC, then posts to
   `/api/ai/worker/generation/complete` or `/api/ai/worker/generation/fail`.

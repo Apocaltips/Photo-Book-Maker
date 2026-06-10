@@ -118,9 +118,10 @@ The authoritative API for v1 is the Next.js app in `apps/web`.
 4. Confirm `https://YOUR-WEB-APP/api/templates` returns at least 12 book template packs and 64 spread templates.
 5. In local/staging, confirm `/ai-health` shows the local AI models are ready, queue health is clean, and the latest saved generation has an acceptable quality score before using AI Designer with testers.
 6. For hosted web alpha, configure `LOCAL_AI_WORKER_SECRET` and `LOCAL_AI_WORKER_ENABLED=1` on the hosted app. Keep `LOCAL_AI_DIRECT_IN_PRODUCTION=0` so Vercel never tries to call local Ollama directly.
-7. On the private PC, run `npm run test:worker:preflight`, then run the local
-   web app with Ollama and storage credentials and run
-   `npm run worker:ai:local` with `LOCAL_AI_WORKER_PREFLIGHT_ONLY=1`,
+7. On the private PC, run `npm run test:worker:preflight`, then
+   `npm run test:worker:e2e`, then run the local web app with Ollama and
+   storage credentials and run `npm run worker:ai:local` with
+   `LOCAL_AI_WORKER_PREFLIGHT_ONLY=1`,
    `LOCAL_AI_WORKER_HOSTED_BASE_URL` pointed at the hosted app, and
    `LOCAL_AI_WORKER_PROCESSOR_BASE_URL` pointed at the local app. Preflight
    must pass before continuous polling starts. Leave
