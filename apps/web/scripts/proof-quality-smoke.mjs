@@ -1,9 +1,9 @@
 /* global AbortSignal, console, fetch, process, setTimeout */
 
 import { spawn } from "node:child_process";
-import { access, copyFile, cp, mkdtemp, mkdir, rm } from "node:fs/promises";
+import { access, copyFile, cp, mkdtemp, mkdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join, resolve } from "node:path";
+import { dirname, join, resolve } from "node:path";
 const port = process.env.PROOF_QUALITY_PORT ?? "3222";
 const explicitBaseUrl = process.env.PROOF_QUALITY_BASE_URL;
 const defaultBaseUrl = `http://127.0.0.1:${port}`;
@@ -40,6 +40,7 @@ const strict = process.env.PROOF_QUALITY_STRICT !== "0";
 const fetchImages = process.env.PROOF_QUALITY_FETCH_IMAGES !== "0";
 const maxImageChecks = Number.parseInt(process.env.PROOF_QUALITY_MAX_IMAGE_CHECKS ?? "18", 10);
 const minQualityScore = Number.parseInt(process.env.PROOF_QUALITY_MIN_SCORE ?? "75", 10);
+const reportPath = process.env.PROOF_QUALITY_REPORT_PATH;
 const devAuthHeaders = process.env.PROOF_QUALITY_BEARER_TOKEN
   ? {
       "Authorization": `Bearer ${process.env.PROOF_QUALITY_BEARER_TOKEN}`,
@@ -94,17 +95,26 @@ async function detectExistingBaseUrl() {
     return undefined;
   }
 
-  try {
-    const response = await fetch("http://127.0.0.1:3000", {
-      signal: AbortSignal.timeout(1_500),
-    });
-    const text = await response.text();
+  const probeUrls = [
+    "http://127.0.0.1:3000",
+    "http://127.0.0.1:3210",
+    "http://127.0.0.1:3221",
+    defaultBaseUrl,
+  ];
 
-    if (response.ok && text.includes("Photo Book Maker")) {
-      return "http://127.0.0.1:3000";
+  for (const probeUrl of [...new Set(probeUrls)]) {
+    try {
+      const response = await fetch(probeUrl, {
+        signal: AbortSignal.timeout(1_500),
+      });
+      const text = await response.text();
+
+      if (response.ok && text.includes("Photo Book Maker")) {
+        return probeUrl;
+      }
+    } catch {
+      // Keep probing known local dev ports.
     }
-  } catch {
-    // No reusable local app server is running.
   }
 
   return undefined;
@@ -240,6 +250,15 @@ async function apiJson(path, init = {}) {
   }
 
   return body;
+}
+
+async function writeReport(summary) {
+  if (!reportPath) {
+    return;
+  }
+
+  await mkdir(dirname(reportPath), { recursive: true });
+  await writeFile(reportPath, `${JSON.stringify(summary, null, 2)}\n`, "utf8");
 }
 
 function tokenizeContextText(value) {
@@ -574,6 +593,7 @@ try {
   };
 
   console.log(JSON.stringify(summary, null, 2));
+  await writeReport(summary);
 
   if (strict && assessment.failures.length) {
     throw new Error(`Proof quality smoke failed:\n- ${assessment.failures.join("\n- ")}`);

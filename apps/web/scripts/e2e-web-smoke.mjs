@@ -47,17 +47,26 @@ async function detectExistingBaseUrl() {
     return undefined;
   }
 
-  try {
-    const response = await fetch("http://127.0.0.1:3000", {
-      signal: AbortSignal.timeout(1_500),
-    });
-    const text = await response.text();
+  const probeUrls = [
+    "http://127.0.0.1:3000",
+    defaultBaseUrl,
+    "http://127.0.0.1:3221",
+    "http://127.0.0.1:3222",
+  ];
 
-    if (response.ok && text.includes("Photo Book Maker")) {
-      return "http://127.0.0.1:3000";
+  for (const probeUrl of [...new Set(probeUrls)]) {
+    try {
+      const response = await fetch(probeUrl, {
+        signal: AbortSignal.timeout(1_500),
+      });
+      const text = await response.text();
+
+      if (response.ok && text.includes("Photo Book Maker")) {
+        return probeUrl;
+      }
+    } catch {
+      // Keep probing known local dev ports.
     }
-  } catch {
-    // No reusable local app server is running.
   }
 
   return undefined;

@@ -17,7 +17,7 @@ The app is not ready for outside testers until these are true:
   tokens per model. Keep those values in each benchmark report so slow
   local-model behavior is visible instead of being mistaken for design quality.
 - The Cap Cana 13-photo set passes `npm run test:ai:local`; the 60-photo test set must produce 10-14 spreads, use at least 35% of approved photos, include hero/detail/quiet rhythm, and avoid unsupported templates or placeholder copy.
-- `npm run test:ai:benchmark` records elapsed time, prompt pressure, planner/fallback mode, JSON acceptance, duplicate rate, photo usage, unsupported templates, quality score, and acceptance failures in a JSON report outside the repo by default.
+- `npm run test:ai:benchmark` records elapsed time, prompt pressure, planner/fallback mode, JSON acceptance, duplicate rate, photo usage, unsupported templates, quality score, acceptance failures, and proof-quality pass/fail in JSON reports outside the repo by default.
 - Web and mobile uploads fingerprint files before saving them to a project, skip duplicate selections, and report uploaded, failed, and duplicate-skipped counts so testers can retry only the files that need attention.
 - The generated proof must look photo-first: filled pages, subtle floating photo borders, varied caption positions, safe-area/bleed preview, and no repeated same-corner captions across the book.
 - Direct print checkout remains disabled; testers use the PDF proof handoff.
@@ -132,14 +132,18 @@ with duplicate photos, unsupported templates, placeholder copy, overfilled
 pages, missing safe-area guides, or same-position caption rhythm.
 `npm run test:ai:benchmark` is isolated by default: it copies the current local
 project store and local uploads into a temp directory, starts a private Next
-server, runs generation, writes the report, and deletes the temp store. Stop any
+server, runs generation, runs proof-quality validation against the generated
+draft, writes generation plus `*-proof-quality.json` reports, and deletes the
+temp store. Stop any
 running local Next dev server before using it because Next cannot run two dev
 servers for this app directory. Large albums are compacted into a curated
 planner candidate pool capped by `LOCAL_AI_PLANNER_MAX_PHOTOS`; the benchmark
 report should include the `planner saw X/Y photo candidates` and
 `planner selected X/Y valid candidate photo ids before repair` progress lines,
 plus `planner returned X unknown photo ids before repair` if the model invents
-IDs that deterministic repair must remove. Keep `LOCAL_AI_PLANNER_NUM_CTX` near
+IDs that deterministic repair must remove, and the benchmark summary should
+include the companion proof report path, proof page count, image failures, and
+proof photo usage. Keep `LOCAL_AI_PLANNER_NUM_CTX` near
 the default `8192` on the laptop unless a run needs a larger context; the old
 32K context path is too slow for local alpha benchmarking.
 

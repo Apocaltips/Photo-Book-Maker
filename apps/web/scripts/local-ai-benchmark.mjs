@@ -1,7 +1,7 @@
 /* global AbortSignal, console, fetch, process, setTimeout */
 
 import { spawn } from "node:child_process";
-import { access, copyFile, cp, mkdtemp, mkdir, rm } from "node:fs/promises";
+import { access, copyFile, cp, mkdtemp, mkdir, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, extname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -76,6 +76,15 @@ function getTargetReportPath(target, index, total) {
   return `${basePath}-${String(index + 1).padStart(2, "0")}-${label}${extension}`;
 }
 
+function getCompanionReportPath(targetReportPath, suffix) {
+  const extension = extname(targetReportPath) || ".json";
+  const basePath = targetReportPath.endsWith(extension)
+    ? targetReportPath.slice(0, -extension.length)
+    : targetReportPath;
+
+  return `${basePath}-${suffix}${extension}`;
+}
+
 async function pathExists(path) {
   try {
     await access(path);
@@ -108,16 +117,29 @@ async function prepareIsolatedStore() {
 }
 
 async function detectExistingLocalServer() {
-  try {
-    const response = await fetch("http://127.0.0.1:3000", {
-      signal: AbortSignal.timeout(1500),
-    });
-    const text = await response.text();
+  const probeUrls = [
+    "http://127.0.0.1:3000",
+    "http://127.0.0.1:3210",
+    "http://127.0.0.1:3222",
+    baseUrl,
+  ];
 
-    return response.ok && text.includes("Photo Book Maker");
-  } catch {
-    return false;
+  for (const probeUrl of [...new Set(probeUrls)]) {
+    try {
+      const response = await fetch(probeUrl, {
+        signal: AbortSignal.timeout(1500),
+      });
+      const text = await response.text();
+
+      if (response.ok && text.includes("Photo Book Maker")) {
+        return probeUrl;
+      }
+    } catch {
+      // Keep probing known local dev ports.
+    }
   }
+
+  return null;
 }
 
 function startServer() {
@@ -230,11 +252,16 @@ function runNode(scriptName, env = {}) {
   });
 }
 
+async function readJsonReport(path) {
+  return JSON.parse(await readFile(path, "utf8"));
+}
+
 try {
-  if (isolated && (await detectExistingLocalServer())) {
+  const existingLocalServer = isolated ? await detectExistingLocalServer() : null;
+  if (existingLocalServer) {
     throw new Error(
       [
-        "A Photo Book Maker dev server is already running at http://127.0.0.1:3000.",
+        `A Photo Book Maker dev server is already running at ${existingLocalServer}.`,
         "The isolated AI benchmark boots its own Next server and temp project store, but Next cannot run two dev servers for the same app directory.",
         "Stop the existing dev server and rerun, or set AI_BENCHMARK_ISOLATED=0 when you intentionally want to target the running app.",
       ].join(" "),
@@ -270,9 +297,46 @@ try {
     }
 
     await runNode("ai-generation-smoke.mjs", smokeEnv);
+    const proofReportPath = getCompanionReportPath(targetReportPath, "proof-quality");
+    const proofEnv = {
+      PROOF_QUALITY_BASE_URL: baseUrl,
+      PROOF_QUALITY_REPORT_PATH: proofReportPath,
+    };
+    if (target.projectId) {
+      proofEnv.PROOF_QUALITY_PROJECT_ID = target.projectId;
+    }
+    if (target.projectTitle) {
+      proofEnv.PROOF_QUALITY_PROJECT_TITLE = target.projectTitle;
+    }
+    if (process.env.AI_GENERATION_CONTEXT_TERMS && !process.env.PROOF_QUALITY_CONTEXT_TERMS) {
+      proofEnv.PROOF_QUALITY_CONTEXT_TERMS = process.env.AI_GENERATION_CONTEXT_TERMS;
+    }
+
+    await runNode("proof-quality-smoke.mjs", proofEnv);
+    const generationReport = await readJsonReport(targetReportPath);
+    const proofReport = await readJsonReport(proofReportPath);
     reports.push({
+      generation: {
+        deterministicFallbackUsed: generationReport.deterministicFallbackUsed ?? null,
+        elapsedMs: generationReport.elapsedMs ?? null,
+        plannerMode: generationReport.plannerMode ?? null,
+        qualityScore: generationReport.qualityReport?.score ?? null,
+        runStatus: generationReport.runStatus ?? null,
+        usedPhotoPercent: generationReport.acceptance?.usagePercent ?? null,
+      },
       projectId: target.projectId ?? null,
       projectTitle: target.projectTitle ?? null,
+      proof: {
+        failures: proofReport.assessment?.failures?.length ?? null,
+        imageFailures: proofReport.imageCheck?.failures?.length ?? null,
+        layoutCount: proofReport.assessment?.layoutCount ?? null,
+        pageCount: proofReport.assessment?.pageCount ?? null,
+        proofRevision: proofReport.proofRevision ?? null,
+        renderedPhotoCount: proofReport.assessment?.renderedPhotoCount ?? null,
+        usedPhotoPercent: proofReport.assessment?.usedPhotoPercent ?? null,
+        warnings: proofReport.assessment?.warnings?.length ?? null,
+      },
+      proofReportPath,
       reportPath: targetReportPath,
     });
   }

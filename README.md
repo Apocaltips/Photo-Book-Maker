@@ -163,10 +163,14 @@ cd apps/mobile && npx expo-doctor
 
 `npm run test:ai:benchmark` runs the health gate and a full local generation
 smoke against an isolated temporary copy of `apps/web/data/projects.json` and
-`apps/web/data/local-uploads`, then writes a JSON benchmark report to the system
-temp directory unless `AI_GENERATION_REPORT_PATH` is set. The report records
-elapsed time, prompt pressure, planner/fallback mode, quality score, photo
-usage, template support, planner candidate count, and acceptance failures.
+`apps/web/data/local-uploads`, then writes JSON benchmark reports to the system
+temp directory unless `AI_GENERATION_REPORT_PATH` is set. The generation report
+records elapsed time, prompt pressure, planner/fallback mode, quality score,
+photo usage, template support, planner candidate count, and acceptance
+failures. The benchmark now also runs the proof-quality gate against the same
+generated project, writes a companion `*-proof-quality.json` report, and
+summarizes proof render pass/fail, loaded image checks, layout rhythm, caption
+position variety, and photo coverage in the final benchmark output.
 Large uploads are pre-curated into a local planner candidate pool capped by
 `LOCAL_AI_PLANNER_MAX_PHOTOS`; the local planner context window is controlled by
 `LOCAL_AI_PLANNER_NUM_CTX`. Deterministic repair still validates coverage after

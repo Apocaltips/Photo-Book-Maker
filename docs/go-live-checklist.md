@@ -229,8 +229,10 @@ cd apps/mobile && npx expo-doctor
 
 The local AI benchmark is isolated by default: it copies the current local
 project store and local uploads into a temp directory, starts its own local web
-server, runs generation, writes the report, and removes the temp store. Keep the
-benchmark report path with tester-session notes:
+server, runs generation, runs proof-quality validation against the generated
+draft, writes generation plus companion `*-proof-quality.json` reports, and
+removes the temp store. Keep both benchmark report paths with tester-session
+notes:
 
 ```powershell
 npm run test:ai:benchmark
@@ -242,6 +244,9 @@ For 60+ photo albums, record the `planner saw X/Y photo candidates` and
 `planner selected X/Y valid candidate photo ids before repair` progress lines,
 plus the `planner returned X unknown photo ids before repair` guardrail and the
 `LOCAL_AI_PLANNER_MAX_PHOTOS` / `LOCAL_AI_PLANNER_NUM_CTX` values used for the run.
+Also record the companion proof report path, proof page count, image failures,
+proof photo usage, layout count, and caption-position spread from the same
+benchmark run.
 
 Run `npm run test:proof:quality` after each accepted local AI run. It is
 read-only by default and verifies the generated proof, object-storage image
