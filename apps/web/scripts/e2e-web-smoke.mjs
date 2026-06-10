@@ -1,4 +1,4 @@
-/* global AbortSignal, Buffer, console, fetch, process, setTimeout */
+/* global AbortSignal, Buffer, URL, console, fetch, process, setTimeout */
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -43,6 +43,11 @@ const otherDevAuthHeaders = {
   "X-Photo-Book-Dev-Email": "family-friend@example.com",
   "X-Photo-Book-Dev-Id": "family-friend",
   "X-Photo-Book-Dev-Name": "Family Friend",
+};
+const intruderDevAuthHeaders = {
+  "X-Photo-Book-Dev-Email": "wrong-invite-user@example.com",
+  "X-Photo-Book-Dev-Id": "wrong-invite-user",
+  "X-Photo-Book-Dev-Name": "Wrong Invite User",
 };
 
 async function detectExistingBaseUrl() {
@@ -152,11 +157,11 @@ async function assertRoute(path, predicate, label) {
   }
 }
 
-async function apiJson(path, init = {}) {
+async function apiJsonAs(path, authHeaders, init = {}) {
   const response = await fetchWithTimeout(`${baseUrl}${path}`, {
     ...init,
     headers: {
-      ...devAuthHeaders,
+      ...authHeaders,
       "Content-Type": "application/json",
       ...(init.headers ?? {}),
     },
@@ -168,6 +173,10 @@ async function apiJson(path, init = {}) {
   }
 
   return body;
+}
+
+async function apiJson(path, init = {}) {
+  return apiJsonAs(path, devAuthHeaders, init);
 }
 
 async function apiJsonEventually(path, init = {}, options = {}) {
@@ -409,6 +418,132 @@ async function runProjectE2E() {
   ) {
     throw new Error("Cross-account project list leaked another user's project.");
   }
+
+  const inviteResponse = await apiJson(`/api/projects/${project.id}/collaborators`, {
+    method: "POST",
+    body: JSON.stringify({
+      email: otherDevAuthHeaders["X-Photo-Book-Dev-Email"],
+      expectedRevision: project.revision,
+      name: otherDevAuthHeaders["X-Photo-Book-Dev-Name"],
+    }),
+  });
+  project = inviteResponse.project;
+  if (!inviteResponse.inviteUrl || project.revision <= 1) {
+    throw new Error("Collaborator invite did not return an invite URL and revised project.");
+  }
+
+  const inviteUrl = new URL(inviteResponse.inviteUrl);
+  const inviteProjectId = inviteUrl.searchParams.get("projectId");
+  const inviteToken = inviteUrl.searchParams.get("token");
+  const inviteId = inviteUrl.pathname.split("/").filter(Boolean).at(-1);
+  if (inviteProjectId !== project.id || !inviteId || !inviteToken) {
+    throw new Error(`Collaborator invite URL was not usable: ${inviteResponse.inviteUrl}`);
+  }
+
+  const wrongUserAccept = await fetchWithTimeout(
+    `${baseUrl}/api/projects/${project.id}/invites/${inviteId}/accept`,
+    {
+      method: "POST",
+      headers: {
+        ...intruderDevAuthHeaders,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ token: inviteToken }),
+    },
+  );
+  if (wrongUserAccept.status !== 403) {
+    throw new Error(`Invite accept did not reject the wrong signed-in email: ${wrongUserAccept.status}`);
+  }
+
+  const wrongTokenAccept = await fetchWithTimeout(
+    `${baseUrl}/api/projects/${project.id}/invites/${inviteId}/accept`,
+    {
+      method: "POST",
+      headers: {
+        ...otherDevAuthHeaders,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ token: "wrong-invite-token" }),
+    },
+  );
+  if (wrongTokenAccept.status !== 403) {
+    throw new Error(`Invite accept did not reject a bad token: ${wrongTokenAccept.status}`);
+  }
+
+  const acceptedInvite = await apiJsonAs(
+    `/api/projects/${project.id}/invites/${inviteId}/accept`,
+    otherDevAuthHeaders,
+    {
+      method: "POST",
+      body: JSON.stringify({ token: inviteToken }),
+    },
+  );
+  if (
+    !acceptedInvite.project?.members?.some(
+      (member) =>
+        member.email?.toLowerCase() ===
+        otherDevAuthHeaders["X-Photo-Book-Dev-Email"],
+    )
+  ) {
+    throw new Error("Invite acceptance did not add the collaborator as a project member.");
+  }
+
+  const collaboratorProject = await apiJsonAs(
+    `/api/projects/${project.id}`,
+    otherDevAuthHeaders,
+  );
+  if (collaboratorProject.project?.id !== project.id) {
+    throw new Error("Accepted collaborator could not open the shared project.");
+  }
+
+  const collaboratorProjectList = await apiJsonAs("/api/projects", otherDevAuthHeaders);
+  if (!collaboratorProjectList.projects?.some((entry) => entry.id === project.id)) {
+    throw new Error("Accepted collaborator did not see the shared project in their project list.");
+  }
+
+  const collaboratorManageAttempt = await fetchWithTimeout(
+    `${baseUrl}/api/projects/${project.id}/collaborators`,
+    {
+      method: "POST",
+      headers: {
+        ...otherDevAuthHeaders,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        email: "another-family-member@example.com",
+        expectedRevision: acceptedInvite.project.revision,
+        name: "Another Family Member",
+      }),
+    },
+  );
+  if (collaboratorManageAttempt.status !== 403) {
+    throw new Error(
+      `Accepted collaborator could perform owner-only invite management: ${collaboratorManageAttempt.status}`,
+    );
+  }
+
+  const collaboratorNote = await apiJsonAs(
+    `/api/projects/${project.id}/notes`,
+    otherDevAuthHeaders,
+    {
+      method: "POST",
+      body: JSON.stringify({
+        authorId: otherDevAuthHeaders["X-Photo-Book-Dev-Id"],
+        body: "This collaborator note proves invited family can edit the shared book.",
+        expectedRevision: acceptedInvite.project.revision,
+        title: "Collaborator E2E note",
+      }),
+    },
+  );
+  if (
+    !collaboratorNote.project?.notes?.some(
+      (note) => note.title === "Collaborator E2E note",
+    )
+  ) {
+    throw new Error("Accepted collaborator could not add an edit note to the project.");
+  }
+
+  project = (await apiJson(`/api/projects/${project.id}`)).project;
 
   await assertRoute(
     `/projects/${project.id}`,
