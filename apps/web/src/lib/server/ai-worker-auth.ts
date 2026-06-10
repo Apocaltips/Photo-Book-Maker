@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { createHash, randomUUID } from "node:crypto";
 
 function parsePositiveIntegerEnv(value: string | undefined, fallback: number, min = 1) {
   const parsed = Number.parseInt(value ?? "", 10);
@@ -65,6 +66,24 @@ export function getAiWorkerQueueConfig() {
     queueEnabled: isAiWorkerQueueEnabled(),
     secretConfigured: Boolean(getAiWorkerSecret()),
   };
+}
+
+export function createAiWorkerLeaseToken() {
+  return randomUUID();
+}
+
+export function hashAiWorkerLeaseToken(token: string) {
+  return createHash("sha256").update(token).digest("hex");
+}
+
+export function isAiWorkerLeaseTokenValid(
+  expectedHash: string | undefined,
+  providedToken: string | undefined,
+) {
+  return (
+    !expectedHash ||
+    Boolean(providedToken && hashAiWorkerLeaseToken(providedToken) === expectedHash)
+  );
 }
 
 export function authorizeAiWorkerRequest(request: Request) {

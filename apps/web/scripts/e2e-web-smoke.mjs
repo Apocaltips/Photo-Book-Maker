@@ -555,7 +555,10 @@ async function runProjectE2E() {
   if (
     claimed.job?.runId !== queuedGeneration.run.id ||
     claimed.job?.workerId !== "e2e-worker" ||
-    claimed.job?.run?.workerAttemptCount !== 1
+    claimed.job?.run?.workerAttemptCount !== 1 ||
+    !claimed.job?.workerLeaseToken ||
+    claimed.job.run?.workerLeaseToken ||
+    !claimed.job.run?.workerLeaseTokenHash
   ) {
     throw new Error("Worker claim route did not return the queued generation job.");
   }
@@ -589,12 +592,35 @@ async function runProjectE2E() {
     throw new Error(`Worker heartbeat did not reject a stale worker: ${staleHeartbeat.status}`);
   }
 
+  const wrongLeaseHeartbeat = await fetchWithTimeout(
+    `${baseUrl}/api/ai/worker/generation/heartbeat`,
+    {
+      method: "POST",
+      headers: {
+        "Authorization": `Bearer ${workerSecret}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        projectId: claimed.job.projectId,
+        runId: claimed.job.runId,
+        workerId: "e2e-worker",
+        workerLeaseToken: "wrong-lease-token",
+      }),
+    },
+  );
+  if (wrongLeaseHeartbeat.status !== 409) {
+    throw new Error(
+      `Worker heartbeat did not reject a wrong lease token: ${wrongLeaseHeartbeat.status}`,
+    );
+  }
+
   const heartbeat = await workerApiJson("/api/ai/worker/generation/heartbeat", {
     method: "POST",
     body: JSON.stringify({
       projectId: claimed.job.projectId,
       runId: claimed.job.runId,
       workerId: "e2e-worker",
+      workerLeaseToken: claimed.job.workerLeaseToken,
     }),
   });
   if (heartbeat.run?.workerId !== "e2e-worker" || !heartbeat.run?.workerHeartbeatAt) {
@@ -627,6 +653,7 @@ async function runProjectE2E() {
         projectId: claimed.job.projectId,
         runId: claimed.job.runId,
         workerId: "stale-e2e-worker",
+        workerLeaseToken: claimed.job.workerLeaseToken,
       }),
     },
   );
@@ -661,6 +688,7 @@ async function runProjectE2E() {
       projectId: claimed.job.projectId,
       runId: claimed.job.runId,
       workerId: "stale-e2e-worker",
+      workerLeaseToken: claimed.job.workerLeaseToken,
     }),
   });
   if (staleFail.status !== 409) {
@@ -674,6 +702,7 @@ async function runProjectE2E() {
       projectId: claimed.job.projectId,
       runId: claimed.job.runId,
       workerId: "e2e-worker",
+      workerLeaseToken: claimed.job.workerLeaseToken,
     }),
   });
   if (failed.run?.status !== "failed") {

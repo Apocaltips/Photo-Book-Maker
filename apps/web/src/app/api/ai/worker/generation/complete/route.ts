@@ -5,7 +5,10 @@ import {
   type Project,
 } from "@photo-book-maker/core";
 import { NextResponse } from "next/server";
-import { authorizeAiWorkerRequest } from "@/lib/server/ai-worker-auth";
+import {
+  authorizeAiWorkerRequest,
+  isAiWorkerLeaseTokenValid,
+} from "@/lib/server/ai-worker-auth";
 import { mutationErrorResponse } from "@/lib/server/mutation-response";
 import { isRevisionConflictError, updateProject } from "@/lib/server/project-store";
 
@@ -15,6 +18,7 @@ type CompleteBody = {
   projectId?: string;
   runId?: string;
   workerId?: string;
+  workerLeaseToken?: string;
 };
 
 class WorkerRunConflictError extends Error {
@@ -79,6 +83,15 @@ export async function POST(request: Request) {
           throw new WorkerRunConflictError("Generation run is claimed by another worker.");
         }
 
+        if (
+          !isAiWorkerLeaseTokenValid(
+            currentRun.workerLeaseTokenHash,
+            body.workerLeaseToken,
+          )
+        ) {
+          throw new WorkerRunConflictError("Generation run lease token did not match.");
+        }
+
         if (!isActiveWorkerRun(currentRun.status)) {
           throw new WorkerRunConflictError(
             `Generation run is already ${currentRun.status} and cannot be completed.`,
@@ -92,6 +105,7 @@ export async function POST(request: Request) {
           workerHeartbeatAt: currentRun.workerHeartbeatAt,
           workerId: currentRun.workerId,
           workerLeaseExpiresAt: currentRun.workerLeaseExpiresAt,
+          workerLeaseTokenHash: currentRun.workerLeaseTokenHash,
         };
 
         return upsertGenerationRun(

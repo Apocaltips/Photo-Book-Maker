@@ -7,7 +7,9 @@ import {
 import { NextResponse } from "next/server";
 import {
   authorizeAiWorkerRequest,
+  createAiWorkerLeaseToken,
   getAiWorkerMaxAttempts,
+  hashAiWorkerLeaseToken,
   normalizeAiWorkerLeaseSeconds,
 } from "@/lib/server/ai-worker-auth";
 import {
@@ -154,6 +156,7 @@ export async function POST(request: Request) {
   }
 
   const claimedAt = nowIso();
+  const workerLeaseToken = createAiWorkerLeaseToken();
   const leaseExpiresAt = new Date(Date.now() + leaseSeconds * 1000).toISOString();
   let project: Project | null;
 
@@ -177,6 +180,7 @@ export async function POST(request: Request) {
         workerHeartbeatAt: claimedAt,
         workerId,
         workerLeaseExpiresAt: leaseExpiresAt,
+        workerLeaseTokenHash: hashAiWorkerLeaseToken(workerLeaseToken),
       });
     });
   } catch (error) {
@@ -199,6 +203,7 @@ export async function POST(request: Request) {
       projectId: project.id,
       run: claimedRun,
       runId: claimedRun.id,
+      workerLeaseToken,
       workerId,
     },
   });

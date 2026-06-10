@@ -149,6 +149,7 @@ async function failJob(job, error) {
       projectId: job.projectId,
       runId: job.runId,
       workerId,
+      workerLeaseToken: job.workerLeaseToken,
     }),
   }).catch((failError) => {
     console.error(`Failed to mark job failed: ${failError.message}`);
@@ -162,6 +163,7 @@ async function heartbeatJob(job) {
       projectId: job.projectId,
       runId: job.runId,
       workerId,
+      workerLeaseToken: job.workerLeaseToken,
     }),
   });
 }
@@ -196,6 +198,7 @@ async function processJob(job) {
       projectId: job.projectId,
       runId: job.runId,
       workerId,
+      workerLeaseToken: job.workerLeaseToken,
     }),
   });
 

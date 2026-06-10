@@ -422,6 +422,7 @@ export interface GenerationRun {
   workerHeartbeatAt?: string;
   workerId?: string;
   workerLeaseExpiresAt?: string;
+  workerLeaseTokenHash?: string;
 }
 
 export interface UploadBatch {

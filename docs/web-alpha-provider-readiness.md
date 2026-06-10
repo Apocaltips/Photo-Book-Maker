@@ -123,6 +123,9 @@ Worker bridge v1:
 - The worker calls `/api/ai/worker/generation/claim`, processes the payload
   through `/api/ai/worker/generation/process` on the private PC, then posts to
   `/api/ai/worker/generation/complete` or `/api/ai/worker/generation/fail`.
+- Each claimed job receives a one-job worker lease token. The hosted app stores
+  only its hash, and heartbeat, fail, and complete calls must echo the token so
+  stale workers cannot update a run they no longer own.
 - The worker heartbeats during long local model calls with
   `LOCAL_AI_WORKER_HEARTBEAT_MS` so slow 60-photo and 174-photo test runs are
   not reclaimed as abandoned.
