@@ -1,10 +1,11 @@
-/* global AbortSignal, console, fetch, process, setTimeout */
+/* global AbortSignal, console, fetch, process */
 
 import { spawn } from "node:child_process";
 import { access, copyFile, cp, mkdtemp, mkdir, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, extname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { createNextDevServerController } from "./lib/next-dev-server.mjs";
 
 const scriptDir = dirname(fileURLToPath(import.meta.url));
 const reportPath =
@@ -23,7 +24,6 @@ const fileStoreDir = isolated
   ? await mkdtemp(join(tmpdir(), "photo-book-maker-ai-benchmark-"))
   : undefined;
 let server;
-let serverOutput = "";
 
 function parseList(value) {
   return (value ?? "")
@@ -147,45 +147,18 @@ function startServer() {
     return undefined;
   }
 
-  const child =
-    process.platform === "win32"
-      ? spawn(`npm.cmd run dev -- --hostname 127.0.0.1 --port ${port}`, {
-          cwd: process.cwd(),
-          env: {
-            ...process.env,
-            EXPO_PUBLIC_API_BASE_URL: `${baseUrl}/api`,
-            NEXT_TELEMETRY_DISABLED: "1",
-            NEXT_PUBLIC_API_BASE_URL: `${baseUrl}/api`,
-            PHOTO_BOOK_FILE_STORE_DIR: fileStoreDir,
-          },
-          shell: true,
-          stdio: ["ignore", "pipe", "pipe"],
-        })
-      : spawn("npm", ["run", "dev", "--", "--hostname", "127.0.0.1", "--port", port], {
-          cwd: process.cwd(),
-          env: {
-            ...process.env,
-            EXPO_PUBLIC_API_BASE_URL: `${baseUrl}/api`,
-            NEXT_TELEMETRY_DISABLED: "1",
-            NEXT_PUBLIC_API_BASE_URL: `${baseUrl}/api`,
-            PHOTO_BOOK_FILE_STORE_DIR: fileStoreDir,
-          },
-          stdio: ["ignore", "pipe", "pipe"],
-        });
-
-  child.stdout.on("data", (chunk) => {
-    serverOutput += chunk.toString();
-  });
-  child.stderr.on("data", (chunk) => {
-    serverOutput += chunk.toString();
-  });
-
-  return child;
-}
-
-async function fetchWithTimeout(url) {
-  return fetch(url, {
-    signal: AbortSignal.timeout(5000),
+  return createNextDevServerController({
+    baseUrl,
+    cwd: process.cwd(),
+    env: {
+      ...process.env,
+      EXPO_PUBLIC_API_BASE_URL: `${baseUrl}/api`,
+      NEXT_TELEMETRY_DISABLED: "1",
+      NEXT_PUBLIC_API_BASE_URL: `${baseUrl}/api`,
+      PHOTO_BOOK_FILE_STORE_DIR: fileStoreDir,
+    },
+    label: "AI benchmark server",
+    port,
   });
 }
 
@@ -194,22 +167,7 @@ async function waitForServer() {
     return;
   }
 
-  const deadline = Date.now() + 30_000;
-
-  while (Date.now() < deadline) {
-    try {
-      const response = await fetchWithTimeout(baseUrl);
-      if (response.ok) {
-        return;
-      }
-    } catch {
-      // Keep polling until Next is ready.
-    }
-
-    await new Promise((resolve) => setTimeout(resolve, 500));
-  }
-
-  throw new Error(`AI benchmark server did not become ready.\n${serverOutput}`);
+  await server.start();
 }
 
 async function stopServer() {
@@ -217,18 +175,7 @@ async function stopServer() {
     return;
   }
 
-  if (process.platform === "win32" && server.pid) {
-    await new Promise((resolve) => {
-      const killer = spawn("taskkill", ["/pid", String(server.pid), "/T", "/F"], {
-        stdio: "ignore",
-      });
-      killer.on("exit", resolve);
-      killer.on("error", resolve);
-    });
-    return;
-  }
-
-  server.kill("SIGTERM");
+  await server.stop();
 }
 
 function runNode(scriptName, env = {}) {

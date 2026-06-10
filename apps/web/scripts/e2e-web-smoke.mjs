@@ -1,8 +1,11 @@
 /* global AbortSignal, Buffer, console, fetch, process, setTimeout */
-import { spawn } from "node:child_process";
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
+import {
+  createNextDevServerController,
+  waitForHttpOk,
+} from "./lib/next-dev-server.mjs";
 
 const port = process.env.E2E_WEB_PORT ?? "3210";
 const defaultBaseUrl = `http://127.0.0.1:${port}`;
@@ -71,50 +74,26 @@ async function detectExistingBaseUrl() {
 
   return undefined;
 }
-const server = reuseExistingServer
+const serverController = reuseExistingServer
   ? undefined
-  : process.platform === "win32"
-    ? spawn(`npm.cmd run dev -- --hostname 127.0.0.1 --port ${port}`, {
-        cwd: process.cwd(),
-        env: {
-          ...process.env,
-          EXPO_PUBLIC_API_BASE_URL: `${baseUrl}/api`,
-          NEXT_TELEMETRY_DISABLED: "1",
-          NEXT_PUBLIC_API_BASE_URL: `${baseUrl}/api`,
-          PHOTO_BOOK_FILE_STORE_DIR: fileStoreDir,
-          LOCAL_AI_WORKER_ENABLED: "1",
-          LOCAL_AI_WORKER_MAX_ATTEMPTS: "2",
-          LOCAL_AI_WORKER_MIN_LEASE_SECONDS: "1",
-          LOCAL_AI_WORKER_SECRET: workerSecret,
-          ALPHA_READINESS_SECRET: readinessSecret,
-        },
-        shell: true,
-        stdio: ["ignore", "pipe", "pipe"],
-      })
-    : spawn("npm", ["run", "dev", "--", "--hostname", "127.0.0.1", "--port", port], {
-        cwd: process.cwd(),
-        env: {
-          ...process.env,
-          EXPO_PUBLIC_API_BASE_URL: `${baseUrl}/api`,
-          NEXT_TELEMETRY_DISABLED: "1",
-          NEXT_PUBLIC_API_BASE_URL: `${baseUrl}/api`,
-          PHOTO_BOOK_FILE_STORE_DIR: fileStoreDir,
-          LOCAL_AI_WORKER_ENABLED: "1",
-          LOCAL_AI_WORKER_MAX_ATTEMPTS: "2",
-          LOCAL_AI_WORKER_MIN_LEASE_SECONDS: "1",
-          LOCAL_AI_WORKER_SECRET: workerSecret,
-          ALPHA_READINESS_SECRET: readinessSecret,
-        },
-        stdio: ["ignore", "pipe", "pipe"],
-      });
-
-let serverOutput = "";
-server?.stdout.on("data", (chunk) => {
-  serverOutput += chunk.toString();
-});
-server?.stderr.on("data", (chunk) => {
-  serverOutput += chunk.toString();
-});
+  : createNextDevServerController({
+      baseUrl,
+      cwd: process.cwd(),
+      env: {
+        ...process.env,
+        EXPO_PUBLIC_API_BASE_URL: `${baseUrl}/api`,
+        NEXT_TELEMETRY_DISABLED: "1",
+        NEXT_PUBLIC_API_BASE_URL: `${baseUrl}/api`,
+        PHOTO_BOOK_FILE_STORE_DIR: fileStoreDir,
+        LOCAL_AI_WORKER_ENABLED: "1",
+        LOCAL_AI_WORKER_MAX_ATTEMPTS: "2",
+        LOCAL_AI_WORKER_MIN_LEASE_SECONDS: "1",
+        LOCAL_AI_WORKER_SECRET: workerSecret,
+        ALPHA_READINESS_SECRET: readinessSecret,
+      },
+      label: "Next dev server",
+      port,
+    });
 
 async function fetchWithTimeout(url, init) {
   let lastError;
@@ -146,41 +125,22 @@ async function fetchWithTimeout(url, init) {
 }
 
 async function stopServer() {
-  if (!server) {
+  if (!serverController) {
     return;
   }
 
-  if (process.platform === "win32" && server.pid) {
-    await new Promise((resolve) => {
-      const killer = spawn("taskkill", ["/pid", String(server.pid), "/T", "/F"], {
-        stdio: "ignore",
-      });
-      killer.on("exit", resolve);
-      killer.on("error", resolve);
-    });
-    return;
-  }
-
-  server.kill("SIGTERM");
+  await serverController.stop();
 }
 
 async function waitForServer() {
-  const deadline = Date.now() + 30_000;
-
-  while (Date.now() < deadline) {
-    try {
-      const response = await fetchWithTimeout(baseUrl);
-      if (response.ok) {
-        return;
-      }
-    } catch {
-      // Keep polling until Next is ready.
-    }
-
-    await new Promise((resolve) => setTimeout(resolve, 500));
+  if (serverController) {
+    await serverController.start();
+    return;
   }
 
-  throw new Error(`Next dev server did not become ready.\n${serverOutput}`);
+  await waitForHttpOk(baseUrl, {
+    label: "existing Photo Book Maker dev server",
+  });
 }
 
 async function assertRoute(path, predicate, label) {

@@ -1,9 +1,12 @@
-/* global AbortSignal, console, fetch, process, setTimeout */
+/* global AbortSignal, console, fetch, process */
 
-import { spawn } from "node:child_process";
 import { access, copyFile, cp, mkdtemp, mkdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
+import {
+  createNextDevServerController,
+  waitForHttpOk,
+} from "./lib/next-dev-server.mjs";
 const port = process.env.PROOF_QUALITY_PORT ?? "3222";
 const explicitBaseUrl = process.env.PROOF_QUALITY_BASE_URL;
 const defaultBaseUrl = `http://127.0.0.1:${port}`;
@@ -88,7 +91,6 @@ const genericContextWords = new Set([
 ]);
 
 let server;
-let serverOutput = "";
 
 async function detectExistingBaseUrl() {
   if (explicitBaseUrl) {
@@ -156,36 +158,19 @@ function startServer() {
     return undefined;
   }
 
-  const env = {
-    ...process.env,
-    EXPO_PUBLIC_API_BASE_URL: `${baseUrl}/api`,
-    NEXT_PUBLIC_API_BASE_URL: `${baseUrl}/api`,
-    NEXT_TELEMETRY_DISABLED: "1",
-    PHOTO_BOOK_FILE_STORE_DIR: fileStoreDir,
-  };
-
-  const child =
-    process.platform === "win32"
-      ? spawn(`npm.cmd run dev -- --hostname 127.0.0.1 --port ${port}`, {
-          cwd: process.cwd(),
-          env,
-          shell: true,
-          stdio: ["ignore", "pipe", "pipe"],
-        })
-      : spawn("npm", ["run", "dev", "--", "--hostname", "127.0.0.1", "--port", port], {
-          cwd: process.cwd(),
-          env,
-          stdio: ["ignore", "pipe", "pipe"],
-        });
-
-  child.stdout.on("data", (chunk) => {
-    serverOutput += chunk.toString();
+  return createNextDevServerController({
+    baseUrl,
+    cwd: process.cwd(),
+    env: {
+      ...process.env,
+      EXPO_PUBLIC_API_BASE_URL: `${baseUrl}/api`,
+      NEXT_PUBLIC_API_BASE_URL: `${baseUrl}/api`,
+      NEXT_TELEMETRY_DISABLED: "1",
+      PHOTO_BOOK_FILE_STORE_DIR: fileStoreDir,
+    },
+    label: "Proof-quality server",
+    port,
   });
-  child.stderr.on("data", (chunk) => {
-    serverOutput += chunk.toString();
-  });
-
-  return child;
 }
 
 async function stopServer() {
@@ -193,18 +178,7 @@ async function stopServer() {
     return;
   }
 
-  if (process.platform === "win32" && server.pid) {
-    await new Promise((resolve) => {
-      const killer = spawn("taskkill", ["/pid", String(server.pid), "/T", "/F"], {
-        stdio: "ignore",
-      });
-      killer.on("exit", resolve);
-      killer.on("error", resolve);
-    });
-    return;
-  }
-
-  server.kill("SIGTERM");
+  await server.stop();
 }
 
 async function fetchWithTimeout(url, init = {}, timeoutMs = 8_000) {
@@ -215,22 +189,14 @@ async function fetchWithTimeout(url, init = {}, timeoutMs = 8_000) {
 }
 
 async function waitForServer() {
-  const deadline = Date.now() + 30_000;
-
-  while (Date.now() < deadline) {
-    try {
-      const response = await fetchWithTimeout(baseUrl, {}, 5_000);
-      if (response.ok) {
-        return;
-      }
-    } catch {
-      // Keep polling until Next is ready.
-    }
-
-    await new Promise((resolve) => setTimeout(resolve, 500));
+  if (server) {
+    await server.start();
+    return;
   }
 
-  throw new Error(`Proof-quality server did not become ready.\n${serverOutput}`);
+  await waitForHttpOk(baseUrl, {
+    label: "existing proof-quality server",
+  });
 }
 
 async function apiJson(path, init = {}) {
