@@ -297,6 +297,7 @@ and `PRINT_PROVIDER_SAMPLE_ORDER_CONFIRMED=1`.
 ```bash
 npm ci
 npm run test
+npm run test:alpha:local
 npm run test:readiness:contract
 npm run test:alpha:readiness
 npm run test:e2e:web
@@ -313,6 +314,13 @@ cd apps/mobile && npx expo-doctor
 For hosted outside-tester validation, run `npm run test:hosted:alpha` after
 setting the hosted URL, readiness secret, proof bearer token, and hosted
 project id/title. It intentionally fails without those hosted values.
+
+The local alpha readiness command is the preferred local pre-tester gate:
+`npm run test:alpha:local` runs readiness contract, local readiness, local AI
+health, worker preflight, and the Cap Cana plus 50-70 photo alpha benchmark in
+sequence and writes a combined report. Use
+`LOCAL_ALPHA_ACCEPTANCE_REPORT_PATH` to keep the report with tester-session
+notes.
 
 The local AI alpha benchmark is isolated by default: it copies the current local
 project store and local uploads into a temp directory, starts its own local web

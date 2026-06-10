@@ -14,6 +14,7 @@
     "typecheck": "npm run typecheck -w @photo-book-maker/core && npm run typecheck -w @photo-book-maker/web && npm run typecheck -w @photo-book-maker/mobile",
     "test": "npm run test -w @photo-book-maker/core",
     "test:readiness:contract": "npm run test:readiness:contract -w @photo-book-maker/web",
+    "test:alpha:local": "npm run test:alpha:local -w @photo-book-maker/web",
     "test:alpha:readiness": "npm run test:alpha:readiness -w @photo-book-maker/web",
     "test:hosted:alpha": "npm run test:hosted:alpha -w @photo-book-maker/web",
     "test:provider:readiness": "npm run test:provider:readiness -w @photo-book-maker/web",

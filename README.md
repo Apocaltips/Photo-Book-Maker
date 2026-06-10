@@ -203,6 +203,7 @@ See:
 
 ```bash
 npm run test
+npm run test:alpha:local
 npm run test:e2e:web
 npm run test:readiness:contract
 npm run test:ai:health
@@ -215,6 +216,15 @@ npm run build
 npm run typecheck -w @photo-book-maker/mobile
 cd apps/mobile && npx expo-doctor
 ```
+
+`npm run test:alpha:local` is the one-command local family/friend readiness
+gate. It runs the readiness contract, self-contained local readiness,
+self-contained local AI health, private worker preflight, and the 13-photo plus
+50-70 photo local AI alpha benchmark sequentially so Next dev servers do not
+collide. It writes a combined JSON report to the system temp directory unless
+`LOCAL_ALPHA_ACCEPTANCE_REPORT_PATH` is set. Set
+`LOCAL_ALPHA_ACCEPTANCE_SKIP_BENCHMARK=1` only for quick script debugging; the
+outside-tester gate should include the benchmark.
 
 `npm run test:ai:alpha-benchmark` is the local outside-tester gate. It
 auto-selects the Cap Cana-style small project and the available 50-70 photo

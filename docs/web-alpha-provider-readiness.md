@@ -174,6 +174,7 @@ npm run test
 npm run typecheck
 npm run lint
 npm run build
+npm run test:alpha:local
 npm run test:readiness:contract
 npm run test:alpha:readiness
 npm run test:e2e:web
@@ -181,6 +182,12 @@ npm run test:ai:health
 npm run test:worker:preflight
 npm run test:proof:quality
 ```
+
+`npm run test:alpha:local` is the one-command local family/friend readiness
+gate. It runs the readiness contract, local readiness, local AI health, worker
+preflight, and local AI alpha benchmark sequentially, then writes a combined
+JSON report. Use the lower-level commands below when diagnosing a specific
+failure. Do not skip the benchmark for outside-tester readiness.
 
 For the hosted family/friend gate, run:
 
