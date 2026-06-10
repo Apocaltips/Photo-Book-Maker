@@ -4,6 +4,7 @@ import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, extname, join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { makeSharedSecretStrengthCheck } from "../src/lib/alpha-readiness-contract.js";
 
 const scriptDir = dirname(fileURLToPath(import.meta.url));
 const reportPath =
@@ -45,6 +46,17 @@ function isLoopbackBaseUrl(value) {
   }
 }
 
+function getReadinessSecretVariable() {
+  if (process.env.ALPHA_READINESS_SECRET?.trim()) {
+    return "ALPHA_READINESS_SECRET";
+  }
+  if (process.env.TRIGGER_SECRET_KEY?.trim()) {
+    return "TRIGGER_SECRET_KEY";
+  }
+
+  return "ALPHA_READINESS_SECRET";
+}
+
 function assertConfigured() {
   const missing = [];
 
@@ -52,7 +64,7 @@ function assertConfigured() {
     missing.push("HOSTED_ALPHA_BASE_URL or ALPHA_READINESS_BASE_URL");
   }
   if (!readinessSecret) {
-    missing.push("ALPHA_READINESS_SECRET");
+    missing.push("ALPHA_READINESS_SECRET or TRIGGER_SECRET_KEY");
   }
   if (requireProof && !proofBearerToken) {
     missing.push("HOSTED_ALPHA_PROOF_BEARER_TOKEN or PROOF_QUALITY_BEARER_TOKEN");
@@ -69,6 +81,18 @@ function assertConfigured() {
     throw new Error(
       "Hosted alpha smoke requires a hosted URL. Set HOSTED_ALPHA_ALLOW_LOCAL_BASE_URL=1 only for local script checks.",
     );
+  }
+
+  const readinessSecretCheck = makeSharedSecretStrengthCheck({
+    label: "Alpha readiness secret",
+    name: "alpha readiness secret strength",
+    required: true,
+    value: readinessSecret,
+    variable: getReadinessSecretVariable(),
+  });
+
+  if (readinessSecretCheck.status === "fail") {
+    throw new Error(readinessSecretCheck.detail);
   }
 }
 

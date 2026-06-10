@@ -1,5 +1,9 @@
-/* global URL, console */
-import { readFile } from "node:fs/promises";
+/* global URL, console, process */
+import { spawnSync } from "node:child_process";
+import { mkdtemp, readFile, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { fileURLToPath } from "node:url";
 import {
   ALLOWED_PRINT_PROVIDERS,
   MIN_HOSTED_SHARED_SECRET_LENGTH,
@@ -17,6 +21,9 @@ const alphaReadinessRouteUrl = new URL(
   "../src/app/api/alpha/readiness/route.ts",
   import.meta.url,
 );
+const hostedAlphaSmokePath = fileURLToPath(new URL("./hosted-alpha-smoke.mjs", import.meta.url));
+const HOSTED_ALPHA_TOKEN_SENTINEL = "proof-token-that-must-not-leak";
+const STRONG_ALPHA_READINESS_SECRET = "hosted-alpha-readiness-secret-2026-random";
 
 function assert(condition, message) {
   if (!condition) {
@@ -63,6 +70,55 @@ function assertSqlContains(sql, expected) {
     sql.includes(normalizedExpected),
     `Supabase schema must include: ${normalizedExpected}`,
   );
+}
+
+function makeHostedAlphaSmokeEnv(overrides = {}) {
+  const env = {
+    HOME: process.env.HOME,
+    PATH: process.env.PATH,
+    Path: process.env.Path,
+    SystemRoot: process.env.SystemRoot,
+    SYSTEMROOT: process.env.SYSTEMROOT,
+    TEMP: process.env.TEMP,
+    TMP: process.env.TMP,
+    USERPROFILE: process.env.USERPROFILE,
+    ...overrides,
+  };
+
+  for (const [key, value] of Object.entries(env)) {
+    if (value === undefined) {
+      delete env[key];
+    }
+  }
+
+  return env;
+}
+
+function runHostedAlphaSmoke(overrides = {}) {
+  return spawnSync(process.execPath, [hostedAlphaSmokePath], {
+    encoding: "utf8",
+    env: makeHostedAlphaSmokeEnv(overrides),
+  });
+}
+
+function getChildOutput(result) {
+  return `${result.stdout ?? ""}\n${result.stderr ?? ""}`;
+}
+
+function assertHostedAlphaSmokeFails(overrides, expectedText) {
+  const result = runHostedAlphaSmoke(overrides);
+  const output = getChildOutput(result);
+
+  assert(
+    result.status !== 0,
+    `Hosted alpha smoke should fail. Output: ${output}`,
+  );
+  assert(
+    output.includes(expectedText),
+    `Hosted alpha smoke failure must mention "${expectedText}". Output: ${output}`,
+  );
+
+  return output;
 }
 
 const envExample = await readFile(envExampleUrl, "utf8");
@@ -246,5 +302,58 @@ assert(
   !failedConfiguredChecks.length,
   `Fully configured provider env should not fail: ${JSON.stringify(failedConfiguredChecks, null, 2)}`,
 );
+
+assertHostedAlphaSmokeFails({}, "Hosted alpha smoke is missing");
+assertHostedAlphaSmokeFails(
+  {
+    ALPHA_READINESS_SECRET: STRONG_ALPHA_READINESS_SECRET,
+    HOSTED_ALPHA_BASE_URL: "http://127.0.0.1:3000",
+    HOSTED_ALPHA_DRY_RUN: "1",
+    HOSTED_ALPHA_PROOF_BEARER_TOKEN: HOSTED_ALPHA_TOKEN_SENTINEL,
+    HOSTED_ALPHA_PROOF_PROJECT_ID: "alpha-proof-project",
+  },
+  "requires a hosted URL",
+);
+assertHostedAlphaSmokeFails(
+  {
+    ALPHA_READINESS_SECRET: "short-secret",
+    HOSTED_ALPHA_ALLOW_LOCAL_BASE_URL: "1",
+    HOSTED_ALPHA_BASE_URL: "http://127.0.0.1:3000",
+    HOSTED_ALPHA_DRY_RUN: "1",
+    HOSTED_ALPHA_PROOF_BEARER_TOKEN: HOSTED_ALPHA_TOKEN_SENTINEL,
+    HOSTED_ALPHA_PROOF_PROJECT_ID: "alpha-proof-project",
+  },
+  `Alpha readiness secret must be at least ${MIN_HOSTED_SHARED_SECRET_LENGTH} characters.`,
+);
+
+const hostedAlphaSmokeTmpDir = await mkdtemp(
+  join(tmpdir(), "photo-book-hosted-alpha-contract-"),
+);
+try {
+  const reportPath = join(hostedAlphaSmokeTmpDir, "hosted-alpha-smoke-report.json");
+  const result = runHostedAlphaSmoke({
+    ALPHA_READINESS_SECRET: STRONG_ALPHA_READINESS_SECRET,
+    HOSTED_ALPHA_ALLOW_LOCAL_BASE_URL: "1",
+    HOSTED_ALPHA_BASE_URL: "http://127.0.0.1:3000",
+    HOSTED_ALPHA_DRY_RUN: "1",
+    HOSTED_ALPHA_PROOF_BEARER_TOKEN: HOSTED_ALPHA_TOKEN_SENTINEL,
+    HOSTED_ALPHA_PROOF_PROJECT_ID: "alpha-proof-project",
+    HOSTED_ALPHA_REPORT_PATH: reportPath,
+  });
+  const output = getChildOutput(result);
+
+  assert(result.status === 0, `Hosted alpha smoke dry run should pass. Output: ${output}`);
+  assert(!output.includes(HOSTED_ALPHA_TOKEN_SENTINEL), "Hosted alpha smoke output leaked the proof bearer token.");
+
+  const report = await readFile(reportPath, "utf8");
+  assert(!report.includes(HOSTED_ALPHA_TOKEN_SENTINEL), "Hosted alpha smoke report leaked the proof bearer token.");
+
+  const summary = JSON.parse(report);
+  assert(summary.status === "hosted alpha smoke dry run passed", "Hosted alpha smoke report must record dry-run pass status.");
+  assert(summary.proofBearerTokenConfigured === true, "Hosted alpha smoke report must record proof token presence without leaking it.");
+  assert(summary.requireProof === true, "Hosted alpha smoke report must keep proof required by default.");
+} finally {
+  await rm(hostedAlphaSmokeTmpDir, { force: true, recursive: true });
+}
 
 console.log("readiness contract smoke passed");
