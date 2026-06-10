@@ -77,6 +77,10 @@ Worker bridge v1:
   `LOCAL_AI_WORKER_MAX_ATTEMPTS` limits retry loops. The default alpha ceiling
   is 3 attempts; after that the run is marked failed and `/ai-health` surfaces
   the failed/stale queue state for the operator.
+- Web and mobile clients poll `/api/projects/:projectId/generation/runs/:runId`
+  after a queued response, then refresh the project automatically when the
+  private worker saves or fails the draft. This is required for hosted alpha
+  because generation can finish after the original button press returns.
 - All worker endpoints require `Authorization: Bearer <LOCAL_AI_WORKER_SECRET>`.
   The processor endpoint is disabled in production unless
   `LOCAL_AI_PROCESSOR_IN_PRODUCTION=1`, because Ollama should run on the private

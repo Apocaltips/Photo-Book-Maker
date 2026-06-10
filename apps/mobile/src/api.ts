@@ -147,6 +147,11 @@ export async function fetchProjectsRemote() {
   return data?.projects ?? null;
 }
 
+export async function fetchProjectRemote(projectId: string) {
+  const data = await request<{ project: Project }>(`/projects/${projectId}`);
+  return data?.project ?? null;
+}
+
 export async function createProjectRemote(input: CreateProjectInput) {
   const data = await request<{ project: Project }>("/projects", {
     method: "POST",
@@ -437,7 +442,14 @@ export async function generateAiBookRemote(
         project: data.project,
         run: data.run ?? null,
       }
-    : null;
+      : null;
+}
+
+export async function fetchGenerationRunRemote(projectId: string, runId: string) {
+  const data = await request<{ revision: number; run: GenerationRun }>(
+    `/projects/${projectId}/generation/runs/${runId}`,
+  );
+  return data ?? null;
 }
 
 export async function advancePrintOrderRemote(projectId: string) {

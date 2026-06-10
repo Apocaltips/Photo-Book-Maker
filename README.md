@@ -86,6 +86,9 @@ unless `LOCAL_AI_WORKER_ALLOW_HOSTED_PROCESSOR=1` is set intentionally. Keep
 proves the worker needs a different retry ceiling; expired leases are reclaimed,
 but a run that exceeds the attempt ceiling is marked failed and shown on
 `/ai-health` instead of being retried forever.
+Web and mobile clients poll the generation run status after a queued response,
+then refresh the project automatically when the private worker saves or fails
+the draft.
 
 Before inviting outside testers, run the read-only readiness gate against the
 running app:

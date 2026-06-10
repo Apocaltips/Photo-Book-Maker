@@ -29,6 +29,11 @@ type GenerationRunPayload = {
   questionnaire?: Partial<BookGenerationQuestionnaireAnswers>;
 };
 
+type GenerationRunStatusPayload = {
+  revision: number;
+  run: GenerationRun;
+};
+
 type AuthInput = {
   email: string;
   name?: string;
@@ -71,6 +76,12 @@ export function useProjectWorkspace({
   }, [authConfig.supabaseAnonKey, authConfig.supabaseUrl]);
   const isDevAuthMode = !supabase;
   const devAuthHeaders = useMemo(() => getDevAuthHeaders(), []);
+
+  function getAuthorizedHeaders() {
+    return session?.access_token
+      ? { Authorization: `Bearer ${session.access_token}` }
+      : devAuthHeaders;
+  }
 
   useEffect(() => {
     if (!supabase) {
@@ -131,16 +142,14 @@ export function useProjectWorkspace({
 
   useEffect(() => {
     if (session?.access_token) {
-      fetchProjectWithHeaders({
-        Authorization: `Bearer ${session.access_token}`,
-      }).catch(() => {
+      fetchProjectWithHeaders(getAuthorizedHeaders()).catch(() => {
         // Surface the message through hook state and keep the previous project if available.
       });
       return;
     }
 
     if (isDevAuthMode) {
-      fetchProjectWithHeaders(devAuthHeaders).catch(() => {
+      fetchProjectWithHeaders(getAuthorizedHeaders()).catch(() => {
         // Surface the message through hook state and keep the previous project if available.
       });
       return;
@@ -173,9 +182,7 @@ export function useProjectWorkspace({
       ...init,
       body: requestBody,
       headers: {
-        ...(session?.access_token
-          ? { Authorization: `Bearer ${session.access_token}` }
-          : devAuthHeaders),
+        ...getAuthorizedHeaders(),
         "Content-Type": "application/json",
         ...(init.headers ?? {}),
       },
@@ -216,9 +223,7 @@ export function useProjectWorkspace({
 
   async function fetchGenerationQuestions() {
     const response = await fetch(`/api/projects/${projectId}/generation/questions`, {
-      headers: session?.access_token
-        ? { Authorization: `Bearer ${session.access_token}` }
-        : devAuthHeaders,
+      headers: getAuthorizedHeaders(),
       cache: "no-store",
     });
     const body = (await response.json()) as {
@@ -241,9 +246,7 @@ export function useProjectWorkspace({
         expectedRevision: project?.revision,
       }),
       headers: {
-        ...(session?.access_token
-          ? { Authorization: `Bearer ${session.access_token}` }
-          : devAuthHeaders),
+        ...getAuthorizedHeaders(),
         "Content-Type": "application/json",
       },
     });
@@ -262,6 +265,26 @@ export function useProjectWorkspace({
       project: responseBody.project,
       run: responseBody.run,
     };
+  }
+
+  async function fetchGenerationRun(runId: string) {
+    const response = await fetch(
+      `/api/projects/${projectId}/generation/runs/${runId}`,
+      {
+        headers: getAuthorizedHeaders(),
+        cache: "no-store",
+      },
+    );
+    const body = (await response.json().catch(() => ({}))) as
+      | GenerationRunStatusPayload
+      | { message?: string };
+
+    if (!response.ok || !("run" in body)) {
+      const message = "message" in body ? body.message : null;
+      throw new Error(message || "Unable to refresh AI book progress.");
+    }
+
+    return body;
   }
 
   async function signIn(input: AuthInput) {
@@ -334,18 +357,14 @@ export function useProjectWorkspace({
     refreshAiDraft,
     refreshProject:
       session?.access_token || isDevAuthMode
-        ? () =>
-            fetchProjectWithHeaders(
-              session?.access_token
-                ? { Authorization: `Bearer ${session.access_token}` }
-                : devAuthHeaders,
-            )
+        ? () => fetchProjectWithHeaders(getAuthorizedHeaders())
         : null,
     saveDraft,
     session,
     signIn,
     signOut,
     signUp,
+    fetchGenerationRun,
     publishDraft,
   };
 }

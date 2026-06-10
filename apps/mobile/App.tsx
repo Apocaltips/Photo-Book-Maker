@@ -24,6 +24,8 @@ import {
   addPhotosRemote,
   createPhotoUploadTicketRemote,
   createProjectRemote,
+  fetchGenerationRunRemote,
+  fetchProjectRemote,
   fetchProjectsRemote,
   finalizeProjectRemote,
   generateAiBookRemote,
@@ -52,6 +54,7 @@ import {
   type Project,
   type BookGenerationQuestionnaireAnswers,
   type BookMakingGuide,
+  type GenerationRun,
   type ProjectType,
   type PublishedBookDraft,
   type YearbookCycle,
@@ -79,6 +82,19 @@ type ImportProgress = {
   total: number;
   uploaded: number;
 };
+
+const activeGenerationStatuses = new Set<GenerationRun["status"]>([
+  "queued",
+  "analyzing_photos",
+  "planning",
+  "validating",
+]);
+const generationPollIntervalMs = 3_000;
+const generationPollTimeoutMs = 20 * 60_000;
+
+function wait(milliseconds: number) {
+  return new Promise((resolve) => setTimeout(resolve, milliseconds));
+}
 
 const STORAGE_KEY = "photo-book-maker-state-v2";
 const MAX_LIBRARY_IMPORT_SELECTION = 200;
@@ -579,6 +595,24 @@ export default function App() {
     );
   }
 
+  function upsertLocalGenerationRun(projectId: string, run: GenerationRun) {
+    setProjects((current) =>
+      current.map((project) => {
+        if (project.id !== projectId) {
+          return project;
+        }
+
+        return {
+          ...project,
+          generationRuns: [
+            run,
+            ...(project.generationRuns ?? []).filter((entry) => entry.id !== run.id),
+          ],
+        };
+      }),
+    );
+  }
+
   function getCurrentMemberId(project: Project) {
     return (
       project.members.find(
@@ -1037,31 +1071,115 @@ async function handleInviteCollaborator() {
     }
 
     setIsAiGenerating(true);
-    const result = await generateAiBookRemote(selectedProject.id, {
-      expectedRevision: selectedProject.revision,
-      questionnaire,
-    }).catch((caughtError) => {
+    try {
+      const result = await generateAiBookRemote(selectedProject.id, {
+        expectedRevision: selectedProject.revision,
+        questionnaire,
+      });
+
+      if (!result?.project) {
+        return;
+      }
+
+      markSharedSync();
+      replaceProject(result.project);
+
+      if (result.run && activeGenerationStatuses.has(result.run.status)) {
+        upsertLocalGenerationRun(result.project.id, result.run);
+        Alert.alert(
+          "AI book started",
+          "The private local AI worker is making your book. Keep the app open to see the draft as soon as it is ready.",
+        );
+        const completedRun = await pollGenerationRun(result.project.id, result.run.id);
+
+        if (activeGenerationStatuses.has(completedRun.status)) {
+          return;
+        }
+
+        if (completedRun.status === "saved") {
+          const refreshedProject = await fetchProjectRemote(result.project.id);
+          if (refreshedProject) {
+            markSharedSync();
+            replaceProject(refreshedProject);
+            setActiveTab("editor");
+            Alert.alert(
+              "AI draft ready",
+              `${refreshedProject.bookDraft.pages.length} spreads are ready to review in the editor.`,
+            );
+          }
+          if (!refreshedProject) {
+            Alert.alert(
+              "AI draft ready",
+              "The worker saved the draft. Refresh this project to load the latest book.",
+            );
+          }
+          return;
+        }
+
+        if (completedRun.status === "failed") {
+          Alert.alert(
+            "AI Designer failed",
+            completedRun.errorMessage ??
+              "The AI book job failed safely and did not overwrite the draft.",
+          );
+          return;
+        }
+      }
+
+      if (result.run?.status === "failed") {
+        Alert.alert(
+          "AI Designer failed",
+          result.run.errorMessage ??
+            "The AI book job failed safely and did not overwrite the draft.",
+        );
+        return;
+      }
+
+      setActiveTab("editor");
+      Alert.alert(
+        "AI draft generated",
+        `${result.project.bookDraft.pages.length} spreads are ready to review in the editor.`,
+      );
+    } catch (caughtError) {
       Alert.alert(
         "AI Designer failed",
         caughtError instanceof Error
           ? caughtError.message
           : "The local AI generation service could not build this book.",
       );
-      return null;
-    });
-    setIsAiGenerating(false);
+    } finally {
+      setIsAiGenerating(false);
+    }
+  }
 
-    if (!result?.project) {
-      return;
+  async function pollGenerationRun(projectId: string, runId: string) {
+    const startedAt = Date.now();
+    let latestRun: GenerationRun | null = null;
+
+    while (Date.now() - startedAt < generationPollTimeoutMs) {
+      await wait(generationPollIntervalMs);
+      const status = await fetchGenerationRunRemote(projectId, runId);
+      if (!status?.run) {
+        throw new Error("Unable to refresh AI book progress.");
+      }
+
+      latestRun = status.run;
+      upsertLocalGenerationRun(projectId, latestRun);
+
+      if (!activeGenerationStatuses.has(latestRun.status)) {
+        return latestRun;
+      }
     }
 
-    markSharedSync();
-    replaceProject(result.project);
-    setActiveTab("editor");
+    if (!latestRun) {
+      throw new Error("The AI book job did not return progress yet.");
+    }
+
     Alert.alert(
-      "AI draft generated",
-      `${result.project.bookDraft.pages.length} spreads are ready to review in the editor.`,
+      "AI book still running",
+      "The private local AI worker is still making your book. Come back to this project and refresh when it finishes.",
     );
+    return latestRun;
   }
 
   async function handleFinalizeProject() {

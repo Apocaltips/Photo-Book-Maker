@@ -348,6 +348,17 @@ async function runProjectE2E() {
     throw new Error("Worker-enabled generation route did not queue a worker job.");
   }
 
+  const queuedRetryStatus = await apiJson(
+    `/api/projects/${project.id}/generation/runs/${queuedRetryGeneration.run.id}`,
+  );
+  if (
+    queuedRetryStatus.revision !== project.revision ||
+    queuedRetryStatus.run?.id !== queuedRetryGeneration.run.id ||
+    queuedRetryStatus.run?.status !== "queued"
+  ) {
+    throw new Error("Generation run status route did not return the queued worker run.");
+  }
+
   const unauthorizedClaim = await fetchWithTimeout(`${baseUrl}/api/ai/worker/generation/claim`, {
     method: "POST",
     headers: {
@@ -418,6 +429,13 @@ async function runProjectE2E() {
     !/exceeded 2 local AI worker attempt/i.test(exhaustedRetryClaim.message ?? "")
   ) {
     throw new Error("Worker claim route did not fail an exhausted retry job.");
+  }
+
+  const exhaustedRunStatus = await apiJson(
+    `/api/projects/${project.id}/generation/runs/${queuedRetryGeneration.run.id}`,
+  );
+  if (exhaustedRunStatus.run?.status !== "failed") {
+    throw new Error("Generation run status route did not expose exhausted run failure.");
   }
 
   project = (await apiJson(`/api/projects/${project.id}`)).project;

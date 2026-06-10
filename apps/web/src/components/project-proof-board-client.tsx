@@ -29,6 +29,20 @@ type UploadProgress = {
   uploaded: number;
 };
 
+const ACTIVE_GENERATION_STATUSES = new Set<GenerationRun["status"]>([
+  "queued",
+  "analyzing_photos",
+  "planning",
+  "validating",
+]);
+
+const generationPollIntervalMs = 3_000;
+const generationPollTimeoutMs = 20 * 60_000;
+
+function wait(milliseconds: number) {
+  return new Promise((resolve) => setTimeout(resolve, milliseconds));
+}
+
 export function ProjectProofBoardClient({
   authConfig,
   projectId,
@@ -375,9 +389,14 @@ export function ProjectProofBoardClient({
         },
       });
       setLastGenerationRun(result.run ?? null);
-      if (result.run && result.run.status !== "saved") {
+      if (result.run && ACTIVE_GENERATION_STATUSES.has(result.run.status)) {
         setBoardMessage(
           `Your AI book job is ${formatGenerationStatus(result.run.status).toLowerCase()} on the private local worker. The editable draft and PDF export unlock after the worker saves it.`,
+        );
+        await pollGenerationRun(result.run.id);
+      } else if (result.run?.status === "failed") {
+        setBoardMessage(
+          "The AI book job failed safely and did not overwrite your current draft. Check Local AI health, then try again.",
         );
       } else {
         setBoardMessage(
@@ -394,6 +413,51 @@ export function ProjectProofBoardClient({
     } finally {
       setIsAiGenerating(false);
     }
+  }
+
+  async function pollGenerationRun(runId: string) {
+    const startedAt = Date.now();
+    let latestRun: GenerationRun | null = null;
+
+    while (Date.now() - startedAt < generationPollTimeoutMs) {
+      await wait(generationPollIntervalMs);
+      const status = await workspace.fetchGenerationRun(runId);
+      latestRun = status.run;
+      setLastGenerationRun(latestRun);
+
+      if (ACTIVE_GENERATION_STATUSES.has(latestRun.status)) {
+        setBoardMessage(
+          `Still making your book: ${formatGenerationStatus(latestRun.status)}. ${formatGenerationProgress(latestRun.progress)}`,
+        );
+        continue;
+      }
+
+      if (latestRun.status === "saved") {
+        const refreshedProject = await workspace.refreshProject?.();
+        const spreadCount = refreshedProject?.bookDraft.pages.length;
+        setBoardMessage(
+          spreadCount
+            ? `Your book draft is ready: ${spreadCount} spreads saved. Review it, then save the PDF when it looks right.`
+            : "Your book draft is ready. Review it, then save the PDF when it looks right.",
+        );
+        return;
+      }
+
+      if (latestRun.status === "failed") {
+        await workspace.refreshProject?.();
+        setBoardMessage(
+          "The AI book job failed safely and did not overwrite your current draft. Check Local AI health, then try again.",
+        );
+        return;
+      }
+    }
+
+    if (latestRun) {
+      setLastGenerationRun(latestRun);
+    }
+    setBoardMessage(
+      "Your book is still being made by the private local worker. You can leave this page and come back; refresh the project to see the finished draft.",
+    );
   }
 
   async function handleTemplatePackSelect(templatePackId: string) {
