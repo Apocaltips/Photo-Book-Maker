@@ -271,10 +271,13 @@ function summarizeGenerationReport(generationReport) {
     fallbackUsed: generationReport.fallbackUsed ?? null,
     localPlannerJsonAccepted: generationReport.localPlannerJsonAccepted ?? null,
     modelNames: generationReport.modelNames ?? null,
+    plannerDiagnostics: generationReport.plannerDiagnostics ?? null,
     plannerMode: generationReport.plannerMode ?? null,
     plannerProgress: {
+      attemptProgress: generationReport.plannerAttemptProgress ?? [],
       candidateProgress: generationReport.plannerCandidateProgress ?? null,
       photoSelectionProgress: generationReport.plannerPhotoSelectionProgress ?? null,
+      promptProgress: generationReport.plannerPromptProgress ?? null,
       unknownPhotoProgress: generationReport.plannerUnknownPhotoProgress ?? null,
     },
     qualityGate: {

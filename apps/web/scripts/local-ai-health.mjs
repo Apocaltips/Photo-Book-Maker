@@ -24,6 +24,7 @@ async function main() {
     lastSavedRun: body.lastSavedRun
       ? {
           plannerMode: body.plannerStatus?.lastSavedPlannerMode ?? null,
+          plannerDiagnostics: body.lastSavedRun.plannerDiagnostics ?? null,
           projectTitle: body.lastSavedRun.projectTitle,
           qualityScore: body.lastSavedRun.qualityReport?.score ?? null,
           runId: body.lastSavedRun.runId,
@@ -34,6 +35,7 @@ async function main() {
     latestRun: body.latestRun
       ? {
           plannerMode: body.plannerStatus?.latestPlannerMode ?? null,
+          plannerDiagnostics: body.latestRun.plannerDiagnostics ?? null,
           projectTitle: body.latestRun.projectTitle,
           qualityScore: body.latestRun.qualityReport?.score ?? null,
           runId: body.latestRun.runId,

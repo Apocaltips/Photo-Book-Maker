@@ -330,10 +330,12 @@ $env:PROOF_QUALITY_PROJECT_ID="trip-madeira-island-60-photo-trip-1781039520416";
 For 60+ photo albums, record the `planner saw X/Y photo candidates` and
 `planner selected X/Y valid candidate photo ids before repair` progress lines,
 plus the `planner returned X unknown photo ids before repair` guardrail and the
-`LOCAL_AI_PLANNER_MAX_PHOTOS` / `LOCAL_AI_PLANNER_NUM_CTX` values used for the run.
-Also record the companion proof report path, proof page count, image failures,
-proof photo usage, layout count, and caption-position spread from the same
-benchmark run.
+`plannerDiagnostics` object: prompt byte/token pressure, primary/fallback
+attempt timings, timeout budgets, `num_ctx`, `num_predict`, final planner model,
+whether fallback was used, and the `LOCAL_AI_PLANNER_MAX_PHOTOS` /
+`LOCAL_AI_PLANNER_NUM_CTX` values used for the run. Also record the companion
+proof report path, proof page count, image failures, proof photo usage, layout
+count, and caption-position spread from the same benchmark run.
 
 Run `npm run test:proof:quality` after each accepted local AI run. It is
 read-only by default and verifies the generated proof, object-storage image

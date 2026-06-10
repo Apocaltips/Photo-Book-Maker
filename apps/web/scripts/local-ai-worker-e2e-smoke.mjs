@@ -292,6 +292,11 @@ async function main() {
     run: {
       deterministicFallbackUsed:
         runStatus.run.modelNames?.planner === "deterministic-editorial-fallback",
+      plannerAttemptProgress:
+        runStatus.run.progress?.filter((entry) =>
+          /^(?:primary planner|fallback planner|deterministic fallback) /.test(entry),
+        ) ?? [],
+      plannerDiagnostics: runStatus.run.plannerDiagnostics ?? null,
       plannerMode:
         runStatus.run.modelNames?.planner === runStatus.run.modelNames?.fallbackPlanner
           ? "fallback-planner"

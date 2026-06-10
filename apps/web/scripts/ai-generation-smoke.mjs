@@ -474,8 +474,15 @@ const summary = {
   deterministicFallbackUsed: getPlannerMode(run) === "deterministic-fallback",
   localPlannerJsonAccepted: getPlannerMode(run) !== "deterministic-fallback",
   modelNames: run?.modelNames,
+  plannerDiagnostics: run?.plannerDiagnostics ?? null,
   plannerCandidateProgress:
     run?.progress?.find((entry) => /^planner saw \d+\/\d+ photo candidates$/.test(entry)) ??
+    null,
+  plannerAttemptProgress: run?.progress?.filter((entry) =>
+    /^(?:primary planner|fallback planner|deterministic fallback) /.test(entry),
+  ) ?? [],
+  plannerPromptProgress:
+    run?.progress?.find((entry) => /^planner prompt budget \d+ approx tokens \/ \d+ bytes$/.test(entry)) ??
     null,
   plannerPhotoSelectionProgress:
     run?.progress?.find((entry) =>

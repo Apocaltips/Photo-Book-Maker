@@ -19,6 +19,7 @@ function summarizeRun(entry: RunEntry) {
   return {
     completedAt: entry.run.completedAt,
     modelNames: entry.run.modelNames,
+    plannerDiagnostics: entry.run.plannerDiagnostics ?? null,
     projectId: entry.project.id,
     projectRevision: entry.project.revision ?? 1,
     projectTitle: entry.project.title,

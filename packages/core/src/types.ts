@@ -402,6 +402,29 @@ export interface BookGenerationQualityReport {
   warnings: string[];
 }
 
+export interface PlannerAttemptDiagnostic {
+  elapsedMs: number;
+  errorMessage?: string;
+  model: string;
+  numCtx?: number;
+  numPredict?: number;
+  outcome: "accepted" | "failed";
+  role: "primary" | "fallback" | "deterministic";
+  timeoutMs?: number;
+}
+
+export interface PlannerDiagnostics {
+  approvedPhotoCount: number;
+  attemptCount: number;
+  attempts: PlannerAttemptDiagnostic[];
+  finalPlannerModel: string;
+  plannerCandidateCount: number;
+  promptApproxTokens: number;
+  promptBytes: number;
+  usedDeterministicFallback: boolean;
+  usedFallback: boolean;
+}
+
 export interface GenerationRun {
   completedAt?: string;
   errorMessage?: string;
@@ -411,6 +434,7 @@ export interface GenerationRun {
     vision: string;
     fallbackPlanner?: string;
   };
+  plannerDiagnostics?: PlannerDiagnostics;
   progress: string[];
   qualityReport?: BookGenerationQualityReport;
   savedDraftVersionId?: string;

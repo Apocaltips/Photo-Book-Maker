@@ -11,8 +11,11 @@ import {
   type GenerationRun,
   type PhotoAsset,
   type PhotoInsight,
+  type PlannerAttemptDiagnostic,
+  type PlannerDiagnostics,
   type Project,
 } from "@photo-book-maker/core";
+import { Buffer } from "node:buffer";
 import sharp from "sharp";
 import { readStoredObjectBuffer } from "@/lib/server/object-storage";
 
@@ -125,6 +128,46 @@ function parsePlannerContent(content: string) {
     const message = error instanceof Error ? error.message : "unknown parse error";
     throw new Error(`${message}. Response preview: ${content.slice(0, 1200)}`);
   }
+}
+
+function getApproxTokenCount(value: string) {
+  return Math.ceil(value.length / 4);
+}
+
+function formatPlannerAttemptProgress(attempt: PlannerAttemptDiagnostic) {
+  const role = attempt.role === "deterministic" ? "deterministic fallback" : `${attempt.role} planner`;
+  const budget = [
+    attempt.timeoutMs ? `timeout ${attempt.timeoutMs}ms` : null,
+    attempt.numCtx ? `num_ctx ${attempt.numCtx}` : null,
+    attempt.numPredict ? `num_predict ${attempt.numPredict}` : null,
+  ]
+    .filter(Boolean)
+    .join(", ");
+  const suffix = budget ? ` (${budget})` : "";
+
+  return `${role} ${attempt.model} ${attempt.outcome} after ${attempt.elapsedMs}ms${suffix}`;
+}
+
+function buildPlannerDiagnostics(input: {
+  attempts: PlannerAttemptDiagnostic[];
+  finalPlannerModel: string;
+  photoSelection: {
+    approvedPhotoCount: number;
+    plannerCandidateCount: number;
+  };
+  promptText: string;
+}): PlannerDiagnostics {
+  return {
+    approvedPhotoCount: input.photoSelection.approvedPhotoCount,
+    attemptCount: input.attempts.length,
+    attempts: input.attempts,
+    finalPlannerModel: input.finalPlannerModel,
+    plannerCandidateCount: input.photoSelection.plannerCandidateCount,
+    promptApproxTokens: getApproxTokenCount(input.promptText),
+    promptBytes: Buffer.byteLength(input.promptText),
+    usedDeterministicFallback: input.finalPlannerModel === "deterministic-editorial-fallback",
+    usedFallback: input.finalPlannerModel !== LOCAL_AI_PLANNER_MODEL,
+  };
 }
 
 type GenerationRunInput = {
@@ -1240,6 +1283,9 @@ async function requestPlannerPlan(input: {
   run: GenerationRun;
 }) {
   const plannerPrompt = buildPlannerPrompt(input);
+  const plannerPromptText = JSON.stringify(plannerPrompt);
+  const attempts: PlannerAttemptDiagnostic[] = [];
+  const primaryStartedAt = Date.now();
   const messages: OllamaChatMessage[] = [
     {
       role: "system",
@@ -1248,7 +1294,7 @@ async function requestPlannerPlan(input: {
     },
     {
       role: "user",
-      content: JSON.stringify(plannerPrompt),
+      content: plannerPromptText,
     },
   ];
 
@@ -1274,8 +1320,23 @@ async function requestPlannerPlan(input: {
       new Set(plannerPrompt.templateCatalog.spreadTemplates.map((template) => template.id)),
     );
     const planPhotoSelection = summarizePlanPhotoSelection(enforcedPlan.plan, candidatePhotoIds);
+    attempts.push({
+      elapsedMs: Date.now() - primaryStartedAt,
+      model: LOCAL_AI_PLANNER_MODEL,
+      numCtx: PLANNER_NUM_CTX,
+      numPredict: PRIMARY_PLANNER_NUM_PREDICT,
+      outcome: "accepted",
+      role: "primary",
+      timeoutMs: PRIMARY_PLANNER_TIMEOUT_MS,
+    });
 
     return {
+      diagnostics: buildPlannerDiagnostics({
+        attempts,
+        finalPlannerModel: LOCAL_AI_PLANNER_MODEL,
+        photoSelection: plannerPrompt.photoSelection,
+        promptText: plannerPromptText,
+      }),
       model: LOCAL_AI_PLANNER_MODEL,
       photoSelection: plannerPrompt.photoSelection,
       plan: enforcedPlan.plan,
@@ -1283,12 +1344,33 @@ async function requestPlannerPlan(input: {
       warnings: enforcedPlan.warnings,
     };
   } catch (primaryError) {
-    const fallbackWarning = `${LOCAL_AI_PLANNER_MODEL} planner failed, attempting ${LOCAL_AI_FALLBACK_PLANNER_MODEL}: ${
-      primaryError instanceof Error ? primaryError.message : "unknown error"
-    }`;
+    const primaryErrorMessage =
+      primaryError instanceof Error ? primaryError.message : "unknown error";
+    const lastPrimaryAttempt = attempts.find(
+      (attempt) => attempt.role === "primary" && attempt.model === LOCAL_AI_PLANNER_MODEL,
+    );
+    if (!lastPrimaryAttempt) {
+      attempts.push({
+        elapsedMs: Date.now() - primaryStartedAt,
+        errorMessage: primaryErrorMessage,
+        model: LOCAL_AI_PLANNER_MODEL,
+        numCtx: PLANNER_NUM_CTX,
+        numPredict: PRIMARY_PLANNER_NUM_PREDICT,
+        outcome: "failed",
+        role: "primary",
+        timeoutMs: PRIMARY_PLANNER_TIMEOUT_MS,
+      });
+    }
+    const failedPrimaryAttempt = attempts.find(
+      (attempt) => attempt.role === "primary" && attempt.outcome === "failed",
+    );
+    const fallbackWarning = `${LOCAL_AI_PLANNER_MODEL} planner failed after ${
+      failedPrimaryAttempt?.elapsedMs ?? PRIMARY_PLANNER_TIMEOUT_MS
+    }ms (timeout ${PRIMARY_PLANNER_TIMEOUT_MS}ms, num_ctx ${PLANNER_NUM_CTX}, num_predict ${PRIMARY_PLANNER_NUM_PREDICT}), attempting ${LOCAL_AI_FALLBACK_PLANNER_MODEL}: ${primaryErrorMessage}`;
 
     if (LOCAL_AI_FALLBACK_PLANNER_MODEL === LOCAL_AI_PLANNER_MODEL) {
       const warning = `${fallbackWarning}; skipped duplicate fallback attempt because planner and fallback model are both ${LOCAL_AI_PLANNER_MODEL}`;
+      const deterministicStartedAt = Date.now();
       const deterministicPlan = buildDeterministicEditorialPlan({
         aesthetics: input.aesthetics,
         insights: input.insights,
@@ -1297,8 +1379,20 @@ async function requestPlannerPlan(input: {
       });
       const candidatePhotoIds = new Set(plannerPrompt.photos.map((photo) => photo.id));
       const planPhotoSelection = summarizePlanPhotoSelection(deterministicPlan, candidatePhotoIds);
+      attempts.push({
+        elapsedMs: Date.now() - deterministicStartedAt,
+        model: "deterministic-editorial-fallback",
+        outcome: "accepted",
+        role: "deterministic",
+      });
 
       return {
+        diagnostics: buildPlannerDiagnostics({
+          attempts,
+          finalPlannerModel: "deterministic-editorial-fallback",
+          photoSelection: plannerPrompt.photoSelection,
+          promptText: plannerPromptText,
+        }),
         model: "deterministic-editorial-fallback",
         photoSelection: plannerPrompt.photoSelection,
         plan: deterministicPlan,
@@ -1307,6 +1401,7 @@ async function requestPlannerPlan(input: {
       };
     }
 
+    const fallbackStartedAt = Date.now();
     try {
       const content = await postOllamaJson({
         format: "json",
@@ -1329,8 +1424,23 @@ async function requestPlannerPlan(input: {
         new Set(plannerPrompt.templateCatalog.spreadTemplates.map((template) => template.id)),
       );
       const planPhotoSelection = summarizePlanPhotoSelection(enforcedPlan.plan, candidatePhotoIds);
+      attempts.push({
+        elapsedMs: Date.now() - fallbackStartedAt,
+        model: LOCAL_AI_FALLBACK_PLANNER_MODEL,
+        numCtx: PLANNER_NUM_CTX,
+        numPredict: FALLBACK_PLANNER_NUM_PREDICT,
+        outcome: "accepted",
+        role: "fallback",
+        timeoutMs: FALLBACK_PLANNER_TIMEOUT_MS,
+      });
 
       return {
+        diagnostics: buildPlannerDiagnostics({
+          attempts,
+          finalPlannerModel: LOCAL_AI_FALLBACK_PLANNER_MODEL,
+          photoSelection: plannerPrompt.photoSelection,
+          promptText: plannerPromptText,
+        }),
         model: LOCAL_AI_FALLBACK_PLANNER_MODEL,
         photoSelection: plannerPrompt.photoSelection,
         plan: enforcedPlan.plan,
@@ -1338,9 +1448,25 @@ async function requestPlannerPlan(input: {
         warnings: [fallbackWarning, ...enforcedPlan.warnings],
       };
     } catch (fallbackError) {
-      const warning = `${fallbackWarning}; ${LOCAL_AI_FALLBACK_PLANNER_MODEL} fallback failed: ${
-        fallbackError instanceof Error ? fallbackError.message : "unknown error"
-      }`;
+      const fallbackErrorMessage =
+        fallbackError instanceof Error ? fallbackError.message : "unknown error";
+      attempts.push({
+        elapsedMs: Date.now() - fallbackStartedAt,
+        errorMessage: fallbackErrorMessage,
+        model: LOCAL_AI_FALLBACK_PLANNER_MODEL,
+        numCtx: PLANNER_NUM_CTX,
+        numPredict: FALLBACK_PLANNER_NUM_PREDICT,
+        outcome: "failed",
+        role: "fallback",
+        timeoutMs: FALLBACK_PLANNER_TIMEOUT_MS,
+      });
+      const failedFallbackAttempt = attempts.find(
+        (attempt) => attempt.role === "fallback" && attempt.outcome === "failed",
+      );
+      const warning = `${fallbackWarning}; ${LOCAL_AI_FALLBACK_PLANNER_MODEL} fallback failed after ${
+        failedFallbackAttempt?.elapsedMs ?? FALLBACK_PLANNER_TIMEOUT_MS
+      }ms (timeout ${FALLBACK_PLANNER_TIMEOUT_MS}ms, num_ctx ${PLANNER_NUM_CTX}, num_predict ${FALLBACK_PLANNER_NUM_PREDICT}): ${fallbackErrorMessage}`;
+      const deterministicStartedAt = Date.now();
       const deterministicPlan = buildDeterministicEditorialPlan({
         aesthetics: input.aesthetics,
         insights: input.insights,
@@ -1349,8 +1475,20 @@ async function requestPlannerPlan(input: {
       });
       const candidatePhotoIds = new Set(plannerPrompt.photos.map((photo) => photo.id));
       const planPhotoSelection = summarizePlanPhotoSelection(deterministicPlan, candidatePhotoIds);
+      attempts.push({
+        elapsedMs: Date.now() - deterministicStartedAt,
+        model: "deterministic-editorial-fallback",
+        outcome: "accepted",
+        role: "deterministic",
+      });
 
       return {
+        diagnostics: buildPlannerDiagnostics({
+          attempts,
+          finalPlannerModel: "deterministic-editorial-fallback",
+          photoSelection: plannerPrompt.photoSelection,
+          promptText: plannerPromptText,
+        }),
         model: "deterministic-editorial-fallback",
         photoSelection: plannerPrompt.photoSelection,
         plan: deterministicPlan,
@@ -1403,8 +1541,11 @@ export async function generateProjectBookWithLocalAi(
       ...run.modelNames,
       planner: planner.model,
     },
+    plannerDiagnostics: planner.diagnostics,
     progress: [
       ...run.progress,
+      `planner prompt budget ${planner.diagnostics.promptApproxTokens} approx tokens / ${planner.diagnostics.promptBytes} bytes`,
+      ...planner.diagnostics.attempts.map(formatPlannerAttemptProgress),
       `planner saw ${planner.photoSelection.plannerCandidateCount}/${planner.photoSelection.approvedPhotoCount} photo candidates`,
       `planner selected ${planner.planPhotoSelection.validCandidatePhotoCount}/${planner.photoSelection.plannerCandidateCount} valid candidate photo ids before repair`,
       `planner returned ${planner.planPhotoSelection.unknownPhotoCount} unknown photo ids before repair`,
