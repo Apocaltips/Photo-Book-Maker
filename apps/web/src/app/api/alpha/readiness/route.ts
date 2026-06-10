@@ -1,4 +1,8 @@
-import { listTemplateCatalog } from "@photo-book-maker/core";
+import {
+  listTemplateCatalog,
+  type GenerationRun,
+  type Project,
+} from "@photo-book-maker/core";
 import { NextResponse } from "next/server";
 import { getAiWorkerQueueConfig } from "@/lib/server/ai-worker-auth";
 import {
@@ -18,6 +22,18 @@ type ReadinessCheck = {
   name: string;
   status: ReadinessStatus;
 };
+
+type GenerationRunEntry = {
+  project: Project;
+  run: GenerationRun;
+};
+
+const ACTIVE_RUN_STATUSES: GenerationRun["status"][] = [
+  "analyzing_photos",
+  "planning",
+  "queued",
+  "validating",
+];
 
 function getReadinessSecret() {
   return process.env.ALPHA_READINESS_SECRET ?? process.env.TRIGGER_SECRET_KEY ?? "";
@@ -132,6 +148,7 @@ function addTemplateCatalogChecks(checks: ReadinessCheck[]) {
 async function addProjectStoreChecks(
   checks: ReadinessCheck[],
   requireProviders: boolean,
+  readFileStore: boolean,
 ) {
   const mode = getProjectStoreMode();
 
@@ -143,7 +160,7 @@ async function addProjectStoreChecks(
     { mode },
   );
 
-  if (mode !== "supabase") {
+  if (mode !== "supabase" && !readFileStore) {
     addCheck(
       checks,
       requireProviders ? "fail" : "skip",
@@ -153,14 +170,24 @@ async function addProjectStoreChecks(
         : "Skipped file-store read to avoid touching local test data.",
       { mode },
     );
-    return;
+    return null;
   }
 
   try {
     const projects = await readProjects();
-    addCheck(checks, "pass", "project store read", "Supabase project store is readable.", {
-      projectCount: projects.length,
-    });
+    addCheck(
+      checks,
+      "pass",
+      "project store read",
+      mode === "supabase"
+        ? "Supabase project store is readable."
+        : "Local project store is readable for explicit readiness checks.",
+      {
+        mode,
+        projectCount: projects.length,
+      },
+    );
+    return projects;
   } catch (error) {
     addCheck(
       checks,
@@ -168,6 +195,7 @@ async function addProjectStoreChecks(
       "project store read",
       error instanceof Error ? error.message : "Project store read failed.",
     );
+    return null;
   }
 }
 
@@ -304,6 +332,135 @@ function addWorkerChecks(
   }
 }
 
+function getGenerationRunEntries(projects: Project[]) {
+  return projects
+    .flatMap<GenerationRunEntry>((project) =>
+      (project.generationRuns ?? []).map((run) => ({
+        project,
+        run,
+      })),
+    )
+    .sort((left, right) =>
+      String(right.run.startedAt).localeCompare(String(left.run.startedAt)),
+    );
+}
+
+function isActiveGenerationRun(run: GenerationRun) {
+  return ACTIVE_RUN_STATUSES.includes(run.status);
+}
+
+function isStaleGenerationRun(run: GenerationRun) {
+  if (!isActiveGenerationRun(run) || !run.workerLeaseExpiresAt) {
+    return false;
+  }
+
+  return Date.parse(run.workerLeaseExpiresAt) <= Date.now();
+}
+
+function summarizeGenerationRun(entry: GenerationRunEntry | undefined) {
+  if (!entry) {
+    return null;
+  }
+
+  return {
+    completedAt: entry.run.completedAt ?? null,
+    modelNames: entry.run.modelNames,
+    projectId: entry.project.id,
+    projectRevision: entry.project.revision ?? 1,
+    projectTitle: entry.project.title,
+    qualityScore: entry.run.qualityReport?.score ?? null,
+    runId: entry.run.id,
+    startedAt: entry.run.startedAt,
+    status: entry.run.status,
+    validationWarnings: entry.run.validationWarnings.length,
+    workerAttemptCount: entry.run.workerAttemptCount ?? 0,
+    workerLeaseExpiresAt: entry.run.workerLeaseExpiresAt ?? null,
+  };
+}
+
+function addGenerationRunChecks(
+  checks: ReadinessCheck[],
+  projects: Project[] | null,
+  requireSavedGeneration: boolean,
+) {
+  if (!projects) {
+    addCheck(
+      checks,
+      requireSavedGeneration ? "fail" : "skip",
+      "AI generation queue",
+      requireSavedGeneration
+        ? "Project store could not be inspected for generation queue health."
+        : "Generation queue read is skipped for this readiness mode.",
+    );
+    return;
+  }
+
+  const runs = getGenerationRunEntries(projects);
+  const activeRuns = runs.filter((entry) => isActiveGenerationRun(entry.run));
+  const staleRuns = activeRuns.filter((entry) => isStaleGenerationRun(entry.run));
+  const savedRuns = runs.filter((entry) => entry.run.status === "saved");
+  const failedRuns = runs.filter((entry) => entry.run.status === "failed");
+  const latestRun = summarizeGenerationRun(runs[0]);
+  const lastSavedRun = summarizeGenerationRun(savedRuns[0]);
+  const queueEvidence = {
+    activeRuns: activeRuns.length,
+    failedRuns: failedRuns.length,
+    latestRun,
+    savedRuns: savedRuns.length,
+    staleRuns: staleRuns.length,
+    totalRuns: runs.length,
+  };
+
+  addCheck(
+    checks,
+    activeRuns.length || staleRuns.length ? "fail" : "pass",
+    "AI generation queue",
+    activeRuns.length || staleRuns.length
+      ? "Generation queue has active or stale runs; wait or fail them before tester sessions."
+      : "Generation queue has no active or stale runs.",
+    queueEvidence,
+  );
+
+  const minQualityScore = parseMinEnv("ALPHA_READINESS_MIN_QUALITY_SCORE", 75);
+  const qualityScore = lastSavedRun?.qualityScore;
+  const qualityEvidence = {
+    lastSavedRun,
+    minQualityScore,
+  };
+
+  if (!lastSavedRun) {
+    addCheck(
+      checks,
+      requireSavedGeneration ? "fail" : "skip",
+      "AI saved generation quality",
+      requireSavedGeneration
+        ? "Hosted alpha requires at least one saved AI generation before inviting testers."
+        : "No saved generation quality gate is required for this mode.",
+      qualityEvidence,
+    );
+    return;
+  }
+
+  if (typeof qualityScore !== "number") {
+    addCheck(
+      checks,
+      requireSavedGeneration ? "fail" : "warn",
+      "AI saved generation quality",
+      "The latest saved generation does not include a quality report.",
+      qualityEvidence,
+    );
+    return;
+  }
+
+  addCheck(
+    checks,
+    qualityScore >= minQualityScore ? "pass" : "fail",
+    "AI saved generation quality",
+    `Latest saved generation quality score is ${qualityScore}/100.`,
+    qualityEvidence,
+  );
+}
+
 export async function GET(request: Request) {
   const unauthorized = authorizeReadinessRequest(request);
   if (unauthorized) {
@@ -319,13 +476,25 @@ export async function GET(request: Request) {
     process.env.ALPHA_READINESS_REQUIRE_WORKER === "1" ||
     mode === "hosted" ||
     mode === "provider";
+  const rawRequireSavedGeneration = process.env.ALPHA_READINESS_REQUIRE_SAVED_RUN;
+  const requireSavedGeneration =
+    rawRequireSavedGeneration === "1" ||
+    (rawRequireSavedGeneration !== "0" && requireProviders);
+  const readProjectStoreForRuns =
+    requireSavedGeneration ||
+    process.env.ALPHA_READINESS_REQUIRE_GENERATION_QUEUE === "1";
   const checks: ReadinessCheck[] = [];
 
   addTemplateCatalogChecks(checks);
   addAuthChecks(checks, requireProviders);
   addStorageChecks(checks, requireProviders);
   addWorkerChecks(checks, mode, requireWorker);
-  await addProjectStoreChecks(checks, requireProviders);
+  const projects = await addProjectStoreChecks(
+    checks,
+    requireProviders,
+    readProjectStoreForRuns,
+  );
+  addGenerationRunChecks(checks, projects, requireSavedGeneration);
 
   const failCount = checks.filter((check) => check.status === "fail").length;
   const warnCount = checks.filter((check) => check.status === "warn").length;

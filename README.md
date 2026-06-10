@@ -109,11 +109,16 @@ npm run test:alpha:readiness
 
 Hosted readiness calls the protected `/api/alpha/readiness` route so the
 deployed app reports its own Supabase, R2, project-store, template-catalog, and
-private-worker configuration. The route returns only booleans, counts, mode
-names, and missing variable names; it never returns secret values. In hosted
-mode the CLI skips caller-env checks by default because the local shell may not
-match Vercel. Set `ALPHA_READINESS_CHECK_CALLER_ENV=1` when you also want to
-verify this PC's worker-side environment before a tester session.
+private-worker configuration. In hosted mode it also inspects the deployed
+project store for active/stale generation runs and requires the latest saved
+AI generation to have a quality score at or above
+`ALPHA_READINESS_MIN_QUALITY_SCORE` unless
+`ALPHA_READINESS_REQUIRE_SAVED_RUN=0` is set intentionally. The route returns
+only booleans, counts, mode names, and missing variable names; it never returns
+secret values. In hosted mode the CLI skips caller-env checks by default
+because the local shell may not match Vercel. Set
+`ALPHA_READINESS_CHECK_CALLER_ENV=1` when you also want to verify this PC's
+worker-side environment before a tester session.
 
 6. In a second terminal, start Expo:
 

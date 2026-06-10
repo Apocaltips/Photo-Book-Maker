@@ -273,8 +273,9 @@ async function assertAlphaReadinessRoute() {
   const hasWorkerCheck = checks.some(
     (check) => check.name === "private AI worker queue" && check.status === "pass",
   );
+  const hasAiQueueCheck = checks.some((check) => check.name === "AI generation queue");
 
-  if (!hasTemplateCheck || !hasStoreModeCheck || !hasWorkerCheck) {
+  if (!hasTemplateCheck || !hasStoreModeCheck || !hasWorkerCheck || !hasAiQueueCheck) {
     throw new Error(
       `Alpha readiness route did not return expected checks.\n${JSON.stringify(body, null, 2)}`,
     );

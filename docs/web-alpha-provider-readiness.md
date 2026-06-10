@@ -114,7 +114,12 @@ testing. For the hosted family/friend alpha gate, set
 `ALPHA_READINESS_SECRET` to the same value configured on the hosted app. Hosted
 mode skips local caller-env checks by default and relies on the protected
 app-side readiness route; set `ALPHA_READINESS_CHECK_CALLER_ENV=1` when you
-also want to verify this PC's worker-side env before inviting testers.
+also want to verify this PC's worker-side env before inviting testers. In
+hosted mode, the protected app-side route also inspects the deployed project
+store for active/stale generation runs and requires the latest saved AI
+generation to include a quality score at or above
+`ALPHA_READINESS_MIN_QUALITY_SCORE` unless
+`ALPHA_READINESS_REQUIRE_SAVED_RUN=0` is set intentionally.
 `npm run test:ai:health` expects the web app to be running and Ollama to have
 the required models installed.
 `npm run test:ai:local` expects a reachable Cap Cana-style test project unless

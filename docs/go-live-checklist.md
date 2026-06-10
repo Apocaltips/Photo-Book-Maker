@@ -99,7 +99,8 @@ The authoritative API for v1 is the Next.js app in `apps/web`.
     `ALPHA_READINESS_BASE_URL=https://YOUR-WEB-APP`, and
     `ALPHA_READINESS_SECRET` set in the local shell. Hosted mode calls the
     protected `/api/alpha/readiness` route so the deployed app proves its own
-    Supabase, R2, project-store, template-catalog, and private-worker setup.
+    Supabase, R2, project-store, template-catalog, private-worker setup,
+    clean generation queue state, and latest saved AI generation quality score.
     Treat any failed check as a no-go for family/friend testers.
 
 ## 5. Point Mobile At The Hosted API
