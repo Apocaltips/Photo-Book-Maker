@@ -98,6 +98,11 @@ Worker bridge v1:
   Preflight verifies the processor URL is loopback/LAN/private and checks the
   local processor's `/api/ai/local/health` route so a hosted job is not claimed
   before Ollama and the required models are reachable.
+- Run `npm run test:worker:preflight` after any worker env or bridge changes.
+  The smoke test does not call Ollama or hosted services; it verifies required
+  worker secret handling, loopback/LAN processor acceptance, public processor
+  rejection, and the explicit `LOCAL_AI_WORKER_ALLOW_HOSTED_PROCESSOR=1`
+  override path.
 - The worker calls `/api/ai/worker/generation/claim`, processes the payload
   through `/api/ai/worker/generation/process` on the private PC, then posts to
   `/api/ai/worker/generation/complete` or `/api/ai/worker/generation/fail`.
@@ -136,6 +141,7 @@ npm run build
 npm run test:alpha:readiness
 npm run test:e2e:web
 npm run test:ai:health
+npm run test:worker:preflight
 npm run test:proof:quality
 ```
 

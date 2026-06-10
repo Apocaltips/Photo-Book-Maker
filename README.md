@@ -83,6 +83,9 @@ npm run worker:ai:local
 Use `LOCAL_AI_WORKER_PREFLIGHT_ONLY=1` first. It verifies the processor URL is
 loopback/LAN/private and checks `/api/ai/local/health` so the worker does not
 claim a hosted job before local Ollama and the required models are reachable.
+Run `npm run test:worker:preflight` when changing worker environment handling;
+it checks the no-network preflight path, required secret, private processor URL
+guard, and the explicit hosted-processor override.
 Use `LOCAL_AI_WORKER_LOOP=1` for continuous polling after preflight passes. The
 hosted app queues the job; the private worker claims it, runs local Ollama
 through the local processor app, heartbeats while the local models are running,
@@ -176,6 +179,7 @@ See:
 npm run test
 npm run test:e2e:web
 npm run test:ai:health
+npm run test:worker:preflight
 npm run test:proof:quality
 npm run typecheck
 npm run lint

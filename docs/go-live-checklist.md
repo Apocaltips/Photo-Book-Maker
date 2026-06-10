@@ -109,7 +109,17 @@ The authoritative API for v1 is the Next.js app in `apps/web`.
 4. Confirm `https://YOUR-WEB-APP/api/templates` returns at least 12 book template packs and 64 spread templates.
 5. In local/staging, confirm `/ai-health` shows the local AI models are ready, queue health is clean, and the latest saved generation has an acceptable quality score before using AI Designer with testers.
 6. For hosted web alpha, configure `LOCAL_AI_WORKER_SECRET` and `LOCAL_AI_WORKER_ENABLED=1` on the hosted app. Keep `LOCAL_AI_DIRECT_IN_PRODUCTION=0` so Vercel never tries to call local Ollama directly.
-7. On the private PC, run the local web app with Ollama and storage credentials, then run `npm run worker:ai:local` with `LOCAL_AI_WORKER_PREFLIGHT_ONLY=1`, `LOCAL_AI_WORKER_HOSTED_BASE_URL` pointed at the hosted app, and `LOCAL_AI_WORKER_PROCESSOR_BASE_URL` pointed at the local app. Preflight must pass before continuous polling starts. Leave `LOCAL_AI_WORKER_HEARTBEAT_MS=60000`, `LOCAL_AI_WORKER_REQUEST_TIMEOUT_MS=30000`, `LOCAL_AI_WORKER_PROCESS_TIMEOUT_MS=3600000`, `LOCAL_AI_WORKER_MAX_ATTEMPTS=3`, and the 60-3600 second lease window unless a benchmark proves the hosted queue needs different values.
+7. On the private PC, run `npm run test:worker:preflight`, then run the local
+   web app with Ollama and storage credentials and run
+   `npm run worker:ai:local` with `LOCAL_AI_WORKER_PREFLIGHT_ONLY=1`,
+   `LOCAL_AI_WORKER_HOSTED_BASE_URL` pointed at the hosted app, and
+   `LOCAL_AI_WORKER_PROCESSOR_BASE_URL` pointed at the local app. Preflight
+   must pass before continuous polling starts. Leave
+   `LOCAL_AI_WORKER_HEARTBEAT_MS=60000`,
+   `LOCAL_AI_WORKER_REQUEST_TIMEOUT_MS=30000`,
+   `LOCAL_AI_WORKER_PROCESS_TIMEOUT_MS=3600000`,
+   `LOCAL_AI_WORKER_MAX_ATTEMPTS=3`, and the 60-3600 second lease window unless
+   a benchmark proves the hosted queue needs different values.
 8. Run the local AI benchmark and keep the generated report path with tester-session notes. If the benchmark used the fallback planner or deterministic safe fallback, record that explicitly instead of treating it as a primary-planner pass.
 9. Before inviting testers, confirm `/ai-health` shows `Stale runs = 0`; any run that exceeds `LOCAL_AI_WORKER_MAX_ATTEMPTS` should appear as failed instead of staying active.
 10. Configure `ALPHA_READINESS_SECRET` on the hosted app, then run
@@ -258,6 +268,7 @@ npm run test
 npm run test:alpha:readiness
 npm run test:e2e:web
 npm run test:ai:health
+npm run test:worker:preflight
 npm run test:proof:quality
 npm run typecheck
 npm run lint
