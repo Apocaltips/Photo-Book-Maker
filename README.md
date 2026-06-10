@@ -148,6 +148,7 @@ See:
 npm run test
 npm run test:e2e:web
 npm run test:ai:health
+npm run test:proof:quality
 npm run typecheck
 npm run lint
 npm run build
@@ -172,10 +173,21 @@ and opt into live-store mutation.
 `npm run test:ai:local` still targets the current app and requires explicit
 opt-in because it saves a generation run to the selected project:
 
+`npm run test:proof:quality` is read-only by default. It boots an isolated
+copy of `apps/web/data/projects.json` and `apps/web/data/local-uploads`, fetches
+the selected project's print proof, checks that object-storage photos are
+re-signed into the proof, verifies rendered image URLs, and fails sparse or
+repetitive books with unsupported templates, duplicate photos, missing safe-area
+guides, placeholder copy, overfilled pages, or same-corner caption rhythm. Set
+`PROOF_QUALITY_PROJECT_ID` or `PROOF_QUALITY_PROJECT_TITLE` to target a specific
+book.
+
 ```powershell
 npm run test:ai:benchmark
+npm run test:proof:quality
 $env:AI_BENCHMARK_PROJECT_IDS="trip-cap-cana-2026-trip-full-album,trip-madeira-island-60-photo-trip-1781039520416"; npm run test:ai:benchmark
 $env:AI_GENERATION_PROJECT_ID="trip-madeira-island-60-photo-trip-1781039520416"; $env:AI_GENERATION_CONTEXT_LABEL="Madeira"; $env:AI_GENERATION_CONTEXT_TERMS="madeira"; npm run test:ai:benchmark
+$env:PROOF_QUALITY_PROJECT_ID="trip-madeira-island-60-photo-trip-1781039520416"; $env:PROOF_QUALITY_CONTEXT_TERMS="madeira"; npm run test:proof:quality
 $env:AI_BENCHMARK_ISOLATED="0"; $env:AI_GENERATION_ALLOW_EXISTING_STORE="1"; npm run test:ai:benchmark
 $env:AI_GENERATION_ALLOW_EXISTING_STORE="1"; npm run test:ai:local
 ```

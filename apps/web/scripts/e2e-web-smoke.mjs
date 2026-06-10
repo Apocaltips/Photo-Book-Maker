@@ -1,6 +1,6 @@
 /* global AbortSignal, Buffer, console, fetch, process, setTimeout */
 import { spawn } from "node:child_process";
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 
@@ -217,6 +217,27 @@ async function workerApiJson(path, init = {}) {
   }
 
   return body;
+}
+
+async function expireStoredPhotoImageUri(projectId, photoId) {
+  if (!fileStoreDir) {
+    return null;
+  }
+
+  const projectStorePath = path.join(fileStoreDir, "projects.json");
+  const projects = JSON.parse(await readFile(projectStorePath, "utf8"));
+  const project = projects.find((entry) => entry.id === projectId);
+  const photo = project?.photos?.find((entry) => entry.id === photoId);
+
+  if (!photo) {
+    throw new Error(`Could not find uploaded photo ${photoId} in isolated project store.`);
+  }
+
+  const staleUri = `expired://signed-url/${photoId}`;
+  photo.imageUri = staleUri;
+  await writeFile(projectStorePath, `${JSON.stringify(projects, null, 2)}\n`, "utf8");
+
+  return staleUri;
 }
 
 async function assertAlphaReadinessRoute() {
@@ -675,6 +696,10 @@ async function runProjectE2E() {
   ) {
     throw new Error("Duplicate photo import was not skipped without a revision change.");
   }
+  const uploadedPhotoId = project.photos[0]?.id;
+  const staleProofImageUri = uploadedPhotoId
+    ? await expireStoredPhotoImageUri(project.id, uploadedPhotoId)
+    : null;
 
   project = (
     await apiJson(`/api/projects/${project.id}/notes`, {
@@ -751,6 +776,16 @@ async function runProjectE2E() {
 
   if (!proof.html?.includes("Travel photo book") || !proof.html?.includes("Safe text area")) {
     throw new Error("Proof export did not include expected customer-facing proof HTML.");
+  }
+  if (staleProofImageUri && proof.html.includes(staleProofImageUri)) {
+    throw new Error("Proof export reused an expired stored photo URL instead of a fresh read URL.");
+  }
+  const proofStoragePath = upload.storagePath
+    .split("/")
+    .map((segment) => encodeURIComponent(segment))
+    .join("/");
+  if (!proof.html.includes(proofStoragePath)) {
+    throw new Error("Proof export did not render the uploaded photo from object storage.");
   }
   const proofSheetCount = proof.html.match(/class="sheet/g)?.length ?? 0;
   if (proofSheetCount < project.bookDraft.pages.length + 1) {

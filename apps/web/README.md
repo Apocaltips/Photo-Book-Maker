@@ -25,12 +25,19 @@ Open [http://localhost:3000](http://localhost:3000) with your browser.
 
 ```bash
 npm run test:e2e
+npm run test:proof:quality
 ```
 
 The smoke boots Next locally, verifies the root page, verifies `/api/templates`, and checks that protected proof routes require auth.
 
 When Supabase and object storage are not configured, local development runs with a dev-only tester identity and local upload storage. The E2E script uses an isolated temp store so it does not write test projects into `apps/web/data/projects.json`.
 To intentionally run the smoke against an already-running app, set `E2E_WEB_BASE_URL` or `E2E_WEB_REUSE_EXISTING=1`.
+
+`npm run test:proof:quality` also uses an isolated temp store by default. It
+fetches the print proof for the Cap Cana/generated target, verifies image URLs
+load, confirms proof export rehydrates object-storage photos instead of reusing
+stale signed URLs, and fails books that are sparse, repetitive, unsupported, or
+missing print-safe visual treatment.
 
 ## Local AI Designer Smoke
 

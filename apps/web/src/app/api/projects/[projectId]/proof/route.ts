@@ -29,12 +29,13 @@ export async function GET(
   }
 
   const proofRequest = getProofRequest(projectId, request);
+  const project = await hydrateProjectForClient(auth.project, getRequestOrigin(request));
 
   return NextResponse.json({
-    html: buildProofHtml(auth.project, proofRequest),
+    html: buildProofHtml(project, proofRequest),
     proofRequest,
     projectId,
-    revision: auth.project.revision ?? 1,
+    revision: project.revision ?? 1,
   });
 }
 
@@ -77,10 +78,11 @@ export async function POST(
     if (!project) {
       return NextResponse.json({ message: "Project not found." }, { status: 404 });
     }
+    const hydratedProject = await hydrateProjectForClient(project, getRequestOrigin(request));
 
     return NextResponse.json({
-      html: buildProofHtml(project, proofRequest),
-      project: await hydrateProjectForClient(project, getRequestOrigin(request)),
+      html: buildProofHtml(hydratedProject, proofRequest),
+      project: hydratedProject,
       proofRequest,
     });
   } catch (error) {

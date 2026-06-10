@@ -102,6 +102,7 @@ npm run build
 npm run test:alpha:readiness
 npm run test:e2e:web
 npm run test:ai:health
+npm run test:proof:quality
 ```
 
 `npm run test:alpha:readiness` is read-only. It expects the web app to be
@@ -118,6 +119,12 @@ also want to verify this PC's worker-side env before inviting testers.
 the required models installed.
 `npm run test:ai:local` expects a reachable Cap Cana-style test project unless
 `AI_GENERATION_PROJECT_ID` points at another test project.
+`npm run test:proof:quality` is read-only by default: it copies the current
+local project store and local uploads into a temp directory, starts a private
+Next server, fetches the print proof, verifies rendered image URLs, confirms
+fresh object-storage read URLs are used, and blocks sparse/repetitive proofs
+with duplicate photos, unsupported templates, placeholder copy, overfilled
+pages, missing safe-area guides, or same-position caption rhythm.
 `npm run test:ai:benchmark` is isolated by default: it copies the current local
 project store and local uploads into a temp directory, starts a private Next
 server, runs generation, writes the report, and deletes the temp store. Stop any
@@ -136,6 +143,7 @@ outside tester sessions:
 
 ```powershell
 $env:AI_BENCHMARK_PROJECT_IDS="trip-cap-cana-2026-trip-full-album,trip-madeira-island-60-photo-trip-1781039520416"; npm run test:ai:benchmark
+$env:PROOF_QUALITY_PROJECT_ID="trip-madeira-island-60-photo-trip-1781039520416"; $env:PROOF_QUALITY_CONTEXT_TERMS="madeira"; npm run test:proof:quality
 ```
 
 Use live-store mutation only when explicitly needed:
