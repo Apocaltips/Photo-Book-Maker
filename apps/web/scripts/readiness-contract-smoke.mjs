@@ -11,6 +11,10 @@ import {
 
 const envExampleUrl = new URL("../../../.env.example", import.meta.url);
 const supabaseSchemaUrl = new URL("../../../docs/supabase-photo-book-schema.sql", import.meta.url);
+const alphaReadinessRouteUrl = new URL(
+  "../src/app/api/alpha/readiness/route.ts",
+  import.meta.url,
+);
 
 function assert(condition, message) {
   if (!condition) {
@@ -61,6 +65,7 @@ function assertSqlContains(sql, expected) {
 
 const envExample = await readFile(envExampleUrl, "utf8");
 const supabaseSchema = normalizeSql(await readFile(supabaseSchemaUrl, "utf8"));
+const alphaReadinessRoute = await readFile(alphaReadinessRouteUrl, "utf8");
 const envKeys = getEnvExampleKeys(envExample);
 const missingEnvExampleKeys = getReadinessContractEnvNames().filter((key) => !envKeys.has(key));
 
@@ -97,6 +102,14 @@ assertSqlContains(
 assertSqlContains(
   supabaseSchema,
   "revoke execute on function public.touch_photo_book_project_updated_at() from authenticated",
+);
+assert(
+  alphaReadinessRoute.includes("direct Supabase project table access"),
+  "Alpha readiness route must include the direct Supabase project table access probe.",
+);
+assert(
+  alphaReadinessRoute.includes("isDirectAccessDenied"),
+  "Alpha readiness route must fail closed unless the anon direct-access probe is denied.",
 );
 
 assert(!shouldRequireProviderInfrastructure("local", {}), "local mode must not require providers");

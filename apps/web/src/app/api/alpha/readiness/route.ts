@@ -3,6 +3,7 @@ import {
   type GenerationRun,
   type Project,
 } from "@photo-book-maker/core";
+import { createClient } from "@supabase/supabase-js";
 import { NextResponse } from "next/server";
 import {
   collectPhaseTwoProviderChecks,
@@ -32,6 +33,12 @@ type ReadinessCheck = {
 type GenerationRunEntry = {
   project: Project;
   run: GenerationRun;
+};
+
+type SupabaseDirectAccessProbe = {
+  code?: string;
+  message?: string;
+  status?: number;
 };
 
 const ACTIVE_RUN_STATUSES: GenerationRun["status"][] = [
@@ -254,6 +261,87 @@ function addAuthChecks(checks: ReadinessCheck[], requireProviders: boolean) {
       "Auth config is available through fallback env names; NEXT_PUBLIC_SUPABASE_* is preferred for hosted web.",
     );
   }
+}
+
+function isDirectAccessDenied(error: SupabaseDirectAccessProbe | null) {
+  if (!error) {
+    return false;
+  }
+
+  const code = String(error.code ?? "");
+  const message = String(error.message ?? "");
+  return code === "42501" || /permission denied|row-level security|not allowed/i.test(message);
+}
+
+async function addSupabaseDirectAccessChecks(
+  checks: ReadinessCheck[],
+  requireProviders: boolean,
+) {
+  const publicConfig = getPublicSupabaseAuthConfig();
+  const table = process.env.SUPABASE_PROJECTS_TABLE ?? "photo_book_projects";
+
+  if (!publicConfig.supabaseUrl || !publicConfig.supabaseAnonKey) {
+    addCheck(
+      checks,
+      requireProviders ? "fail" : "skip",
+      "direct Supabase project table access",
+      requireProviders
+        ? "Cannot verify direct client table access because public Supabase auth env is missing."
+        : "Direct Supabase table-access probe is skipped without public Supabase auth env.",
+      {
+        hasAnonKey: Boolean(publicConfig.supabaseAnonKey),
+        hasUrl: Boolean(publicConfig.supabaseUrl),
+        table,
+      },
+    );
+    return;
+  }
+
+  const anonClient = createClient(publicConfig.supabaseUrl, publicConfig.supabaseAnonKey, {
+    auth: {
+      autoRefreshToken: false,
+      persistSession: false,
+    },
+  });
+  const { error } = await anonClient.from(table).select("id").limit(1);
+
+  if (isDirectAccessDenied(error)) {
+    addCheck(
+      checks,
+      "pass",
+      "direct Supabase project table access",
+      "Supabase anon client cannot directly read project payload rows.",
+      {
+        code: error?.code ?? null,
+        message: error?.message ?? null,
+        table,
+      },
+    );
+    return;
+  }
+
+  if (error) {
+    addCheck(
+      checks,
+      "fail",
+      "direct Supabase project table access",
+      "Supabase direct-access probe failed for a reason other than denied table access.",
+      {
+        code: error.code ?? null,
+        message: error.message ?? null,
+        table,
+      },
+    );
+    return;
+  }
+
+  addCheck(
+    checks,
+    "fail",
+    "direct Supabase project table access",
+    "Supabase anon client can call the project table endpoint directly; project payloads must stay behind the Next API.",
+    { table },
+  );
 }
 
 function addStorageChecks(checks: ReadinessCheck[], requireProviders: boolean) {
@@ -497,6 +585,7 @@ export async function GET(request: Request) {
 
   addTemplateCatalogChecks(checks);
   addAuthChecks(checks, requireProviders);
+  await addSupabaseDirectAccessChecks(checks, requireProviders);
   addStorageChecks(checks, requireProviders);
   addWorkerChecks(checks, mode, requireWorker);
   addPhaseTwoProviderChecks(checks, mode);
