@@ -108,8 +108,10 @@ Web and mobile clients poll the generation run status after a queued response,
 then refresh the project automatically when the private worker saves or fails
 the draft.
 
-Before inviting outside testers, run the read-only readiness gate against the
-running app:
+Before inviting outside testers, run the read-only readiness gate. In local
+mode, leave `ALPHA_READINESS_BASE_URL` unset to auto-detect a running app or
+start an isolated local server on `ALPHA_READINESS_PORT` (`3225` by default)
+using a temp copy of the local project store:
 
 ```powershell
 $env:ALPHA_READINESS_MODE="local"

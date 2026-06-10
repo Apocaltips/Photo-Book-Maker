@@ -8,9 +8,9 @@ import { createNextDevServerController } from "./lib/next-dev-server.mjs";
 
 const scriptDir = dirname(fileURLToPath(import.meta.url));
 const port = process.env.LOCAL_AI_HEALTH_PORT ?? "3224";
-const explicitBaseUrl = process.env.LOCAL_AI_HEALTH_BASE_URL;
+const explicitBaseUrl = process.env.LOCAL_AI_HEALTH_BASE_URL?.trim() ?? "";
 const defaultBaseUrl = `http://127.0.0.1:${port}`;
-const baseUrl = (explicitBaseUrl ?? defaultBaseUrl).replace(/\/$/, "");
+const baseUrl = (explicitBaseUrl || defaultBaseUrl).replace(/\/$/, "");
 const sourceDataDir = process.env.LOCAL_AI_HEALTH_SOURCE_DATA_DIR
   ? resolve(process.env.LOCAL_AI_HEALTH_SOURCE_DATA_DIR)
   : resolve(scriptDir, "../data");

@@ -143,8 +143,10 @@ The authoritative API for v1 is the Next.js app in `apps/web`.
 8. Run the local AI benchmark and keep the generated report path with tester-session notes. If the benchmark used the fallback planner or deterministic safe fallback, record that explicitly instead of treating it as a primary-planner pass.
 9. Before inviting testers, confirm `/ai-health` shows `Stale runs = 0`; any run that exceeds `LOCAL_AI_WORKER_MAX_ATTEMPTS` should appear as failed instead of staying active.
 10. Configure `ALPHA_READINESS_SECRET` on the hosted app, then run
-    `npm run test:alpha:readiness` in local mode. After deployment, rerun it
-    with `ALPHA_READINESS_MODE=hosted`,
+    `npm run test:alpha:readiness` in local mode. Leave
+    `ALPHA_READINESS_BASE_URL` unset for the local gate so it auto-detects a
+    running app or starts an isolated local server with a temp copy of the
+    project store. After deployment, rerun it with `ALPHA_READINESS_MODE=hosted`,
     `ALPHA_READINESS_BASE_URL=https://YOUR-WEB-APP`, and
     `ALPHA_READINESS_SECRET` set in the local shell. Hosted mode calls the
     protected `/api/alpha/readiness` route so the deployed app proves its own
@@ -320,11 +322,12 @@ companion `*-proof-quality.json`, and combined `*-summary.json` reports, and
 removes the temp store. Keep the summary and companion report paths with
 tester-session notes:
 
-`npm run test:ai:health` is also safe to run from a cold local checkout. Without
-`LOCAL_AI_HEALTH_BASE_URL`, it auto-detects a running app or starts an isolated
-local server on `LOCAL_AI_HEALTH_PORT` and verifies Ollama, model availability,
-queue state, and latest saved-run quality against a temp copy of the local
-project store.
+`npm run test:alpha:readiness` and `npm run test:ai:health` are safe to run
+from a cold local checkout. Without `ALPHA_READINESS_BASE_URL` or
+`LOCAL_AI_HEALTH_BASE_URL`, they auto-detect a running app or start isolated
+local servers on `ALPHA_READINESS_PORT` / `LOCAL_AI_HEALTH_PORT` and verify the
+app, Ollama, model availability, queue state, and latest saved-run quality
+against temp copies of the local project store.
 
 ```powershell
 npm run test:ai:alpha-benchmark

@@ -207,11 +207,15 @@ For the Phase 2 direct-print gate, run:
 npm run test:provider:readiness
 ```
 
-`npm run test:alpha:readiness` is read-only. It expects the web app to be
-running and checks the home page, auth gate, template catalog, local AI health
-in local mode, stale queue state, worker bridge config, and provider env
-requirements for the selected mode. Use `ALPHA_READINESS_MODE=local` for local
-testing. For the hosted family/friend alpha gate, set
+`npm run test:alpha:readiness` is read-only. In local mode, when
+`ALPHA_READINESS_BASE_URL` is not set, it auto-detects a running Photo Book
+Maker web app or starts an isolated local server on `ALPHA_READINESS_PORT`
+(`3225` by default) with a temp copy of the local project store/uploads. It
+checks the home page, auth gate, template catalog, local AI health, stale queue
+state, worker bridge config, and provider env requirements for the selected
+mode without mutating `apps/web/data/projects.json`. Use
+`ALPHA_READINESS_MODE=local` for local testing. For the hosted family/friend
+alpha gate, set
 `ALPHA_READINESS_MODE=hosted`, `ALPHA_READINESS_BASE_URL=https://...`, and
 `ALPHA_READINESS_SECRET` to the same strong value configured on the hosted app.
 Hosted

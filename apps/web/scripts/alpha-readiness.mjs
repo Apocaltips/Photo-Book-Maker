@@ -1,6 +1,8 @@
 /* global AbortSignal, URL, console, fetch, process */
-import { mkdir, writeFile } from "node:fs/promises";
-import { dirname } from "node:path";
+import { access, copyFile, cp, mkdtemp, mkdir, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { dirname, join, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 import {
   collectPhaseTwoProviderChecks,
   getMissingEnv,
@@ -8,11 +10,16 @@ import {
   shouldRequirePrivateWorker,
   shouldRequireProviderInfrastructure,
 } from "../src/lib/alpha-readiness-contract.js";
+import { createNextDevServerController } from "./lib/next-dev-server.mjs";
 
-const baseUrl = (process.env.ALPHA_READINESS_BASE_URL ?? "http://127.0.0.1:3000").replace(
-  /\/$/,
-  "",
-);
+const scriptDir = dirname(fileURLToPath(import.meta.url));
+const explicitBaseUrl = process.env.ALPHA_READINESS_BASE_URL?.trim() ?? "";
+const port = process.env.ALPHA_READINESS_PORT ?? "3225";
+const defaultBaseUrl = `http://127.0.0.1:${port}`;
+let activeBaseUrl = (explicitBaseUrl || defaultBaseUrl).replace(/\/$/, "");
+const sourceDataDir = process.env.ALPHA_READINESS_SOURCE_DATA_DIR
+  ? resolve(process.env.ALPHA_READINESS_SOURCE_DATA_DIR)
+  : resolve(scriptDir, "../data");
 const reportPath = process.env.ALPHA_READINESS_REPORT_PATH;
 const mode = (process.env.ALPHA_READINESS_MODE ?? "local").toLowerCase();
 const strict = process.env.ALPHA_READINESS_STRICT !== "0";
@@ -43,6 +50,8 @@ const checkCallerEnvironment =
   (process.env.ALPHA_READINESS_CHECK_CALLER_ENV !== "0" && mode === "local");
 
 const checks = [];
+let fileStoreDir;
+let serverController;
 
 function isLoopbackUrl(value) {
   try {
@@ -50,6 +59,105 @@ function isLoopbackUrl(value) {
     return host === "localhost" || host === "127.0.0.1" || host === "::1";
   } catch {
     return false;
+  }
+}
+
+async function pathExists(path) {
+  try {
+    await access(path);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+async function detectExistingLocalBaseUrl() {
+  if (Boolean(explicitBaseUrl) || mode !== "local") {
+    return null;
+  }
+
+  const probeUrls = [
+    "http://127.0.0.1:3000",
+    defaultBaseUrl,
+    "http://127.0.0.1:3210",
+    "http://127.0.0.1:3221",
+    "http://127.0.0.1:3222",
+    "http://127.0.0.1:3223",
+    "http://127.0.0.1:3224",
+  ];
+
+  for (const probeUrl of [...new Set(probeUrls)]) {
+    try {
+      const response = await fetch(probeUrl, {
+        signal: AbortSignal.timeout(1_500),
+      });
+      const text = await response.text();
+
+      if (response.ok && text.includes("Photo Book Maker")) {
+        return probeUrl.replace(/\/$/, "");
+      }
+    } catch {
+      // Keep probing known local smoke-test ports.
+    }
+  }
+
+  return null;
+}
+
+async function prepareIsolatedStore() {
+  fileStoreDir = await mkdtemp(join(tmpdir(), "photo-book-maker-alpha-readiness-"));
+  await mkdir(fileStoreDir, { recursive: true });
+
+  const sourceProjects = join(sourceDataDir, "projects.json");
+  if (await pathExists(sourceProjects)) {
+    await copyFile(sourceProjects, join(fileStoreDir, "projects.json"));
+  }
+
+  const sourceUploads = join(sourceDataDir, "local-uploads");
+  if (await pathExists(sourceUploads)) {
+    await cp(sourceUploads, join(fileStoreDir, "local-uploads"), {
+      force: true,
+      recursive: true,
+    });
+  }
+}
+
+async function startLocalReadinessServer() {
+  await prepareIsolatedStore();
+  serverController = createNextDevServerController({
+    baseUrl: activeBaseUrl,
+    cwd: process.cwd(),
+    env: {
+      ...process.env,
+      EXPO_PUBLIC_API_BASE_URL: `${activeBaseUrl}/api`,
+      NEXT_PUBLIC_API_BASE_URL: `${activeBaseUrl}/api`,
+      NEXT_TELEMETRY_DISABLED: "1",
+      PHOTO_BOOK_FILE_STORE_DIR: fileStoreDir,
+    },
+    label: "Alpha readiness local server",
+    port,
+  });
+  await serverController.start();
+}
+
+async function stopLocalReadinessServer() {
+  if (serverController) {
+    await serverController.stop();
+  }
+  if (fileStoreDir) {
+    await rm(fileStoreDir, { force: true, recursive: true });
+  }
+}
+
+async function prepareReadinessTarget() {
+  const existingLocalBaseUrl = await detectExistingLocalBaseUrl();
+  if (existingLocalBaseUrl) {
+    activeBaseUrl = existingLocalBaseUrl;
+    return;
+  }
+
+  if (mode === "local" && !explicitBaseUrl) {
+    await startLocalReadinessServer();
   }
 }
 
@@ -145,7 +253,7 @@ function checkSharedSecretEnvironment() {
 }
 
 async function fetchRoute(path, init = {}) {
-  const response = await fetch(`${baseUrl}${path}`, {
+  const response = await fetch(`${activeBaseUrl}${path}`, {
     ...init,
     signal: AbortSignal.timeout(8_000),
   });
@@ -477,6 +585,8 @@ function checkProviderEnvironment() {
 }
 
 async function main() {
+  await prepareReadinessTarget();
+
   if (checkCallerEnvironment) {
     checkProviderEnvironment();
   } else {
@@ -496,10 +606,13 @@ async function main() {
   const failCount = checks.filter((check) => check.status === "fail").length;
   const warnCount = checks.filter((check) => check.status === "warn").length;
   const summary = {
-    baseUrl,
+    baseUrl: activeBaseUrl,
     checks,
+    isolated: Boolean(serverController),
     mode,
+    sourceDataDir: serverController ? sourceDataDir : null,
     status: failCount ? "failed" : warnCount ? "warning" : "passed",
+    tempStoreDir: fileStoreDir ?? null,
     totals: {
       fail: failCount,
       pass: checks.filter((check) => check.status === "pass").length,
@@ -516,5 +629,9 @@ async function main() {
   }
 }
 
-await main();
-console.log("alpha readiness passed");
+try {
+  await main();
+  console.log("alpha readiness passed");
+} finally {
+  await stopLocalReadinessServer();
+}
