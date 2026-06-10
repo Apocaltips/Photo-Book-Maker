@@ -62,6 +62,25 @@ LOCAL_AI_PRIMARY_PLANNER_NUM_PREDICT=1200
 LOCAL_AI_FALLBACK_PLANNER_NUM_PREDICT=1200
 ALPHA_READINESS_SECRET=long-random-readiness-secret
 OPENAI_API_KEY=
+
+STRIPE_SECRET_KEY=
+NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY=
+STRIPE_WEBHOOK_SECRET=
+STRIPE_PRICE_TRIP_BOOK_ID=
+STRIPE_PRICE_YEARBOOK_ID=
+RESEND_API_KEY=
+POSTMARK_SERVER_TOKEN=
+TRANSACTIONAL_EMAIL_FROM=
+SENTRY_DSN=
+NEXT_PUBLIC_SENTRY_DSN=
+NEXT_PUBLIC_POSTHOG_KEY=
+NEXT_PUBLIC_POSTHOG_HOST=https://us.i.posthog.com
+PRINT_PROVIDER=manual_pdf
+PRINT_PROVIDER_API_KEY=
+PRINT_PROVIDER_WEBHOOK_SECRET=
+PRINT_PROVIDER_PRODUCT_TRIP_SKU=
+PRINT_PROVIDER_PRODUCT_YEARBOOK_SKU=
+PRINT_PROVIDER_SAMPLE_ORDER_CONFIRMED=0
 ```
 
 `AI_DRAFT_PROVIDER=ollama` runs the AI Designer through the local Ollama server
@@ -102,6 +121,11 @@ The authoritative API for v1 is the Next.js app in `apps/web`.
     Supabase, R2, project-store, template-catalog, private-worker setup,
     clean generation queue state, and latest saved AI generation quality score.
     Treat any failed check as a no-go for family/friend testers.
+11. Leave `PRINT_PROVIDER=manual_pdf` for Phase 1. When direct print checkout
+    starts, set `PRINT_PROVIDER` to the selected API candidate, configure the
+    Stripe/email/monitoring/print adapter variables, confirm a reviewed sample
+    order with `PRINT_PROVIDER_SAMPLE_ORDER_CONFIRMED=1`, then run
+    `npm run test:provider:readiness`.
 
 ## 5. Point Mobile At The Hosted API
 
@@ -210,6 +234,21 @@ test accounts for:
 Do not expose every book size in checkout first. Start with one trip SKU and
 one family/yearbook SKU until bleed, spine, shipping, reprint, support, and
 unit economics are proven by sample orders.
+
+Before turning on direct print checkout, the provider-alpha readiness gate must
+pass:
+
+```powershell
+$env:ALPHA_READINESS_MODE="provider"
+$env:ALPHA_READINESS_BASE_URL="https://YOUR-WEB-APP"
+$env:ALPHA_READINESS_SECRET="same-readiness-secret-as-hosted"
+npm run test:provider:readiness
+```
+
+This command calls the protected app-side readiness route and fails until the
+hosted app can prove Supabase/R2/private-worker readiness plus Stripe,
+transactional email, Sentry/PostHog, a non-`manual_pdf` print provider adapter,
+and `PRINT_PROVIDER_SAMPLE_ORDER_CONFIRMED=1`.
 
 ## Required Validation
 

@@ -40,6 +40,32 @@ Provider alpha starts only after Phase 1 proof quality is repeatable. Use a narr
 - **Monitoring**: Sentry for web/mobile errors; PostHog for product funnel analytics.
 - **Mobile builds**: Expo EAS for Android preview now and iOS when Apple approval is available.
 
+## Provider Readiness Modes
+
+The readiness gate is intentionally staged so Phase 1 can stay PDF-first while
+Phase 2 fails until real provider accounts are configured.
+
+| Mode | Command | Fails On | Notes |
+| --- | --- | --- | --- |
+| Local AI alpha | `npm run test:alpha:readiness` with `ALPHA_READINESS_MODE=local` | broken app shell, template catalog, local AI health, stale queue, required local checks | Used before internal device testing and Cap Cana/60-photo proof validation. |
+| Hosted web alpha | `npm run test:alpha:readiness` with `ALPHA_READINESS_MODE=hosted` | missing hosted Supabase/R2/private-worker config, bad auth gate, stale queue, missing saved quality score | Commerce, email, monitoring, and direct print provider gaps are warnings unless explicitly required. |
+| Provider alpha | `npm run test:provider:readiness` | missing Stripe, email, Sentry/PostHog, direct print provider adapter, or sample-order confirmation | Used only after PDF quality is proven and the first print-provider sandbox/sample path is being wired. |
+
+Provider-alpha environment groups:
+
+| Area | Required Variables |
+| --- | --- |
+| Stripe checkout | `STRIPE_SECRET_KEY`, `NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY`, `STRIPE_WEBHOOK_SECRET`, `STRIPE_PRICE_TRIP_BOOK_ID`, `STRIPE_PRICE_YEARBOOK_ID` |
+| Transactional email | either `RESEND_API_KEY` or `POSTMARK_SERVER_TOKEN`, plus `TRANSACTIONAL_EMAIL_FROM` |
+| Monitoring and analytics | `SENTRY_DSN` or `NEXT_PUBLIC_SENTRY_DSN`, plus `NEXT_PUBLIC_POSTHOG_KEY` and `NEXT_PUBLIC_POSTHOG_HOST` |
+| Print provider adapter | `PRINT_PROVIDER`, `PRINT_PROVIDER_API_KEY`, `PRINT_PROVIDER_WEBHOOK_SECRET`, `PRINT_PROVIDER_PRODUCT_TRIP_SKU`, `PRINT_PROVIDER_PRODUCT_YEARBOOK_SKU` |
+| Sample quality gate | `PRINT_PROVIDER_SAMPLE_ORDER_CONFIRMED=1` after a real sample is reviewed |
+
+Allowed `PRINT_PROVIDER` values are `manual_pdf`, `peecho`, `prodigi`,
+`cloudprinter`, `rpi_blurb`, `lulu`, and `gelato`. `manual_pdf` is valid for
+Phase 1 but fails provider alpha because direct print checkout needs a real API
+target.
+
 ## Print Vendor Bake-Off
 
 Do not hard-code a final print vendor before sample orders. Evaluate:
@@ -113,6 +139,12 @@ npm run test:ai:health
 npm run test:proof:quality
 ```
 
+For the Phase 2 direct-print gate, run:
+
+```bash
+npm run test:provider:readiness
+```
+
 `npm run test:alpha:readiness` is read-only. It expects the web app to be
 running and checks the home page, auth gate, template catalog, local AI health
 in local mode, stale queue state, worker bridge config, and provider env
@@ -128,6 +160,11 @@ store for active/stale generation runs and requires the latest saved AI
 generation to include a quality score at or above
 `ALPHA_READINESS_MIN_QUALITY_SCORE` unless
 `ALPHA_READINESS_REQUIRE_SAVED_RUN=0` is set intentionally.
+`npm run test:provider:readiness` is also read-only. It defaults
+`ALPHA_READINESS_MODE=provider` and requires the protected readiness route, so
+it should fail until hosted auth/storage/private-worker, Stripe, email,
+observability, direct print-provider adapter variables, and the reviewed sample
+order gate are all configured.
 `npm run test:ai:health` expects the web app to be running and Ollama to have
 the required models installed.
 `npm run test:ai:local` expects a reachable Cap Cana-style test project unless

@@ -130,6 +130,19 @@ because the local shell may not match Vercel. Set
 `ALPHA_READINESS_CHECK_CALLER_ENV=1` when you also want to verify this PC's
 worker-side environment before a tester session.
 
+Phase 2 direct-print readiness has a separate cross-platform command:
+
+```powershell
+$env:ALPHA_READINESS_BASE_URL="https://YOUR-WEB-APP"
+$env:ALPHA_READINESS_SECRET="same-readiness-secret-as-hosted"
+npm run test:provider:readiness
+```
+
+That gate is expected to fail until Stripe, transactional email, Sentry,
+PostHog, a concrete print provider adapter, and a reviewed sample order are
+configured. Phase 1 remains PDF-first; do not treat a missing direct print
+provider as a blocker for family/friend proof testing.
+
 6. In a second terminal, start Expo:
 
 ```bash

@@ -289,6 +289,44 @@ async function assertAlphaReadinessRoute() {
       `Alpha readiness route did not return expected checks.\n${JSON.stringify(body, null, 2)}`,
     );
   }
+
+  const providerResponse = await fetchWithTimeout(
+    `${baseUrl}/api/alpha/readiness?mode=provider`,
+    {
+      headers: {
+        "Authorization": `Bearer ${readinessSecret}`,
+      },
+    },
+  );
+  const providerBody = await providerResponse.json().catch(() => ({}));
+
+  if (!providerResponse.ok) {
+    throw new Error(
+      `Provider readiness route failed authorized request: ${providerResponse.status}\n${JSON.stringify(
+        providerBody,
+      )}`,
+    );
+  }
+
+  const providerChecks = Array.isArray(providerBody.checks) ? providerBody.checks : [];
+  const hasProviderAlphaChecks = [
+    "Stripe checkout env",
+    "transactional email provider",
+    "Sentry observability",
+    "PostHog analytics",
+    "print provider choice",
+    "print sample order",
+  ].every((name) => providerChecks.some((check) => check.name === name));
+
+  if (!hasProviderAlphaChecks || providerBody.status !== "failed") {
+    throw new Error(
+      `Provider readiness route did not expose the expected provider-alpha blockers.\n${JSON.stringify(
+        providerBody,
+        null,
+        2,
+      )}`,
+    );
+  }
 }
 
 async function runProjectE2E() {

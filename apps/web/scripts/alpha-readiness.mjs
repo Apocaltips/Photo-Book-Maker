@@ -96,6 +96,178 @@ function requireEnvGroup(name, variables, required) {
   }
 }
 
+function shouldCheckPhaseTwoProviders() {
+  return (
+    mode === "hosted" ||
+    mode === "provider" ||
+    process.env.ALPHA_READINESS_REQUIRE_COMMERCE === "1" ||
+    process.env.ALPHA_READINESS_REQUIRE_EMAIL === "1" ||
+    process.env.ALPHA_READINESS_REQUIRE_OBSERVABILITY === "1" ||
+    process.env.ALPHA_READINESS_REQUIRE_PRINT_PROVIDER === "1"
+  );
+}
+
+function shouldRequirePhaseTwoGroup(envName) {
+  return process.env[envName] === "1" || mode === "provider";
+}
+
+function checkStripeEnvironment(required) {
+  requireEnvGroup(
+    "Stripe checkout",
+    ["STRIPE_SECRET_KEY", "NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY", "STRIPE_WEBHOOK_SECRET"],
+    required,
+  );
+  requireEnvGroup(
+    "Stripe product prices",
+    ["STRIPE_PRICE_TRIP_BOOK_ID", "STRIPE_PRICE_YEARBOOK_ID"],
+    required,
+  );
+}
+
+function checkEmailEnvironment(required) {
+  const hasResend = hasValue("RESEND_API_KEY");
+  const hasPostmark = hasValue("POSTMARK_SERVER_TOKEN");
+  const hasSender = hasValue("TRANSACTIONAL_EMAIL_FROM");
+
+  addCheck(
+    hasResend || hasPostmark ? "pass" : required ? "fail" : "warn",
+    "transactional email provider",
+    hasResend || hasPostmark
+      ? "A transactional email provider is configured."
+      : "Configure Resend or Postmark before branded invites and order emails.",
+    {
+      hasPostmark,
+      hasResend,
+      providers: ["RESEND_API_KEY", "POSTMARK_SERVER_TOKEN"],
+    },
+  );
+
+  addCheck(
+    hasSender ? "pass" : required ? "fail" : "warn",
+    "transactional email sender",
+    hasSender
+      ? "Transactional email sender is configured."
+      : "TRANSACTIONAL_EMAIL_FROM is required before sending branded customer email.",
+    {
+      variable: "TRANSACTIONAL_EMAIL_FROM",
+    },
+  );
+}
+
+function checkObservabilityEnvironment(required) {
+  const hasSentry = hasValue("SENTRY_DSN") || hasValue("NEXT_PUBLIC_SENTRY_DSN");
+  const hasPostHog = hasValue("NEXT_PUBLIC_POSTHOG_KEY");
+
+  addCheck(
+    hasSentry ? "pass" : required ? "fail" : "warn",
+    "Sentry observability",
+    hasSentry
+      ? "Sentry is configured for runtime error visibility."
+      : "Configure Sentry before provider alpha so upload, checkout, and print errors are visible.",
+    {
+      variables: ["SENTRY_DSN", "NEXT_PUBLIC_SENTRY_DSN"],
+    },
+  );
+
+  addCheck(
+    hasPostHog ? "pass" : required ? "fail" : "warn",
+    "PostHog analytics",
+    hasPostHog
+      ? "PostHog analytics key is configured."
+      : "Configure PostHog before provider alpha to measure upload-to-proof and checkout drop-off.",
+    {
+      variables: ["NEXT_PUBLIC_POSTHOG_KEY", "NEXT_PUBLIC_POSTHOG_HOST"],
+    },
+  );
+}
+
+function checkPrintProviderEnvironment(required) {
+  const provider = process.env.PRINT_PROVIDER?.trim().toLowerCase() ?? "";
+  const allowedProviders = [
+    "manual_pdf",
+    "peecho",
+    "prodigi",
+    "cloudprinter",
+    "rpi_blurb",
+    "lulu",
+    "gelato",
+  ];
+  const isKnownProvider = provider ? allowedProviders.includes(provider) : false;
+
+  if (!provider) {
+    addCheck(
+      required ? "fail" : "warn",
+      "print provider choice",
+      "PRINT_PROVIDER is not selected. Phase 1 can stay PDF-first; provider alpha needs a concrete adapter target.",
+      { allowedProviders },
+    );
+  } else if (!isKnownProvider) {
+    addCheck(
+      "fail",
+      "print provider choice",
+      `PRINT_PROVIDER=${provider} is not one of the supported provider candidates.`,
+      { allowedProviders, provider },
+    );
+  } else if (required && provider === "manual_pdf") {
+    addCheck(
+      "fail",
+      "print provider choice",
+      "Provider alpha requires a direct print API candidate, not manual_pdf.",
+      { allowedProviders, provider },
+    );
+  } else {
+    addCheck(
+      "pass",
+      "print provider choice",
+      `Print provider target is ${provider}.`,
+      { allowedProviders, provider },
+    );
+  }
+
+  requireEnvGroup(
+    "Print provider adapter",
+    [
+      "PRINT_PROVIDER_API_KEY",
+      "PRINT_PROVIDER_WEBHOOK_SECRET",
+      "PRINT_PROVIDER_PRODUCT_TRIP_SKU",
+      "PRINT_PROVIDER_PRODUCT_YEARBOOK_SKU",
+    ],
+    required && provider !== "manual_pdf",
+  );
+
+  const sampleConfirmed = process.env.PRINT_PROVIDER_SAMPLE_ORDER_CONFIRMED === "1";
+  addCheck(
+    sampleConfirmed ? "pass" : required ? "fail" : "warn",
+    "print sample order",
+    sampleConfirmed
+      ? "A sample order has been marked as confirmed for the selected print provider."
+      : "Provider alpha requires at least one reviewed sample order before outside print checkout.",
+    {
+      variable: "PRINT_PROVIDER_SAMPLE_ORDER_CONFIRMED",
+    },
+  );
+}
+
+function checkPhaseTwoProviderEnvironment() {
+  if (!shouldCheckPhaseTwoProviders()) {
+    skip(
+      "phase 2 provider env",
+      "Commerce, email, monitoring, and direct print provider checks are skipped for local PDF-first alpha.",
+      { mode },
+    );
+    return;
+  }
+
+  checkStripeEnvironment(shouldRequirePhaseTwoGroup("ALPHA_READINESS_REQUIRE_COMMERCE"));
+  checkEmailEnvironment(shouldRequirePhaseTwoGroup("ALPHA_READINESS_REQUIRE_EMAIL"));
+  checkObservabilityEnvironment(
+    shouldRequirePhaseTwoGroup("ALPHA_READINESS_REQUIRE_OBSERVABILITY"),
+  );
+  checkPrintProviderEnvironment(
+    shouldRequirePhaseTwoGroup("ALPHA_READINESS_REQUIRE_PRINT_PROVIDER"),
+  );
+}
+
 async function fetchRoute(path, init = {}) {
   const response = await fetch(`${baseUrl}${path}`, {
     ...init,
@@ -366,6 +538,8 @@ function checkProviderEnvironment() {
     ],
     requireProviders,
   );
+
+  checkPhaseTwoProviderEnvironment();
 
   if (!requireWorker) {
     skip("private AI worker env", "Private worker env is not required for this readiness mode.");
