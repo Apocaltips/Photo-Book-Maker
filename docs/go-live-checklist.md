@@ -135,6 +135,9 @@ The authoritative API for v1 is the Next.js app in `apps/web`.
    `LOCAL_AI_WORKER_HEARTBEAT_MS=60000`,
    `LOCAL_AI_WORKER_REQUEST_TIMEOUT_MS=30000`,
    `LOCAL_AI_WORKER_PROCESS_TIMEOUT_MS=3600000`,
+   `LOCAL_AI_WORKER_BACKOFF_MAX_MS=120000`,
+   `LOCAL_AI_WORKER_BACKOFF_JITTER_MS=1000`,
+   `LOCAL_AI_WORKER_MAX_CONSECUTIVE_FAILURES=0`,
    `LOCAL_AI_WORKER_MAX_ATTEMPTS=3`, and the 60-3600 second lease window unless
    a benchmark proves the hosted queue needs different values.
 8. Run the local AI benchmark and keep the generated report path with tester-session notes. If the benchmark used the fallback planner or deterministic safe fallback, record that explicitly instead of treating it as a primary-planner pass.

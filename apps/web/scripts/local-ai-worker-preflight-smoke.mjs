@@ -6,11 +6,14 @@ const workerScriptPath = fileURLToPath(new URL("./local-ai-worker.mjs", import.m
 const workerEnvKeys = [
   "AI_WORKER_SECRET",
   "LOCAL_AI_WORKER_ALLOW_HOSTED_PROCESSOR",
+  "LOCAL_AI_WORKER_BACKOFF_JITTER_MS",
+  "LOCAL_AI_WORKER_BACKOFF_MAX_MS",
   "LOCAL_AI_WORKER_BASE_URL",
   "LOCAL_AI_WORKER_HEARTBEAT_MS",
   "LOCAL_AI_WORKER_HOSTED_BASE_URL",
   "LOCAL_AI_WORKER_ID",
   "LOCAL_AI_WORKER_LOOP",
+  "LOCAL_AI_WORKER_MAX_CONSECUTIVE_FAILURES",
   "LOCAL_AI_WORKER_POLL_MS",
   "LOCAL_AI_WORKER_PREFLIGHT_ONLY",
   "LOCAL_AI_WORKER_PROCESSOR_BASE_URL",
@@ -145,6 +148,24 @@ assertIncludes(
   explicitPublicProcessor.stdout,
   "Local AI worker preflight passed.",
   "explicit public processor preflight stdout",
+);
+
+const loopRetryBackoff = await runWorkerPreflight("loop retry backoff", {
+  LOCAL_AI_WORKER_BACKOFF_JITTER_MS: "0",
+  LOCAL_AI_WORKER_BACKOFF_MAX_MS: "250",
+  LOCAL_AI_WORKER_HOSTED_BASE_URL: "http://127.0.0.1:9",
+  LOCAL_AI_WORKER_LOOP: "1",
+  LOCAL_AI_WORKER_MAX_CONSECUTIVE_FAILURES: "1",
+  LOCAL_AI_WORKER_POLL_MS: "250",
+  LOCAL_AI_WORKER_PROCESSOR_BASE_URL: "http://127.0.0.1:3000",
+  LOCAL_AI_WORKER_SECRET: "worker-smoke-secret",
+  LOCAL_AI_WORKER_SKIP_PROCESSOR_HEALTH: "1",
+});
+assertExit(loopRetryBackoff, 1, "loop retry backoff");
+assertIncludes(
+  `${loopRetryBackoff.stdout}\n${loopRetryBackoff.stderr}`,
+  "AI worker loop error 1; retrying in 250ms",
+  "loop retry backoff output",
 );
 
 console.log("local AI worker preflight smoke passed");

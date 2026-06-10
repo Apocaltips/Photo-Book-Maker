@@ -2,6 +2,16 @@
 import { Buffer } from "node:buffer";
 import { createHash, createHmac, timingSafeEqual } from "node:crypto";
 
+function parseWorkerIntegerEnv(name, fallback, min = 0) {
+  const parsed = Number.parseInt(process.env[name] ?? "", 10);
+
+  if (!Number.isFinite(parsed)) {
+    return Math.max(min, fallback);
+  }
+
+  return Math.max(min, parsed);
+}
+
 const hostedBaseUrl = (
   process.env.LOCAL_AI_WORKER_HOSTED_BASE_URL ??
   process.env.LOCAL_AI_WORKER_BASE_URL ??
@@ -16,18 +26,28 @@ const secret = process.env.LOCAL_AI_WORKER_SECRET ?? process.env.AI_WORKER_SECRE
 const workerId =
   process.env.LOCAL_AI_WORKER_ID ??
   `local-worker-${process.env.COMPUTERNAME ?? process.env.HOSTNAME ?? "pc"}`;
-const pollMs = Number.parseInt(process.env.LOCAL_AI_WORKER_POLL_MS ?? "15000", 10);
+const pollMs = parseWorkerIntegerEnv("LOCAL_AI_WORKER_POLL_MS", 15000, 250);
 const heartbeatMs = Math.max(
   10000,
-  Number.parseInt(process.env.LOCAL_AI_WORKER_HEARTBEAT_MS ?? "60000", 10),
+  parseWorkerIntegerEnv("LOCAL_AI_WORKER_HEARTBEAT_MS", 60000, 10000),
 );
 const requestTimeoutMs = Math.max(
   5000,
-  Number.parseInt(process.env.LOCAL_AI_WORKER_REQUEST_TIMEOUT_MS ?? "30000", 10),
+  parseWorkerIntegerEnv("LOCAL_AI_WORKER_REQUEST_TIMEOUT_MS", 30000, 5000),
 );
 const processorTimeoutMs = Math.max(
   requestTimeoutMs,
-  Number.parseInt(process.env.LOCAL_AI_WORKER_PROCESS_TIMEOUT_MS ?? "3600000", 10),
+  parseWorkerIntegerEnv("LOCAL_AI_WORKER_PROCESS_TIMEOUT_MS", 3600000, requestTimeoutMs),
+);
+const backoffMaxMs = Math.max(
+  pollMs,
+  parseWorkerIntegerEnv("LOCAL_AI_WORKER_BACKOFF_MAX_MS", 120000, pollMs),
+);
+const backoffJitterMs = parseWorkerIntegerEnv("LOCAL_AI_WORKER_BACKOFF_JITTER_MS", 1000, 0);
+const maxConsecutiveFailures = parseWorkerIntegerEnv(
+  "LOCAL_AI_WORKER_MAX_CONSECUTIVE_FAILURES",
+  0,
+  0,
 );
 const loop = process.env.LOCAL_AI_WORKER_LOOP === "1";
 const preflightOnly = process.env.LOCAL_AI_WORKER_PREFLIGHT_ONLY === "1";
@@ -67,6 +87,19 @@ function isPrivateProcessorUrl(value) {
   } catch {
     return false;
   }
+}
+
+function getLoopRetryDelayMs(consecutiveFailures) {
+  const exponent = Math.min(Math.max(0, consecutiveFailures - 1), 8);
+  const baseDelayMs = pollMs * 2 ** exponent;
+  const jitterMs =
+    backoffJitterMs > 0 ? Math.floor(Math.random() * (backoffJitterMs + 1)) : 0;
+
+  return Math.min(backoffMaxMs, baseDelayMs + jitterMs);
+}
+
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 if (!isPrivateProcessorUrl(processorBaseUrl) && process.env.LOCAL_AI_WORKER_ALLOW_HOSTED_PROCESSOR !== "1") {
@@ -277,12 +310,37 @@ async function runOnce() {
   }
 }
 
+let consecutiveFailures = 0;
+
 do {
-  await preflightWorker();
-  if (!preflightOnly) {
-    await runOnce();
-  }
-  if (loop) {
-    await new Promise((resolve) => setTimeout(resolve, pollMs));
+  try {
+    await preflightWorker();
+    if (!preflightOnly) {
+      await runOnce();
+    }
+    consecutiveFailures = 0;
+    if (loop) {
+      await sleep(pollMs);
+    }
+  } catch (error) {
+    if (!loop || preflightOnly) {
+      throw error;
+    }
+
+    consecutiveFailures += 1;
+    const retryDelayMs = getLoopRetryDelayMs(consecutiveFailures);
+    console.error(
+      `AI worker loop error ${consecutiveFailures}; retrying in ${retryDelayMs}ms: ${
+        error instanceof Error ? error.message : "Unknown worker error."
+      }`,
+    );
+    if (
+      maxConsecutiveFailures > 0 &&
+      consecutiveFailures >= maxConsecutiveFailures
+    ) {
+      throw error;
+    }
+
+    await sleep(retryDelayMs);
   }
 } while (loop && !preflightOnly);

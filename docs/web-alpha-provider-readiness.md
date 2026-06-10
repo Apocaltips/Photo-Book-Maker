@@ -138,6 +138,12 @@ Worker bridge v1:
 - Worker route calls use `LOCAL_AI_WORKER_REQUEST_TIMEOUT_MS`; local generation
   processing uses `LOCAL_AI_WORKER_PROCESS_TIMEOUT_MS` so hung local requests
   become visible failures instead of leaving the operator guessing.
+- In continuous polling mode, transient hosted-app or processor failures use
+  exponential retry backoff based on `LOCAL_AI_WORKER_POLL_MS`, capped by
+  `LOCAL_AI_WORKER_BACKOFF_MAX_MS`, with optional
+  `LOCAL_AI_WORKER_BACKOFF_JITTER_MS`. Keep
+  `LOCAL_AI_WORKER_MAX_CONSECUTIVE_FAILURES=0` for normal alpha operation so
+  the private bridge keeps polling after temporary network or model outages.
 - Expired leases can be reclaimed by another worker, but
   `LOCAL_AI_WORKER_MAX_ATTEMPTS` limits retry loops. The default alpha ceiling
   is 3 attempts; after that the run is marked failed and `/ai-health` surfaces
