@@ -298,16 +298,18 @@ For hosted outside-tester validation, run `npm run test:hosted:alpha` after
 setting the hosted URL, readiness secret, proof bearer token, and hosted
 project id/title. It intentionally fails without those hosted values.
 
-The local AI benchmark is isolated by default: it copies the current local
+The local AI alpha benchmark is isolated by default: it copies the current local
 project store and local uploads into a temp directory, starts its own local web
-server, runs generation, runs proof-quality validation against the generated
-draft, writes generation plus companion `*-proof-quality.json` reports, and
-removes the temp store. Keep both benchmark report paths with tester-session
-notes:
+server, runs the small Cap Cana-style project plus the 50-70 photo test project,
+runs proof-quality validation against each generated draft, writes generation,
+companion `*-proof-quality.json`, and combined `*-summary.json` reports, and
+removes the temp store. Keep the summary and companion report paths with
+tester-session notes:
 
 ```powershell
+npm run test:ai:alpha-benchmark
 npm run test:ai:benchmark
-$env:AI_BENCHMARK_PROJECT_IDS="trip-cap-cana-2026-trip-full-album,trip-madeira-island-60-photo-trip-1781039520416"; npm run test:ai:benchmark
+$env:AI_ALPHA_BENCHMARK_SMALL_PROJECT_ID="trip-cap-cana-2026-trip-full-album"; $env:AI_ALPHA_BENCHMARK_60_PROJECT_ID="trip-madeira-island-60-photo-trip-1781039520416"; npm run test:ai:alpha-benchmark
 $env:PROOF_QUALITY_PROJECT_ID="trip-madeira-island-60-photo-trip-1781039520416"; $env:PROOF_QUALITY_CONTEXT_TERMS="madeira"; npm run test:proof:quality
 ```
 

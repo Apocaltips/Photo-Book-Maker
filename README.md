@@ -207,6 +207,13 @@ npm run typecheck -w @photo-book-maker/mobile
 cd apps/mobile && npx expo-doctor
 ```
 
+`npm run test:ai:alpha-benchmark` is the local outside-tester gate. It
+auto-selects the Cap Cana-style small project and the available 50-70 photo
+test project, runs both through the isolated benchmark temp store, and writes a
+combined `*-summary.json` report without mutating `apps/web/data/projects.json`.
+Use `AI_ALPHA_BENCHMARK_SMALL_PROJECT_ID` and `AI_ALPHA_BENCHMARK_60_PROJECT_ID`
+when you need to pin exact projects.
+
 `npm run test:ai:benchmark` runs the health gate and a full local generation
 smoke against an isolated temporary copy of `apps/web/data/projects.json` and
 `apps/web/data/local-uploads`, then writes JSON benchmark reports to the system
@@ -238,6 +245,7 @@ guides, placeholder copy, overfilled pages, or same-corner caption rhythm. Set
 book.
 
 ```powershell
+npm run test:ai:alpha-benchmark
 npm run test:ai:benchmark
 npm run test:proof:quality
 $env:AI_BENCHMARK_PROJECT_IDS="trip-cap-cana-2026-trip-full-album,trip-madeira-island-60-photo-trip-1781039520416"; npm run test:ai:benchmark

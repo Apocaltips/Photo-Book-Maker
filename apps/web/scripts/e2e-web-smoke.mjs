@@ -170,6 +170,38 @@ async function apiJson(path, init = {}) {
   return body;
 }
 
+async function apiJsonEventually(path, init = {}, options = {}) {
+  const attempts = options.attempts ?? 6;
+  const retryStatuses = new Set(options.retryStatuses ?? [404]);
+  let lastFailure;
+
+  for (let attempt = 1; attempt <= attempts; attempt += 1) {
+    const response = await fetchWithTimeout(`${baseUrl}${path}`, {
+      ...init,
+      headers: {
+        ...devAuthHeaders,
+        "Content-Type": "application/json",
+        ...(init.headers ?? {}),
+      },
+    });
+    const text = await response.text();
+    const body = text ? JSON.parse(text) : {};
+
+    if (response.ok) {
+      return body;
+    }
+
+    lastFailure = `${response.status}\n${text.slice(0, 1000)}`;
+    if (!retryStatuses.has(response.status) || attempt === attempts) {
+      break;
+    }
+
+    await new Promise((resolve) => setTimeout(resolve, options.delayMs ?? 350));
+  }
+
+  throw new Error(`API call failed ${path}: ${lastFailure}`);
+}
+
 async function workerApiJson(path, init = {}) {
   const response = await fetchWithTimeout(`${baseUrl}${path}`, {
     ...init,
@@ -377,7 +409,7 @@ async function runProjectE2E() {
     throw new Error("Worker-enabled generation route did not queue a worker job.");
   }
 
-  const queuedRetryStatus = await apiJson(
+  const queuedRetryStatus = await apiJsonEventually(
     `/api/projects/${project.id}/generation/runs/${queuedRetryGeneration.run.id}`,
   );
   if (
@@ -460,7 +492,7 @@ async function runProjectE2E() {
     throw new Error("Worker claim route did not fail an exhausted retry job.");
   }
 
-  const exhaustedRunStatus = await apiJson(
+  const exhaustedRunStatus = await apiJsonEventually(
     `/api/projects/${project.id}/generation/runs/${queuedRetryGeneration.run.id}`,
   );
   if (exhaustedRunStatus.run?.status !== "failed") {

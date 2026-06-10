@@ -201,6 +201,14 @@ Next server, fetches the print proof, verifies rendered image URLs, confirms
 fresh object-storage read URLs are used, and blocks sparse/repetitive proofs
 with duplicate photos, unsupported templates, placeholder copy, overfilled
 pages, missing safe-area guides, or same-position caption rhythm.
+`npm run test:ai:alpha-benchmark` is the preferred pre-tester local gate. It
+auto-selects the Cap Cana-style small project and the available 50-70 photo
+test project, runs both through the isolated benchmark flow, writes a combined
+summary report, and fails if either generation/proof quality gate fails or if a
+run falls back to the deterministic safe plan. Use
+`AI_ALPHA_BENCHMARK_SMALL_PROJECT_ID` and `AI_ALPHA_BENCHMARK_60_PROJECT_ID`
+when the local store contains multiple candidates.
+
 `npm run test:ai:benchmark` is isolated by default: it copies the current local
 project store and local uploads into a temp directory, starts a private Next
 server, runs generation, runs proof-quality validation against the generated
@@ -222,7 +230,8 @@ Run the 13-photo plus 60-photo matrix from the isolated temp store before
 outside tester sessions:
 
 ```powershell
-$env:AI_BENCHMARK_PROJECT_IDS="trip-cap-cana-2026-trip-full-album,trip-madeira-island-60-photo-trip-1781039520416"; npm run test:ai:benchmark
+npm run test:ai:alpha-benchmark
+$env:AI_ALPHA_BENCHMARK_SMALL_PROJECT_ID="trip-cap-cana-2026-trip-full-album"; $env:AI_ALPHA_BENCHMARK_60_PROJECT_ID="trip-madeira-island-60-photo-trip-1781039520416"; npm run test:ai:alpha-benchmark
 $env:PROOF_QUALITY_PROJECT_ID="trip-madeira-island-60-photo-trip-1781039520416"; $env:PROOF_QUALITY_CONTEXT_TERMS="madeira"; npm run test:proof:quality
 ```
 

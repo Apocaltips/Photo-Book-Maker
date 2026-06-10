@@ -17,6 +17,7 @@
     "test:hosted:alpha": "npm run test:hosted:alpha -w @photo-book-maker/web",
     "test:provider:readiness": "npm run test:provider:readiness -w @photo-book-maker/web",
     "test:ai:health": "npm run test:ai:health -w @photo-book-maker/web",
+    "test:ai:alpha-benchmark": "npm run test:ai:alpha-benchmark -w @photo-book-maker/web",
     "test:ai:benchmark": "npm run test:ai:benchmark -w @photo-book-maker/web",
     "test:ai:local": "npm run test:ai:local -w @photo-book-maker/web",
     "test:worker:preflight": "npm run test:worker:preflight -w @photo-book-maker/web",

@@ -11,6 +11,7 @@
     "test:hosted:alpha": "node scripts/hosted-alpha-smoke.mjs",
     "test:provider:readiness": "node scripts/provider-readiness.mjs",
     "test:ai:health": "node scripts/local-ai-health.mjs",
+    "test:ai:alpha-benchmark": "node scripts/local-ai-alpha-benchmark.mjs",
     "test:ai:benchmark": "node scripts/local-ai-benchmark.mjs",
     "test:ai:local": "node scripts/ai-generation-smoke.mjs",
     "test:worker:preflight": "node scripts/local-ai-worker-preflight-smoke.mjs",

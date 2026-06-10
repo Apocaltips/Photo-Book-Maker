@@ -1,7 +1,7 @@
 /* global AbortSignal, console, fetch, process */
 
 import { spawn } from "node:child_process";
-import { access, copyFile, cp, mkdtemp, mkdir, readFile, rm } from "node:fs/promises";
+import { access, copyFile, cp, mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, extname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -11,6 +11,7 @@ const scriptDir = dirname(fileURLToPath(import.meta.url));
 const reportPath =
   process.env.AI_GENERATION_REPORT_PATH ??
   join(tmpdir(), `photo-book-local-ai-benchmark-${Date.now()}.json`);
+const summaryReportPath = process.env.AI_BENCHMARK_SUMMARY_REPORT_PATH;
 const isolated = process.env.AI_BENCHMARK_ISOLATED !== "0";
 const port = process.env.AI_BENCHMARK_PORT ?? "3221";
 const baseUrl = (process.env.AI_BENCHMARK_BASE_URL ?? `http://127.0.0.1:${port}`).replace(
@@ -201,6 +202,15 @@ function runNode(scriptName, env = {}) {
 
 async function readJsonReport(path) {
   return JSON.parse(await readFile(path, "utf8"));
+}
+
+async function writeJsonReport(path, payload) {
+  if (!path) {
+    return;
+  }
+
+  await mkdir(dirname(path), { recursive: true });
+  await writeFile(path, `${JSON.stringify(payload, null, 2)}\n`, "utf8");
 }
 
 function getDuplicatePairCount(duplicatePairs) {
@@ -398,20 +408,18 @@ try {
     });
   }
 
-  console.log(
-    JSON.stringify(
-      {
-        isolated,
-        reportPath: targets.length === 1 ? reports[0]?.reportPath ?? reportPath : null,
-        reports,
-        sourceDataDir: isolated ? sourceDataDir : null,
-        status: "local AI benchmark passed",
-        tempStoreDir: isolated ? fileStoreDir : null,
-      },
-      null,
-      2,
-    ),
-  );
+  const summary = {
+    isolated,
+    reportPath: targets.length === 1 ? reports[0]?.reportPath ?? reportPath : null,
+    reports,
+    sourceDataDir: isolated ? sourceDataDir : null,
+    status: "local AI benchmark passed",
+    summaryReportPath: summaryReportPath ?? null,
+    tempStoreDir: isolated ? fileStoreDir : null,
+  };
+
+  await writeJsonReport(summaryReportPath, summary);
+  console.log(JSON.stringify(summary, null, 2));
 } finally {
   await stopServer();
   if (fileStoreDir) {
