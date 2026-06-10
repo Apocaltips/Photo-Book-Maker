@@ -702,6 +702,39 @@ async function runProjectE2E() {
     );
   }
 
+  const externalPhotoImport = await fetchWithTimeout(`${baseUrl}/api/projects/${project.id}/photos`, {
+    method: "POST",
+    headers: {
+      ...devAuthHeaders,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      expectedRevision: project.revision,
+      photos: [
+        {
+          height: 1000,
+          locationConfidence: "missing",
+          mimeType: "image/jpeg",
+          qualityNotes: ["External URL bypass attempt."],
+          storagePath: "https://example.com/not-owned.jpg",
+          title: "External URL bypass",
+          uploaderId: "android-tester",
+          uri: "https://example.com/not-owned.jpg",
+          width: 1000,
+        },
+      ],
+    }),
+  });
+  const externalPhotoImportBody = await externalPhotoImport.json().catch(() => ({}));
+  if (
+    externalPhotoImport.status !== 400 ||
+    !/upload flow/i.test(externalPhotoImportBody.message ?? "")
+  ) {
+    throw new Error(
+      `Photo import route did not reject external URL bypass: ${externalPhotoImport.status}`,
+    );
+  }
+
   const corruptUpload = (
     await apiJson(`/api/projects/${project.id}/uploads`, {
       method: "POST",
