@@ -128,8 +128,12 @@ smoke against an isolated temporary copy of `apps/web/data/projects.json` and
 `apps/web/data/local-uploads`, then writes a JSON benchmark report to the system
 temp directory unless `AI_GENERATION_REPORT_PATH` is set. The report records
 elapsed time, prompt pressure, planner/fallback mode, quality score, photo
-usage, template support, and acceptance failures. Stop any running local Next
-dev server first; Next cannot run two dev servers for this app directory. To
+usage, template support, planner candidate count, and acceptance failures.
+Large uploads are pre-curated into a local planner candidate pool capped by
+`LOCAL_AI_PLANNER_MAX_PHOTOS`; the local planner context window is controlled by
+`LOCAL_AI_PLANNER_NUM_CTX`. Deterministic repair still validates coverage after
+the planner returns. Stop any running local Next dev server first; Next
+cannot run two dev servers for this app directory. To
 intentionally target a running app/store instead, set `AI_BENCHMARK_ISOLATED=0`
 and opt into live-store mutation.
 

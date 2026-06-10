@@ -222,6 +222,11 @@ npm run test:ai:benchmark
 $env:AI_BENCHMARK_PROJECT_IDS="trip-cap-cana-2026-trip-full-album,trip-madeira-island-60-photo-trip-1781039520416"; npm run test:ai:benchmark
 ```
 
+For 60+ photo albums, record the `planner saw X/Y photo candidates` and
+`planner selected X/Y valid candidate photo ids before repair` progress lines,
+plus the `planner returned X unknown photo ids before repair` guardrail and the
+`LOCAL_AI_PLANNER_MAX_PHOTOS` / `LOCAL_AI_PLANNER_NUM_CTX` values used for the run.
+
 Only opt into the current local project store when you intentionally want the
 validation run saved back into the live project data:
 

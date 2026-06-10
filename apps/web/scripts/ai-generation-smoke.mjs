@@ -474,6 +474,17 @@ const summary = {
   deterministicFallbackUsed: getPlannerMode(run) === "deterministic-fallback",
   localPlannerJsonAccepted: getPlannerMode(run) !== "deterministic-fallback",
   modelNames: run?.modelNames,
+  plannerCandidateProgress:
+    run?.progress?.find((entry) => /^planner saw \d+\/\d+ photo candidates$/.test(entry)) ??
+    null,
+  plannerPhotoSelectionProgress:
+    run?.progress?.find((entry) =>
+      /^planner selected \d+\/\d+ valid candidate photo ids before repair$/.test(entry),
+    ) ?? null,
+  plannerUnknownPhotoProgress:
+    run?.progress?.find((entry) =>
+      /^planner returned \d+ unknown photo ids before repair$/.test(entry),
+    ) ?? null,
   plannerMode: getPlannerMode(run),
   projectId: project.id,
   projectRevision: project.revision,

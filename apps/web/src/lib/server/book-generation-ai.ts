@@ -16,6 +16,25 @@ import {
 import sharp from "sharp";
 import { readStoredObjectBuffer } from "@/lib/server/object-storage";
 
+function firstNonEmptyEnv(...values: Array<string | undefined>) {
+  return values.find((value) => value?.trim());
+}
+
+function parsePositiveIntegerEnv(
+  value: string | undefined,
+  fallback: number,
+  options: { min?: number } = {},
+) {
+  const parsed = Number.parseInt(value ?? "", 10);
+  const min = options.min ?? 1;
+
+  if (!Number.isFinite(parsed)) {
+    return Math.max(min, fallback);
+  }
+
+  return Math.max(min, parsed);
+}
+
 const LOCAL_AI_BASE_URL = (
   process.env.LOCAL_AI_BASE_URL ??
   process.env.OLLAMA_BASE_URL ??
@@ -28,45 +47,62 @@ const LOCAL_AI_FALLBACK_PLANNER_MODEL =
   process.env.LOCAL_AI_FALLBACK_PLANNER_MODEL ?? "qwen3:8b";
 const LOCAL_AI_VISION_MODEL =
   process.env.LOCAL_AI_VISION_MODEL ?? "qwen2.5vl:7b";
-const PRIMARY_PLANNER_TIMEOUT_MS = Number.parseInt(
-  process.env.LOCAL_AI_PRIMARY_PLANNER_TIMEOUT_MS ??
-    process.env.LOCAL_AI_PLANNER_TIMEOUT_MS ??
-    "120000",
-  10,
+const PRIMARY_PLANNER_TIMEOUT_MS = parsePositiveIntegerEnv(
+  firstNonEmptyEnv(
+    process.env.LOCAL_AI_PRIMARY_PLANNER_TIMEOUT_MS,
+    process.env.LOCAL_AI_PLANNER_TIMEOUT_MS,
+  ),
+  120000,
 );
-const FALLBACK_PLANNER_TIMEOUT_MS = Number.parseInt(
-  process.env.LOCAL_AI_FALLBACK_PLANNER_TIMEOUT_MS ??
-    process.env.LOCAL_AI_PLANNER_TIMEOUT_MS ??
-    "180000",
-  10,
+const FALLBACK_PLANNER_TIMEOUT_MS = parsePositiveIntegerEnv(
+  firstNonEmptyEnv(
+    process.env.LOCAL_AI_FALLBACK_PLANNER_TIMEOUT_MS,
+    process.env.LOCAL_AI_PLANNER_TIMEOUT_MS,
+  ),
+  180000,
 );
-const PRIMARY_PLANNER_NUM_PREDICT = Number.parseInt(
-  process.env.LOCAL_AI_PRIMARY_PLANNER_NUM_PREDICT ??
-    process.env.LOCAL_AI_PLANNER_NUM_PREDICT ??
-    "1200",
-  10,
+const PRIMARY_PLANNER_NUM_PREDICT = parsePositiveIntegerEnv(
+  firstNonEmptyEnv(
+    process.env.LOCAL_AI_PRIMARY_PLANNER_NUM_PREDICT,
+    process.env.LOCAL_AI_PLANNER_NUM_PREDICT,
+  ),
+  1200,
 );
-const FALLBACK_PLANNER_NUM_PREDICT = Number.parseInt(
-  process.env.LOCAL_AI_FALLBACK_PLANNER_NUM_PREDICT ??
-    process.env.LOCAL_AI_PLANNER_NUM_PREDICT ??
-    "1200",
-  10,
+const FALLBACK_PLANNER_NUM_PREDICT = parsePositiveIntegerEnv(
+  firstNonEmptyEnv(
+    process.env.LOCAL_AI_FALLBACK_PLANNER_NUM_PREDICT,
+    process.env.LOCAL_AI_PLANNER_NUM_PREDICT,
+  ),
+  1200,
 );
-const VISION_TIMEOUT_MS = Number.parseInt(
-  process.env.LOCAL_AI_VISION_TIMEOUT_MS ?? "180000",
-  10,
+const PLANNER_NUM_CTX = parsePositiveIntegerEnv(
+  process.env.LOCAL_AI_PLANNER_NUM_CTX,
+  8192,
 );
-const VISION_IMAGE_MAX_EDGE = Number.parseInt(
-  process.env.LOCAL_AI_VISION_IMAGE_MAX_EDGE ?? "768",
-  10,
+const VISION_TIMEOUT_MS = parsePositiveIntegerEnv(
+  process.env.LOCAL_AI_VISION_TIMEOUT_MS,
+  180000,
 );
-const VISION_MAX_PHOTOS = Number.parseInt(
-  process.env.LOCAL_AI_VISION_MAX_PHOTOS ?? "4",
-  10,
+const VISION_NUM_CTX = parsePositiveIntegerEnv(
+  process.env.LOCAL_AI_VISION_NUM_CTX,
+  4096,
 );
-const VISION_TIME_BUDGET_MS = Number.parseInt(
-  process.env.LOCAL_AI_VISION_TIME_BUDGET_MS ?? "720000",
-  10,
+const VISION_IMAGE_MAX_EDGE = parsePositiveIntegerEnv(
+  process.env.LOCAL_AI_VISION_IMAGE_MAX_EDGE,
+  768,
+);
+const VISION_MAX_PHOTOS = parsePositiveIntegerEnv(
+  process.env.LOCAL_AI_VISION_MAX_PHOTOS,
+  4,
+);
+const VISION_TIME_BUDGET_MS = parsePositiveIntegerEnv(
+  process.env.LOCAL_AI_VISION_TIME_BUDGET_MS,
+  720000,
+);
+const PLANNER_MAX_PHOTOS = parsePositiveIntegerEnv(
+  process.env.LOCAL_AI_PLANNER_MAX_PHOTOS,
+  36,
+  { min: 12 },
 );
 
 const VALID_CROP_REGIONS = new Set([
@@ -132,6 +168,8 @@ export function getLocalAiRuntimeConfig() {
     fallbackPlannerNumPredict: FALLBACK_PLANNER_NUM_PREDICT,
     fallbackPlannerTimeoutMs: FALLBACK_PLANNER_TIMEOUT_MS,
     plannerModel: LOCAL_AI_PLANNER_MODEL,
+    plannerMaxPhotos: PLANNER_MAX_PHOTOS,
+    plannerNumCtx: PLANNER_NUM_CTX,
     plannerPromptContract: "compact-spread-plan",
     plannerNumPredict: PRIMARY_PLANNER_NUM_PREDICT,
     plannerTimeoutMs: PRIMARY_PLANNER_TIMEOUT_MS,
@@ -139,6 +177,7 @@ export function getLocalAiRuntimeConfig() {
     visionImageMaxEdge: VISION_IMAGE_MAX_EDGE,
     visionMaxPhotos: VISION_MAX_PHOTOS,
     visionModel: LOCAL_AI_VISION_MODEL,
+    visionNumCtx: VISION_NUM_CTX,
     visionTimeoutMs: VISION_TIMEOUT_MS,
     visionTimeBudgetMs: VISION_TIME_BUDGET_MS,
   };
@@ -227,6 +266,7 @@ async function postOllamaJson(input: {
   format?: "json";
   messages: OllamaChatMessage[];
   model: string;
+  numCtx: number;
   numPredict: number;
   temperature: number;
   timeoutMs: number;
@@ -242,7 +282,7 @@ async function postOllamaJson(input: {
       stream: false,
       format: input.format,
       options: {
-        num_ctx: 32768,
+        num_ctx: input.numCtx,
         num_predict: input.numPredict,
         temperature: input.temperature,
       },
@@ -482,6 +522,7 @@ Metadata: ${JSON.stringify({
         },
       ],
       model: LOCAL_AI_VISION_MODEL,
+      numCtx: VISION_NUM_CTX,
       numPredict: 500,
       temperature: 0.1,
       timeoutMs: VISION_TIMEOUT_MS,
@@ -548,6 +589,267 @@ async function analyzeProjectPhotos(project: Project, run: GenerationRun) {
   };
 }
 
+function getPlannerPhotoCandidateTarget(photoCount: number) {
+  if (photoCount <= 25) {
+    return photoCount;
+  }
+
+  const configuredMax = Math.max(12, PLANNER_MAX_PHOTOS);
+  const usageTarget =
+    photoCount >= 120
+      ? Math.ceil(photoCount * 0.45)
+      : photoCount >= 80
+        ? Math.ceil(photoCount * 0.55)
+        : photoCount >= 50
+          ? Math.ceil(photoCount * 0.35)
+          : Math.ceil(photoCount * 0.55);
+  const largeAlbumTarget = Math.max(24, Math.ceil(usageTarget * 1.25));
+
+  return Math.min(photoCount, configuredMax, largeAlbumTarget);
+}
+
+function addPlannerCandidate(
+  selected: Map<string, PhotoAsset>,
+  photo: PhotoAsset | undefined,
+  targetCount: number,
+) {
+  if (!photo) {
+    return;
+  }
+
+  if (photo.mustInclude || selected.size < targetCount) {
+    selected.set(photo.id, photo);
+  }
+}
+
+function selectPlannerCandidatePhotos(input: {
+  aesthetics: Record<string, PhotoAesthetic>;
+  insights: Record<string, PhotoInsight>;
+  project: Project;
+}) {
+  const approvedPhotos = input.project.photos
+    .filter((photo) => photo.approved)
+    .sort((left, right) => left.capturedAt.localeCompare(right.capturedAt));
+  const targetCount = getPlannerPhotoCandidateTarget(approvedPhotos.length);
+  const selected = new Map<string, PhotoAsset>();
+  const rankedOverall = [...approvedPhotos].sort(
+    (left, right) =>
+      getPlannerPhotoScore(right, input.insights[right.id], input.aesthetics[right.id]) -
+        getPlannerPhotoScore(left, input.insights[left.id], input.aesthetics[left.id]) ||
+      left.capturedAt.localeCompare(right.capturedAt),
+  );
+  const storyBeats: Array<AiBookPlan["spreadPlans"][number]["storyBeat"]> = [
+    "opener",
+    "scene_setter",
+    "highlight",
+    "details",
+    "reflection",
+    "closing",
+  ];
+
+  for (const photo of approvedPhotos.filter((photo) => photo.mustInclude)) {
+    addPlannerCandidate(selected, photo, targetCount);
+  }
+
+  for (const photo of rankedOverall.slice(0, Math.ceil(targetCount * 0.45))) {
+    addPlannerCandidate(selected, photo, targetCount);
+  }
+
+  for (const storyBeat of storyBeats) {
+    const rankedForBeat = [...approvedPhotos].sort(
+      (left, right) =>
+        getFallbackBeatPhotoScore(
+          right,
+          input.insights[right.id],
+          input.aesthetics[right.id],
+          storyBeat,
+        ) -
+          getFallbackBeatPhotoScore(
+            left,
+            input.insights[left.id],
+            input.aesthetics[left.id],
+            storyBeat,
+          ) ||
+        left.capturedAt.localeCompare(right.capturedAt),
+    );
+
+    for (const photo of rankedForBeat.slice(0, 4)) {
+      addPlannerCandidate(selected, photo, targetCount);
+    }
+  }
+
+  const anchorCount = Math.min(8, approvedPhotos.length);
+  for (let index = 0; index < anchorCount; index += 1) {
+    const anchorIndex = Math.round(
+      (index * Math.max(approvedPhotos.length - 1, 0)) / Math.max(anchorCount - 1, 1),
+    );
+    addPlannerCandidate(selected, approvedPhotos[anchorIndex], targetCount);
+  }
+
+  for (const photo of rankedOverall) {
+    addPlannerCandidate(selected, photo, targetCount);
+  }
+
+  return [...selected.values()].sort((left, right) =>
+    left.capturedAt.localeCompare(right.capturedAt),
+  );
+}
+
+function getPlannerTemplateCatalog(templatePackId: string | null | undefined) {
+  const catalog = getAiTemplateCatalogForPrompt(templatePackId);
+  const preferredTemplateIds = new Set([
+    "full-bleed-1",
+    "full-bleed-2",
+    "hero-1",
+    "hero-2",
+    "minimal-grid-1",
+    "minimal-grid-2",
+    "caption-1",
+    "timeline-1",
+    "collage-1",
+  ]);
+  const spreadTemplates = catalog.spreadTemplates.filter((template) =>
+    preferredTemplateIds.has(template.id),
+  );
+  const selectedSpreadTemplates = spreadTemplates.length
+    ? spreadTemplates
+    : catalog.spreadTemplates;
+
+  return {
+    ...catalog,
+    bookTemplatePacks: catalog.bookTemplatePacks.map((pack) => ({
+      ...pack,
+      spreadTemplateIds: pack.spreadTemplateIds.filter((templateId) =>
+        selectedSpreadTemplates.some((template) => template.id === templateId),
+      ),
+    })),
+    spreadTemplates: selectedSpreadTemplates,
+  };
+}
+
+function getVisibleTemplateFallbackId(
+  allowedTemplateIds: Set<string>,
+  storyBeat: AiBookPlan["spreadPlans"][number]["storyBeat"],
+) {
+  const candidates =
+    storyBeat === "opener"
+      ? ["full-bleed-1", "hero-1", "full-bleed-2"]
+      : storyBeat === "details"
+        ? ["minimal-grid-1", "collage-1", "minimal-grid-2"]
+        : storyBeat === "reflection" || storyBeat === "closing"
+          ? ["caption-1", "minimal-grid-2", "full-bleed-2"]
+          : ["timeline-1", "hero-2", "hero-1"];
+
+  return candidates.find((templateId) => allowedTemplateIds.has(templateId)) ??
+    [...allowedTemplateIds][0] ??
+    "hero-1";
+}
+
+function enforcePlannerVisibleTemplateCatalog(
+  plan: AiBookPlan,
+  allowedTemplateIds: Set<string>,
+) {
+  const remappedTemplateIds = new Set<string>();
+  const spreadPlans = plan.spreadPlans.map((spread) => {
+    if (allowedTemplateIds.has(spread.templateId)) {
+      return spread;
+    }
+
+    remappedTemplateIds.add(spread.templateId);
+
+    return {
+      ...spread,
+      templateId: getVisibleTemplateFallbackId(allowedTemplateIds, spread.storyBeat),
+    };
+  });
+  const warnings = remappedTemplateIds.size
+    ? [
+        `Planner requested template(s) outside its visible catalog and the server remapped them: ${[
+          ...remappedTemplateIds,
+        ].join(", ")}.`,
+      ]
+    : [];
+
+  return {
+    plan: {
+      ...plan,
+      spreadPlans,
+      warnings: [...plan.warnings, ...warnings],
+    },
+    warnings,
+  };
+}
+
+function summarizePlanPhotoSelection(plan: AiBookPlan, candidatePhotoIds: Set<string>) {
+  const plannedPhotoIds = new Set(plan.spreadPlans.flatMap((spread) => spread.photoIds));
+  const unknownPhotoIds = [...plannedPhotoIds].filter((photoId) => !candidatePhotoIds.has(photoId));
+
+  return {
+    plannedPhotoCount: plannedPhotoIds.size,
+    unknownPhotoCount: unknownPhotoIds.length,
+    validCandidatePhotoCount: plannedPhotoIds.size - unknownPhotoIds.length,
+  };
+}
+
+function getPlannerPhotoAliases(index: number) {
+  const ordinal = index + 1;
+  const paddedOrdinal = String(ordinal).padStart(2, "0");
+
+  return [`p${paddedOrdinal}`, `p${ordinal}`, `photo-${ordinal}`, `photo_${ordinal}`];
+}
+
+function buildPlannerPhotoAliasMap(photos: Array<{ id: string }>) {
+  const realPhotoIds = new Set(photos.map((photo) => photo.id));
+  const aliasMap = new Map<string, string>();
+
+  photos.forEach((photo, index) => {
+    for (const alias of getPlannerPhotoAliases(index)) {
+      if (!realPhotoIds.has(alias)) {
+        aliasMap.set(alias.toLowerCase(), photo.id);
+      }
+    }
+  });
+
+  return aliasMap;
+}
+
+function normalizePlannerPhotoAliases(
+  plan: AiBookPlan,
+  candidatePhotoIds: Set<string>,
+  aliasMap: Map<string, string>,
+) {
+  let replacedAliasCount = 0;
+  const spreadPlans = plan.spreadPlans.map((spread) => ({
+    ...spread,
+    photoIds: spread.photoIds.map((photoId) => {
+      if (candidatePhotoIds.has(photoId)) {
+        return photoId;
+      }
+
+      const aliasedPhotoId = aliasMap.get(photoId.trim().toLowerCase());
+      if (aliasedPhotoId) {
+        replacedAliasCount += 1;
+        return aliasedPhotoId;
+      }
+
+      return photoId;
+    }),
+  }));
+
+  if (!replacedAliasCount) {
+    return plan;
+  }
+
+  return {
+    ...plan,
+    spreadPlans,
+    warnings: [
+      ...plan.warnings,
+      `Planner used ${replacedAliasCount} short photo alias(es); the server mapped them to uploaded photo IDs.`,
+    ],
+  };
+}
+
 function buildPlannerPrompt(input: {
   aesthetics: Record<string, PhotoAesthetic>;
   insights: Record<string, PhotoInsight>;
@@ -555,14 +857,17 @@ function buildPlannerPrompt(input: {
   questionnaire: BookGenerationQuestionnaireAnswers;
 }) {
   const approvedPhotos = input.project.photos.filter((photo) => photo.approved);
+  const plannerPhotos = selectPlannerCandidatePhotos(input);
 
   return {
     instructions: [
       "Create a premium printed photo-book plan.",
       "Do not invent templates, photo ids, or free-form geometry.",
       "Use only the template IDs in templateCatalog.spreadTemplates.",
-      "Use each photo at most once.",
-      "Include every mustInclude photo.",
+      "Use only the photo IDs in photos; the app has already curated the strongest planner candidates from the full upload.",
+      "If a photo ID is too long, you may use that photo's alias value exactly; never invent a different photo reference.",
+      "Use each candidate photo at most once.",
+      "Include every mustInclude candidate photo.",
       "Use the editorial travel-story rhythm: opener, arrival/scene, hero moment, detail grid, quiet reflection, hero reset, detail grid, closer.",
       "Use 6 to 8 spreads for 13-25 photos.",
       "Use 10 to 14 spreads for 26-60 photos and curate the strongest subset instead of using every image.",
@@ -594,6 +899,12 @@ function buildPlannerPrompt(input: {
       summary: "Draft summary",
       warnings: [],
     },
+    photoSelection: {
+      approvedPhotoCount: approvedPhotos.length,
+      omittedLowerScoredPhotoCount: Math.max(0, approvedPhotos.length - plannerPhotos.length),
+      plannerCandidateCount: plannerPhotos.length,
+      plannerMaxPhotos: PLANNER_MAX_PHOTOS,
+    },
     project: {
       endDate: input.project.endDate,
       notes: input.project.notes.slice(0, 10),
@@ -604,7 +915,8 @@ function buildPlannerPrompt(input: {
       type: input.project.type,
     },
     questionnaire: input.questionnaire,
-    photos: approvedPhotos.map((photo) => ({
+    photos: plannerPhotos.map((photo, index) => ({
+      alias: getPlannerPhotoAliases(index)[0],
       capturedAt: photo.capturedAt,
       id: photo.id,
       insight: input.insights[photo.id]
@@ -629,7 +941,7 @@ function buildPlannerPrompt(input: {
       orientation: photo.orientation,
       title: photo.title,
     })),
-    templateCatalog: getAiTemplateCatalogForPrompt(input.project.draftEditorState?.templatePackId),
+    templateCatalog: getPlannerTemplateCatalog(input.project.draftEditorState?.templatePackId),
   };
 }
 
@@ -945,15 +1257,30 @@ async function requestPlannerPlan(input: {
       format: "json",
       messages,
       model: LOCAL_AI_PLANNER_MODEL,
+      numCtx: PLANNER_NUM_CTX,
       numPredict: PRIMARY_PLANNER_NUM_PREDICT,
       temperature: 0.25,
       timeoutMs: PRIMARY_PLANNER_TIMEOUT_MS,
     });
+    const candidatePhotoIds = new Set(plannerPrompt.photos.map((photo) => photo.id));
+    const aliasMap = buildPlannerPhotoAliasMap(plannerPrompt.photos);
+    const normalizedPlan = normalizePlannerPhotoAliases(
+      parsePlannerContent(content),
+      candidatePhotoIds,
+      aliasMap,
+    );
+    const enforcedPlan = enforcePlannerVisibleTemplateCatalog(
+      normalizedPlan,
+      new Set(plannerPrompt.templateCatalog.spreadTemplates.map((template) => template.id)),
+    );
+    const planPhotoSelection = summarizePlanPhotoSelection(enforcedPlan.plan, candidatePhotoIds);
 
     return {
       model: LOCAL_AI_PLANNER_MODEL,
-      plan: parsePlannerContent(content),
-      warnings: [] as string[],
+      photoSelection: plannerPrompt.photoSelection,
+      plan: enforcedPlan.plan,
+      planPhotoSelection,
+      warnings: enforcedPlan.warnings,
     };
   } catch (primaryError) {
     const fallbackWarning = `${LOCAL_AI_PLANNER_MODEL} planner failed, attempting ${LOCAL_AI_FALLBACK_PLANNER_MODEL}: ${
@@ -962,15 +1289,20 @@ async function requestPlannerPlan(input: {
 
     if (LOCAL_AI_FALLBACK_PLANNER_MODEL === LOCAL_AI_PLANNER_MODEL) {
       const warning = `${fallbackWarning}; skipped duplicate fallback attempt because planner and fallback model are both ${LOCAL_AI_PLANNER_MODEL}`;
+      const deterministicPlan = buildDeterministicEditorialPlan({
+        aesthetics: input.aesthetics,
+        insights: input.insights,
+        project: input.project,
+        warning,
+      });
+      const candidatePhotoIds = new Set(plannerPrompt.photos.map((photo) => photo.id));
+      const planPhotoSelection = summarizePlanPhotoSelection(deterministicPlan, candidatePhotoIds);
 
       return {
         model: "deterministic-editorial-fallback",
-        plan: buildDeterministicEditorialPlan({
-          aesthetics: input.aesthetics,
-          insights: input.insights,
-          project: input.project,
-          warning,
-        }),
+        photoSelection: plannerPrompt.photoSelection,
+        plan: deterministicPlan,
+        planPhotoSelection,
         warnings: [warning],
       };
     }
@@ -980,29 +1312,49 @@ async function requestPlannerPlan(input: {
         format: "json",
         messages,
         model: LOCAL_AI_FALLBACK_PLANNER_MODEL,
+        numCtx: PLANNER_NUM_CTX,
         numPredict: FALLBACK_PLANNER_NUM_PREDICT,
         temperature: 0.2,
         timeoutMs: FALLBACK_PLANNER_TIMEOUT_MS,
       });
+      const candidatePhotoIds = new Set(plannerPrompt.photos.map((photo) => photo.id));
+      const aliasMap = buildPlannerPhotoAliasMap(plannerPrompt.photos);
+      const normalizedPlan = normalizePlannerPhotoAliases(
+        parsePlannerContent(content),
+        candidatePhotoIds,
+        aliasMap,
+      );
+      const enforcedPlan = enforcePlannerVisibleTemplateCatalog(
+        normalizedPlan,
+        new Set(plannerPrompt.templateCatalog.spreadTemplates.map((template) => template.id)),
+      );
+      const planPhotoSelection = summarizePlanPhotoSelection(enforcedPlan.plan, candidatePhotoIds);
 
       return {
         model: LOCAL_AI_FALLBACK_PLANNER_MODEL,
-        plan: parsePlannerContent(content),
-        warnings: [fallbackWarning],
+        photoSelection: plannerPrompt.photoSelection,
+        plan: enforcedPlan.plan,
+        planPhotoSelection,
+        warnings: [fallbackWarning, ...enforcedPlan.warnings],
       };
     } catch (fallbackError) {
       const warning = `${fallbackWarning}; ${LOCAL_AI_FALLBACK_PLANNER_MODEL} fallback failed: ${
         fallbackError instanceof Error ? fallbackError.message : "unknown error"
       }`;
+      const deterministicPlan = buildDeterministicEditorialPlan({
+        aesthetics: input.aesthetics,
+        insights: input.insights,
+        project: input.project,
+        warning,
+      });
+      const candidatePhotoIds = new Set(plannerPrompt.photos.map((photo) => photo.id));
+      const planPhotoSelection = summarizePlanPhotoSelection(deterministicPlan, candidatePhotoIds);
 
       return {
         model: "deterministic-editorial-fallback",
-        plan: buildDeterministicEditorialPlan({
-          aesthetics: input.aesthetics,
-          insights: input.insights,
-          project: input.project,
-          warning,
-        }),
+        photoSelection: plannerPrompt.photoSelection,
+        plan: deterministicPlan,
+        planPhotoSelection,
         warnings: [warning],
       };
     }
@@ -1051,7 +1403,14 @@ export async function generateProjectBookWithLocalAi(
       ...run.modelNames,
       planner: planner.model,
     },
-    progress: [...run.progress, "planner returned book plan", "validated template plan"],
+    progress: [
+      ...run.progress,
+      `planner saw ${planner.photoSelection.plannerCandidateCount}/${planner.photoSelection.approvedPhotoCount} photo candidates`,
+      `planner selected ${planner.planPhotoSelection.validCandidatePhotoCount}/${planner.photoSelection.plannerCandidateCount} valid candidate photo ids before repair`,
+      `planner returned ${planner.planPhotoSelection.unknownPhotoCount} unknown photo ids before repair`,
+      "planner returned book plan",
+      "validated template plan",
+    ],
     status: "validating",
     validationWarnings: [...run.validationWarnings, ...planner.warnings, ...planner.plan.warnings],
   };

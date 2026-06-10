@@ -421,6 +421,50 @@ describe("AI book generation engine", () => {
     expect(() => parseAiBookPlanJson("{ not json")).toThrow(/invalid json/i);
   });
 
+  it("repairs common local planner JSON punctuation slips", () => {
+    const parsedPlan = parseAiBookPlanJson(`{
+      "designScore": 90,
+      "spreadPlans": [
+        {
+          "caption": "Madeira from the coast.",
+          "id": "spread-1",
+          "photoIds": ["photo-1"],
+          "storyBeat": "highlight",;
+          "templateId": "full-bleed-1",
+          "title": "Madeira Coast"
+        },
+      ],
+      "summary": "A Madeira travel book.",
+      "warnings": []
+    }`);
+
+    expect(parsedPlan.spreadPlans).toHaveLength(1);
+    expect(parsedPlan.spreadPlans[0]?.storyBeat).toBe("highlight");
+  });
+
+  it("salvages complete spreads from truncated local planner JSON", () => {
+    const parsedPlan = parseAiBookPlanJson(`{
+      "designScore": 88,
+      "spreadPlans": [
+        {
+          "caption": "Madeira opens with Atlantic light.",
+          "id": "spread-1",
+          "photoIds": ["photo-1"],
+          "storyBeat": "opener",
+          "templateId": "full-bleed-1",
+          "title": "Madeira Opens"
+        },
+        {
+          "id": "spread-2",
+          "photoIds": ["photo-2"],
+          "storyBeat": "highlight"
+    `);
+
+    expect(parsedPlan.designScore).toBe(88);
+    expect(parsedPlan.spreadPlans).toHaveLength(1);
+    expect(parsedPlan.warnings.join(" ")).toMatch(/partial local-model response/i);
+  });
+
   it("normalizes common planner story beat synonyms", () => {
     const parsedPlan = parseAiBookPlanJson(
       JSON.stringify({

@@ -80,6 +80,7 @@ export default async function LocalAiHealthPage() {
           <ConfigRow label="Base URL" value={ai.config.baseUrl} />
           <ConfigRow label="Provider" value={ai.config.provider} />
           <ConfigRow label="Primary planner timeout" value={`${ai.config.plannerTimeoutMs}ms`} />
+          <ConfigRow label="Planner context" value={`${ai.config.plannerNumCtx} tokens`} />
           <ConfigRow
             label="Fallback planner timeout"
             value={`${ai.config.fallbackPlannerTimeoutMs}ms`}
@@ -89,6 +90,11 @@ export default async function LocalAiHealthPage() {
             label="Fallback output budget"
             value={`${ai.config.fallbackPlannerNumPredict} tokens`}
           />
+          <ConfigRow
+            label="Planner candidate cap"
+            value={`${ai.config.plannerMaxPhotos} photos`}
+          />
+          <ConfigRow label="Vision context" value={`${ai.config.visionNumCtx} tokens`} />
           <ConfigRow label="Vision budget" value={`${ai.config.visionMaxPhotos} photos`} />
         </div>
       </section>

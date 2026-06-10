@@ -95,7 +95,14 @@ npm run test:ai:health
 project store and local uploads into a temp directory, starts a private Next
 server, runs generation, writes the report, and deletes the temp store. Stop any
 running local Next dev server before using it because Next cannot run two dev
-servers for this app directory.
+servers for this app directory. Large albums are compacted into a curated
+planner candidate pool capped by `LOCAL_AI_PLANNER_MAX_PHOTOS`; the benchmark
+report should include the `planner saw X/Y photo candidates` and
+`planner selected X/Y valid candidate photo ids before repair` progress lines,
+plus `planner returned X unknown photo ids before repair` if the model invents
+IDs that deterministic repair must remove. Keep `LOCAL_AI_PLANNER_NUM_CTX` near
+the default `8192` on the laptop unless a run needs a larger context; the old
+32K context path is too slow for local alpha benchmarking.
 
 Run the 13-photo plus 60-photo matrix from the isolated temp store before
 outside tester sessions:

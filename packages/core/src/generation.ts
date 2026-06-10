@@ -678,19 +678,146 @@ function parseSpread(value: unknown): AiBookPlanSpread | null {
   };
 }
 
-export function parseAiBookPlanJson(outputText: string): AiBookPlan {
+function extractPlannerJson(outputText: string) {
   const trimmedText = outputText.trim();
-  const candidateJson =
-    trimmedText.startsWith("{") && trimmedText.endsWith("}")
-      ? trimmedText
-      : trimmedText.slice(trimmedText.indexOf("{"), trimmedText.lastIndexOf("}") + 1);
+  const fencedJson = trimmedText.match(/```(?:json)?\s*([\s\S]*?)```/i)?.[1]?.trim();
+  const text = fencedJson ?? trimmedText;
+
+  return text.startsWith("{") && text.endsWith("}")
+    ? text
+    : text.slice(text.indexOf("{"), text.lastIndexOf("}") + 1);
+}
+
+function repairPlannerJson(candidateJson: string) {
+  return candidateJson
+    .replace(/,\s*;/g, ",")
+    .replace(/;\s*([}\]])/g, "$1")
+    .replace(/,\s*([}\]])/g, "$1")
+    .replace(/]\s*;/g, "]")
+    .replace(/}\s*;/g, "}");
+}
+
+function extractObjectJsonStringsFromArray(candidateJson: string, key: string) {
+  const keyIndex = candidateJson.indexOf(`"${key}"`);
+  if (keyIndex < 0) {
+    return [];
+  }
+
+  const arrayStart = candidateJson.indexOf("[", keyIndex);
+  if (arrayStart < 0) {
+    return [];
+  }
+
+  const objectJsonStrings: string[] = [];
+  let objectStart = -1;
+  let objectDepth = 0;
+  let inString = false;
+  let escaped = false;
+
+  for (let index = arrayStart + 1; index < candidateJson.length; index += 1) {
+    const character = candidateJson[index];
+
+    if (escaped) {
+      escaped = false;
+      continue;
+    }
+
+    if (character === "\\") {
+      escaped = inString;
+      continue;
+    }
+
+    if (character === "\"") {
+      inString = !inString;
+      continue;
+    }
+
+    if (inString) {
+      continue;
+    }
+
+    if (character === "{") {
+      if (objectDepth === 0) {
+        objectStart = index;
+      }
+      objectDepth += 1;
+      continue;
+    }
+
+    if (character === "}") {
+      objectDepth -= 1;
+      if (objectDepth === 0 && objectStart >= 0) {
+        objectJsonStrings.push(candidateJson.slice(objectStart, index + 1));
+        objectStart = -1;
+      }
+    }
+  }
+
+  return objectJsonStrings;
+}
+
+function parseJsonStringLiteral(value: string | undefined) {
+  if (!value) {
+    return "";
+  }
+
+  try {
+    return JSON.parse(`"${value}"`) as string;
+  } catch {
+    return value;
+  }
+}
+
+function parsePartialAiBookPlanJson(candidateJson: string): AiBookPlan | null {
+  const spreadPlans = extractObjectJsonStringsFromArray(candidateJson, "spreadPlans")
+    .map((spreadJson) => {
+      try {
+        return parseSpread(JSON.parse(repairPlannerJson(spreadJson)));
+      } catch {
+        return null;
+      }
+    })
+    .filter((spread): spread is AiBookPlanSpread => Boolean(spread));
+
+  if (!spreadPlans.length) {
+    return null;
+  }
+
+  const designScoreText = candidateJson.match(/"designScore"\s*:\s*(\d+(?:\.\d+)?)/)?.[1];
+  const designScore = designScoreText ? Number.parseFloat(designScoreText) : 0;
+  const summary = parseJsonStringLiteral(
+    candidateJson.match(/"summary"\s*:\s*"((?:\\.|[^"\\])*)"/)?.[1],
+  );
+
+  return {
+    chapters: [],
+    designScore: Number.isFinite(designScore) ? Math.max(0, Math.min(100, designScore)) : 0,
+    spreadPlans,
+    summary,
+    warnings: [
+      "Planner JSON was repaired from a partial local-model response before deterministic validation.",
+    ],
+  };
+}
+
+export function parseAiBookPlanJson(outputText: string): AiBookPlan {
+  const candidateJson = extractPlannerJson(outputText);
 
   let parsed: unknown;
   try {
     parsed = JSON.parse(candidateJson);
   } catch (error) {
-    const message = error instanceof Error ? error.message : "Invalid JSON.";
-    throw new Error(`AI book plan returned invalid JSON: ${message}`);
+    try {
+      parsed = JSON.parse(repairPlannerJson(candidateJson));
+    } catch {
+      const partialPlan = parsePartialAiBookPlanJson(candidateJson);
+      if (partialPlan) {
+        return partialPlan;
+      }
+
+      const message = error instanceof Error ? error.message : "Invalid JSON.";
+      throw new Error(`AI book plan returned invalid JSON: ${message}`);
+    }
   }
 
   if (!parsed || typeof parsed !== "object") {
