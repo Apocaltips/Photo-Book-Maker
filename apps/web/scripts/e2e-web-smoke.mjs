@@ -216,6 +216,25 @@ async function apiJsonEventually(path, init = {}, options = {}) {
   throw new Error(`API call failed ${path}: ${lastFailure}`);
 }
 
+function assertNoClientWorkerInternals(value, label) {
+  const text = JSON.stringify(value);
+  const leakedKeys = [
+    "jobSignature",
+    "projectDigest",
+    "workerAttemptCount",
+    "workerClaimedAt",
+    "workerHeartbeatAt",
+    "workerId",
+    "workerLeaseExpiresAt",
+    "workerLeaseToken",
+    "workerLeaseTokenHash",
+  ].filter((key) => text.includes(`"${key}"`));
+
+  if (leakedKeys.length) {
+    throw new Error(`${label} leaked worker-only field(s): ${leakedKeys.join(", ")}`);
+  }
+}
+
 async function workerApiJson(path, init = {}) {
   const response = await fetchWithTimeout(`${baseUrl}${path}`, {
     ...init,
@@ -629,6 +648,16 @@ async function runProjectE2E() {
   if (heartbeat.run?.workerId !== "e2e-worker" || !heartbeat.run?.workerHeartbeatAt) {
     throw new Error("Worker heartbeat did not refresh claimed run state.");
   }
+
+  const clientRunStatusAfterClaim = await apiJsonEventually(
+    `/api/projects/${project.id}/generation/runs/${queuedGeneration.run.id}`,
+  );
+  assertNoClientWorkerInternals(
+    clientRunStatusAfterClaim.run,
+    "client generation run status",
+  );
+  const clientProjectAfterClaim = await apiJson(`/api/projects/${project.id}`);
+  assertNoClientWorkerInternals(clientProjectAfterClaim.project, "client project response");
 
   const completedByStaleWorker = {
     ...claimed.job.project,

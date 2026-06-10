@@ -1,5 +1,21 @@
-import { normalizeProjectDraftState, type Project } from "@photo-book-maker/core";
+import {
+  normalizeProjectDraftState,
+  type GenerationRun,
+  type Project,
+} from "@photo-book-maker/core";
 import { signObjectReadUrl } from "@/lib/server/object-storage";
+
+export function sanitizeGenerationRunForClient(run: GenerationRun): GenerationRun {
+  const clientRun = { ...run };
+  delete clientRun.workerAttemptCount;
+  delete clientRun.workerClaimedAt;
+  delete clientRun.workerHeartbeatAt;
+  delete clientRun.workerId;
+  delete clientRun.workerLeaseExpiresAt;
+  delete clientRun.workerLeaseTokenHash;
+
+  return clientRun;
+}
 
 export async function hydrateProjectForClient(
   project: Project,
@@ -27,6 +43,7 @@ export async function hydrateProjectForClient(
 
   return {
     ...normalizedProject,
+    generationRuns: normalizedProject.generationRuns?.map(sanitizeGenerationRunForClient),
     photos,
   };
 }

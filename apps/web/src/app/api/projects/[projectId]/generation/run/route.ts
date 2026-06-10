@@ -10,7 +10,10 @@ import { authorizeProjectRequest } from "@/lib/server/auth";
 import { isAiWorkerQueueEnabled } from "@/lib/server/ai-worker-auth";
 import { generateProjectBookWithLocalAi } from "@/lib/server/book-generation-ai";
 import { mutationErrorResponse } from "@/lib/server/mutation-response";
-import { hydrateProjectForClient } from "@/lib/server/project-response";
+import {
+  hydrateProjectForClient,
+  sanitizeGenerationRunForClient,
+} from "@/lib/server/project-response";
 import { isRevisionConflictError, updateProject } from "@/lib/server/project-store";
 import { getRequestOrigin } from "@/lib/server/request-origin";
 
@@ -86,8 +89,10 @@ export async function POST(
         {
           message: "AI book generation queued for the private local worker.",
           project: await hydrateProjectForClient(startedProject, getRequestOrigin(request)),
-          run: startedProject.generationRuns?.find((entry) => entry.id === queuedRun.id) ??
-            queuedRun,
+          run: sanitizeGenerationRunForClient(
+            startedProject.generationRuns?.find((entry) => entry.id === queuedRun.id) ??
+              queuedRun,
+          ),
         },
         { status: 202 },
       );
@@ -138,7 +143,7 @@ export async function POST(
     return NextResponse.json({
       message: "AI book draft generated.",
       project: await hydrateProjectForClient(project, getRequestOrigin(request)),
-      run,
+      run: run ? sanitizeGenerationRunForClient(run) : run,
     });
   } catch (error) {
     const message =

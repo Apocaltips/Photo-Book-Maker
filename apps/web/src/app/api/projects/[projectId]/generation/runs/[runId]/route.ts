@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { authorizeProjectRequest } from "@/lib/server/auth";
+import { sanitizeGenerationRunForClient } from "@/lib/server/project-response";
 
 export async function GET(
   request: Request,
@@ -19,6 +20,6 @@ export async function GET(
   return NextResponse.json({
     projectId,
     revision: auth.project.revision ?? 1,
-    run,
+    run: sanitizeGenerationRunForClient(run),
   });
 }
