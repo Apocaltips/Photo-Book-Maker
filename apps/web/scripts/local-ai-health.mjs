@@ -11,7 +11,23 @@ const disallowDeterministicFallback =
   process.env.LOCAL_AI_HEALTH_DISALLOW_DETERMINISTIC_FALLBACK === "1";
 
 async function main() {
-  const response = await fetch(`${baseUrl}/api/ai/local/health`);
+  const healthUrl = `${baseUrl}/api/ai/local/health`;
+  let response;
+
+  try {
+    response = await fetch(healthUrl);
+  } catch (error) {
+    throw new Error(
+      [
+        `Local AI health endpoint was not reachable at ${healthUrl}.`,
+        "Start the web app first with `npm run dev:web`, or set LOCAL_AI_HEALTH_BASE_URL to a running Photo Book Maker web app.",
+        error instanceof Error ? `Original error: ${error.message}` : null,
+      ]
+        .filter(Boolean)
+        .join(" "),
+    );
+  }
+
   const body = await response.json().catch(() => ({}));
 
   if (!response.ok) {
