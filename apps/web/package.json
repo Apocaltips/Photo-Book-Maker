@@ -2,11 +2,13 @@
   "name": "@photo-book-maker/web",
   "version": "0.1.0",
   "private": true,
+  "type": "module",
   "scripts": {
     "dev": "next dev --hostname 0.0.0.0",
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
+    "test:readiness:contract": "node scripts/readiness-contract-smoke.mjs",
     "test:alpha:readiness": "node scripts/alpha-readiness.mjs",
     "test:hosted:alpha": "node scripts/hosted-alpha-smoke.mjs",
     "test:provider:readiness": "node scripts/provider-readiness.mjs",

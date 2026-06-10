@@ -202,6 +202,7 @@ See:
 ```bash
 npm run test
 npm run test:e2e:web
+npm run test:readiness:contract
 npm run test:ai:health
 npm run test:worker:preflight
 npm run test:worker:e2e

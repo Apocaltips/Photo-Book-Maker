@@ -144,6 +144,7 @@ npm run test
 npm run typecheck
 npm run lint
 npm run build
+npm run test:readiness:contract
 npm run test:alpha:readiness
 npm run test:e2e:web
 npm run test:ai:health

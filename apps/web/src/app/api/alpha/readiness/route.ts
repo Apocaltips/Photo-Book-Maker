@@ -4,6 +4,12 @@ import {
   type Project,
 } from "@photo-book-maker/core";
 import { NextResponse } from "next/server";
+import {
+  collectPhaseTwoProviderChecks,
+  getMissingEnv,
+  shouldRequirePrivateWorker,
+  shouldRequireProviderInfrastructure,
+} from "@/lib/alpha-readiness-contract";
 import { getAiWorkerQueueConfig } from "@/lib/server/ai-worker-auth";
 import {
   isLocalObjectStorageEnabled,
@@ -77,29 +83,6 @@ function parseMinEnv(name: string, fallback: number) {
   return Number.isFinite(parsed) ? parsed : fallback;
 }
 
-function hasEnvValue(name: string) {
-  return Boolean(process.env[name]?.trim());
-}
-
-function getMissingEnv(variables: string[]) {
-  return variables.filter((variable) => !hasEnvValue(variable));
-}
-
-function shouldCheckPhaseTwoProviders(mode: string) {
-  return (
-    mode === "hosted" ||
-    mode === "provider" ||
-    process.env.ALPHA_READINESS_REQUIRE_COMMERCE === "1" ||
-    process.env.ALPHA_READINESS_REQUIRE_EMAIL === "1" ||
-    process.env.ALPHA_READINESS_REQUIRE_OBSERVABILITY === "1" ||
-    process.env.ALPHA_READINESS_REQUIRE_PRINT_PROVIDER === "1"
-  );
-}
-
-function shouldRequirePhaseTwoGroup(mode: string, envName: string) {
-  return process.env[envName] === "1" || mode === "provider";
-}
-
 function addCheck(
   checks: ReadinessCheck[],
   status: ReadinessStatus,
@@ -115,13 +98,19 @@ function addCheck(
   });
 }
 
+function normalizeReadinessStatus(status: unknown): ReadinessStatus {
+  return status === "fail" || status === "pass" || status === "skip" || status === "warn"
+    ? status
+    : "fail";
+}
+
 function addEnvGroupCheck(
   checks: ReadinessCheck[],
   name: string,
   variables: string[],
   required: boolean,
 ) {
-  const missing = getMissingEnv(variables);
+  const missing = getMissingEnv(process.env, variables);
 
   if (!missing.length) {
     addCheck(checks, "pass", `${name} env`, `${name} environment variables are present.`, {
@@ -139,177 +128,16 @@ function addEnvGroupCheck(
   );
 }
 
-function addStripeChecks(checks: ReadinessCheck[], required: boolean) {
-  addEnvGroupCheck(
-    checks,
-    "Stripe checkout",
-    ["STRIPE_SECRET_KEY", "NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY", "STRIPE_WEBHOOK_SECRET"],
-    required,
-  );
-  addEnvGroupCheck(
-    checks,
-    "Stripe product prices",
-    ["STRIPE_PRICE_TRIP_BOOK_ID", "STRIPE_PRICE_YEARBOOK_ID"],
-    required,
-  );
-}
-
-function addEmailChecks(checks: ReadinessCheck[], required: boolean) {
-  const hasResend = hasEnvValue("RESEND_API_KEY");
-  const hasPostmark = hasEnvValue("POSTMARK_SERVER_TOKEN");
-  const hasSender = hasEnvValue("TRANSACTIONAL_EMAIL_FROM");
-
-  addCheck(
-    checks,
-    hasResend || hasPostmark ? "pass" : required ? "fail" : "warn",
-    "transactional email provider",
-    hasResend || hasPostmark
-      ? "A transactional email provider is configured."
-      : "Configure Resend or Postmark before branded invites and order emails.",
-    {
-      hasPostmark,
-      hasResend,
-      providers: ["RESEND_API_KEY", "POSTMARK_SERVER_TOKEN"],
-    },
-  );
-
-  addCheck(
-    checks,
-    hasSender ? "pass" : required ? "fail" : "warn",
-    "transactional email sender",
-    hasSender
-      ? "Transactional email sender is configured."
-      : "TRANSACTIONAL_EMAIL_FROM is required before sending branded customer email.",
-    {
-      variable: "TRANSACTIONAL_EMAIL_FROM",
-    },
-  );
-}
-
-function addObservabilityChecks(checks: ReadinessCheck[], required: boolean) {
-  const hasSentry = hasEnvValue("SENTRY_DSN") || hasEnvValue("NEXT_PUBLIC_SENTRY_DSN");
-  const hasPostHog = hasEnvValue("NEXT_PUBLIC_POSTHOG_KEY");
-
-  addCheck(
-    checks,
-    hasSentry ? "pass" : required ? "fail" : "warn",
-    "Sentry observability",
-    hasSentry
-      ? "Sentry is configured for runtime error visibility."
-      : "Configure Sentry before provider alpha so upload, checkout, and print errors are visible.",
-    {
-      variables: ["SENTRY_DSN", "NEXT_PUBLIC_SENTRY_DSN"],
-    },
-  );
-
-  addCheck(
-    checks,
-    hasPostHog ? "pass" : required ? "fail" : "warn",
-    "PostHog analytics",
-    hasPostHog
-      ? "PostHog analytics key is configured."
-      : "Configure PostHog before provider alpha to measure upload-to-proof and checkout drop-off.",
-    {
-      variables: ["NEXT_PUBLIC_POSTHOG_KEY", "NEXT_PUBLIC_POSTHOG_HOST"],
-    },
-  );
-}
-
-function addPrintProviderChecks(checks: ReadinessCheck[], required: boolean) {
-  const provider = process.env.PRINT_PROVIDER?.trim().toLowerCase() ?? "";
-  const allowedProviders = [
-    "manual_pdf",
-    "peecho",
-    "prodigi",
-    "cloudprinter",
-    "rpi_blurb",
-    "lulu",
-    "gelato",
-  ];
-  const isKnownProvider = provider ? allowedProviders.includes(provider) : false;
-
-  if (!provider) {
-    addCheck(
-      checks,
-      required ? "fail" : "warn",
-      "print provider choice",
-      "PRINT_PROVIDER is not selected. Phase 1 can stay PDF-first; provider alpha needs a concrete adapter target.",
-      { allowedProviders },
-    );
-  } else if (!isKnownProvider) {
-    addCheck(
-      checks,
-      "fail",
-      "print provider choice",
-      `PRINT_PROVIDER=${provider} is not one of the supported provider candidates.`,
-      { allowedProviders, provider },
-    );
-  } else if (required && provider === "manual_pdf") {
-    addCheck(
-      checks,
-      "fail",
-      "print provider choice",
-      "Provider alpha requires a direct print API candidate, not manual_pdf.",
-      { allowedProviders, provider },
-    );
-  } else {
-    addCheck(
-      checks,
-      "pass",
-      "print provider choice",
-      `Print provider target is ${provider}.`,
-      { allowedProviders, provider },
-    );
-  }
-
-  addEnvGroupCheck(
-    checks,
-    "Print provider adapter",
-    [
-      "PRINT_PROVIDER_API_KEY",
-      "PRINT_PROVIDER_WEBHOOK_SECRET",
-      "PRINT_PROVIDER_PRODUCT_TRIP_SKU",
-      "PRINT_PROVIDER_PRODUCT_YEARBOOK_SKU",
-    ],
-    required && provider !== "manual_pdf",
-  );
-
-  const sampleConfirmed = process.env.PRINT_PROVIDER_SAMPLE_ORDER_CONFIRMED === "1";
-  addCheck(
-    checks,
-    sampleConfirmed ? "pass" : required ? "fail" : "warn",
-    "print sample order",
-    sampleConfirmed
-      ? "A sample order has been marked as confirmed for the selected print provider."
-      : "Provider alpha requires at least one reviewed sample order before outside print checkout.",
-    {
-      variable: "PRINT_PROVIDER_SAMPLE_ORDER_CONFIRMED",
-    },
-  );
-}
-
 function addPhaseTwoProviderChecks(checks: ReadinessCheck[], mode: string) {
-  if (!shouldCheckPhaseTwoProviders(mode)) {
+  for (const check of collectPhaseTwoProviderChecks({ env: process.env, mode })) {
     addCheck(
       checks,
-      "skip",
-      "phase 2 provider env",
-      "Commerce, email, monitoring, and direct print provider checks are skipped for local PDF-first alpha.",
-      { mode },
+      normalizeReadinessStatus(check.status),
+      check.name,
+      check.detail,
+      check.evidence,
     );
-    return;
   }
-
-  addStripeChecks(checks, shouldRequirePhaseTwoGroup(mode, "ALPHA_READINESS_REQUIRE_COMMERCE"));
-  addEmailChecks(checks, shouldRequirePhaseTwoGroup(mode, "ALPHA_READINESS_REQUIRE_EMAIL"));
-  addObservabilityChecks(
-    checks,
-    shouldRequirePhaseTwoGroup(mode, "ALPHA_READINESS_REQUIRE_OBSERVABILITY"),
-  );
-  addPrintProviderChecks(
-    checks,
-    shouldRequirePhaseTwoGroup(mode, "ALPHA_READINESS_REQUIRE_PRINT_PROVIDER"),
-  );
 }
 
 function addTemplateCatalogChecks(checks: ReadinessCheck[]) {
@@ -656,14 +484,8 @@ export async function GET(request: Request) {
   }
 
   const mode = getRequestedMode(request);
-  const requireProviders =
-    process.env.ALPHA_READINESS_REQUIRE_PROVIDERS === "1" ||
-    mode === "hosted" ||
-    mode === "provider";
-  const requireWorker =
-    process.env.ALPHA_READINESS_REQUIRE_WORKER === "1" ||
-    mode === "hosted" ||
-    mode === "provider";
+  const requireProviders = shouldRequireProviderInfrastructure(mode, process.env);
+  const requireWorker = shouldRequirePrivateWorker(mode, process.env);
   const rawRequireSavedGeneration = process.env.ALPHA_READINESS_REQUIRE_SAVED_RUN;
   const requireSavedGeneration =
     rawRequireSavedGeneration === "1" ||
