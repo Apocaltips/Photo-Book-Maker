@@ -79,7 +79,8 @@ The authoritative API for v1 is the Next.js app in `apps/web`.
 2. Add the same environment variables to the hosted project.
 3. Confirm `https://YOUR-WEB-APP/api/projects` returns an auth-required JSON response.
 4. Confirm `https://YOUR-WEB-APP/api/templates` returns at least 12 book template packs and 64 spread templates.
-5. In local/staging, confirm `/ai-health` shows the local AI models are ready before using AI Designer with testers.
+5. In local/staging, confirm `/ai-health` shows the local AI models are ready, queue health is clean, and the latest saved generation has an acceptable quality score before using AI Designer with testers.
+6. Run the local AI benchmark and keep the generated report path with tester-session notes. If the benchmark used the fallback planner or deterministic safe fallback, record that explicitly instead of treating it as a primary-planner pass.
 
 ## 5. Point Mobile At The Hosted API
 
@@ -196,12 +197,19 @@ npm ci
 npm run test
 npm run test:e2e:web
 npm run test:ai:health
-npm run test:ai:local
 npm run typecheck
 npm run lint
 npm run build
 npm run typecheck -w @photo-book-maker/mobile
 cd apps/mobile && npx expo-doctor
+```
+
+For the mutating local AI acceptance run, opt into the current local project
+store explicitly and keep the benchmark report path with tester-session notes:
+
+```powershell
+$env:AI_GENERATION_ALLOW_EXISTING_STORE="1"; npm run test:ai:benchmark
+$env:AI_GENERATION_ALLOW_EXISTING_STORE="1"; npm run test:ai:local
 ```
 
 ## Current Limits

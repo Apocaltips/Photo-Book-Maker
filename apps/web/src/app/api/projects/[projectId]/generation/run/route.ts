@@ -28,6 +28,19 @@ export async function POST(
   try {
     const { projectId } = await params;
     failureProjectId = projectId;
+    const directLocalAiAllowed =
+      process.env.NODE_ENV !== "production" ||
+      process.env.LOCAL_AI_DIRECT_IN_PRODUCTION === "1";
+    if (!directLocalAiAllowed) {
+      return NextResponse.json(
+        {
+          message:
+            "Local AI direct generation is disabled in production. Configure the private AI worker bridge before enabling hosted AI Designer runs.",
+        },
+        { status: 503 },
+      );
+    }
+
     const auth = await authorizeProjectRequest(request, projectId, "edit");
     if ("response" in auth) {
       return auth.response;

@@ -1,8 +1,10 @@
 /* global console, process */
 
 import { Buffer } from "node:buffer";
+import { mkdir, writeFile } from "node:fs/promises";
 import { request as requestHttp } from "node:http";
 import { request as requestHttps } from "node:https";
+import { dirname } from "node:path";
 import { URL } from "node:url";
 
 const baseUrl = (process.env.AI_GENERATION_BASE_URL ?? "http://127.0.0.1:3000").replace(
@@ -15,6 +17,10 @@ const projectTitleNeedle = (
 ).toLowerCase();
 const timeoutMs = Number.parseInt(process.env.AI_GENERATION_TIMEOUT_MS ?? "600000", 10);
 const strictAcceptance = process.env.AI_GENERATION_STRICT !== "0";
+const disallowDeterministicFallback =
+  process.env.AI_GENERATION_DISALLOW_DETERMINISTIC_FALLBACK === "1";
+const reportPath = process.env.AI_GENERATION_REPORT_PATH;
+const allowExistingStore = process.env.AI_GENERATION_ALLOW_EXISTING_STORE === "1";
 const devAuthHeaders = {
   "X-Photo-Book-Dev-Email":
     process.env.AI_GENERATION_DEV_EMAIL ?? "android-tester@example.com",
@@ -191,6 +197,32 @@ function assertAcceptance(project, templateIds) {
   };
 }
 
+function getPlannerMode(run) {
+  const planner = run?.modelNames?.planner;
+  if (!planner) {
+    return "none";
+  }
+
+  if (planner === "deterministic-editorial-fallback") {
+    return "deterministic-fallback";
+  }
+
+  if (planner === run?.modelNames?.fallbackPlanner) {
+    return "fallback-planner";
+  }
+
+  return "primary-or-custom-planner";
+}
+
+async function writeReport(summary) {
+  if (!reportPath) {
+    return;
+  }
+
+  await mkdir(dirname(reportPath), { recursive: true });
+  await writeFile(reportPath, `${JSON.stringify(summary, null, 2)}\n`);
+}
+
 async function findProject() {
   if (projectId) {
     return (await apiJson(`/api/projects/${projectId}`)).project;
@@ -210,7 +242,23 @@ async function findProject() {
   return match;
 }
 
+function assertExistingStoreOptIn() {
+  const isDefaultLocalApp = /^https?:\/\/(?:127\.0\.0\.1|localhost):3000\b/i.test(baseUrl);
+  if (!isDefaultLocalApp || allowExistingStore) {
+    return;
+  }
+
+  throw new Error(
+    [
+      "Refusing to mutate the default local project store without explicit opt-in.",
+      "Set AI_GENERATION_ALLOW_EXISTING_STORE=1 when you intentionally want this smoke to save a generation run into the current local app data.",
+      "For safer automated E2E coverage, use npm run test:e2e:web, which boots an isolated temp store by default.",
+    ].join(" "),
+  );
+}
+
 const startedAt = Date.now();
+assertExistingStoreOptIn();
 const templates = await apiJson("/api/templates");
 const templateIds = new Set(
   templates.catalog?.spreadTemplates?.map((template) => template.id) ?? [],
@@ -267,7 +315,11 @@ const summary = {
   acceptance,
   approxPromptPressureTokens,
   elapsedMs,
+  fallbackUsed: getPlannerMode(run) !== "primary-or-custom-planner",
+  deterministicFallbackUsed: getPlannerMode(run) === "deterministic-fallback",
+  localPlannerJsonAccepted: getPlannerMode(run) !== "deterministic-fallback",
   modelNames: run?.modelNames,
+  plannerMode: getPlannerMode(run),
   projectId: project.id,
   projectRevision: project.revision,
   qualityReport,
@@ -277,9 +329,16 @@ const summary = {
 };
 
 console.log(JSON.stringify(summary, null, 2));
+await writeReport(summary);
 
 if (strictAcceptance && acceptance.failures.length) {
   throw new Error(`AI generation acceptance failed:\n- ${acceptance.failures.join("\n- ")}`);
+}
+
+if (strictAcceptance && disallowDeterministicFallback && summary.deterministicFallbackUsed) {
+  throw new Error(
+    "AI generation acceptance used deterministic fallback. Set AI_GENERATION_DISALLOW_DETERMINISTIC_FALLBACK=0 for local alpha fallback testing, or tune planner timeouts/prompts.",
+  );
 }
 
 console.log("local AI generation smoke passed");

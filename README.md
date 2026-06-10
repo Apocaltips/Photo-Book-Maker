@@ -51,7 +51,10 @@ npm run dev:web
 
 Open `http://127.0.0.1:3000/ai-health` before tester sessions to confirm
 Ollama, required local models, project storage mode, and the latest generation
-quality score.
+quality score. The page also shows whether the latest saved book used the
+primary planner, fallback planner, or the deterministic safe fallback. A safe
+fallback can be acceptable for local alpha when the quality score passes, but
+it should stay visible instead of being treated like a primary-model success.
 
 6. In a second terminal, start Expo:
 
@@ -86,12 +89,23 @@ See:
 npm run test
 npm run test:e2e:web
 npm run test:ai:health
-npm run test:ai:local
 npm run typecheck
 npm run lint
 npm run build
 npm run typecheck -w @photo-book-maker/mobile
 cd apps/mobile && npx expo-doctor
+```
+
+`npm run test:ai:benchmark` runs the health gate and a full local generation
+smoke, then writes a JSON benchmark report to the system temp directory unless
+`AI_GENERATION_REPORT_PATH` is set. The report records elapsed time, prompt
+pressure, planner/fallback mode, quality score, photo usage, template support,
+and acceptance failures. Because it saves a generation run to the current local
+project, it requires an explicit opt-in:
+
+```powershell
+$env:AI_GENERATION_ALLOW_EXISTING_STORE="1"; npm run test:ai:benchmark
+$env:AI_GENERATION_ALLOW_EXISTING_STORE="1"; npm run test:ai:local
 ```
 
 ## iOS Preview Build

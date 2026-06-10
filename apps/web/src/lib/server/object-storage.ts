@@ -1,7 +1,10 @@
 import { GetObjectCommand, PutObjectCommand, S3Client } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
+import { Buffer } from "node:buffer";
 import { randomUUID } from "node:crypto";
+import { readFile } from "node:fs/promises";
 import path from "node:path";
+import { Readable } from "node:stream";
 
 type UploadTicket = {
   contentType: string;
@@ -123,6 +126,46 @@ function getS3Client() {
 
 export function isObjectStorageConfigured() {
   return Boolean(getS3Client() && getBucketName());
+}
+
+export async function readStoredObjectBuffer(storagePath: string) {
+  if (isLocalObjectStorageEnabled() && isLocalUploadStoragePath(storagePath)) {
+    return readFile(getLocalUploadFilePath(storagePath));
+  }
+
+  const bucket = getBucketName();
+  const client = getS3Client();
+
+  if (!bucket || !client) {
+    return null;
+  }
+
+  const response = await client.send(
+    new GetObjectCommand({
+      Bucket: bucket,
+      Key: storagePath,
+    }),
+  );
+  const body = response.Body;
+
+  if (!body) {
+    return null;
+  }
+
+  if (body instanceof Readable) {
+    const chunks: Buffer[] = [];
+    for await (const chunk of body) {
+      chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
+    }
+
+    return Buffer.concat(chunks);
+  }
+
+  if (typeof body.transformToByteArray === "function") {
+    return Buffer.from(await body.transformToByteArray());
+  }
+
+  return null;
 }
 
 export async function signObjectReadUrl(

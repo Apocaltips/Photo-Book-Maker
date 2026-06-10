@@ -13,12 +13,8 @@ import {
   type PhotoInsight,
   type Project,
 } from "@photo-book-maker/core";
-import { readFile } from "node:fs/promises";
 import sharp from "sharp";
-import {
-  getLocalUploadFilePath,
-  isLocalUploadStoragePath,
-} from "@/lib/server/object-storage";
+import { readStoredObjectBuffer } from "@/lib/server/object-storage";
 
 const LOCAL_AI_BASE_URL = (
   process.env.LOCAL_AI_BASE_URL ??
@@ -257,11 +253,15 @@ async function notifyGenerationRun(
 }
 
 async function readPhotoImageBase64(photo: PhotoAsset) {
-  if (!photo.storagePath || !isLocalUploadStoragePath(photo.storagePath)) {
+  if (!photo.storagePath) {
     return null;
   }
 
-  const file = await readFile(getLocalUploadFilePath(photo.storagePath));
+  const file = await readStoredObjectBuffer(photo.storagePath);
+  if (!file) {
+    return null;
+  }
+
   const image = await sharp(file)
     .rotate()
     .resize({
@@ -277,12 +277,16 @@ async function readPhotoImageBase64(photo: PhotoAsset) {
 }
 
 async function analyzePhotoAesthetic(photo: PhotoAsset): Promise<PhotoAesthetic | null> {
-  if (!photo.storagePath || !isLocalUploadStoragePath(photo.storagePath)) {
+  if (!photo.storagePath) {
     return null;
   }
 
   try {
-    const file = await readFile(getLocalUploadFilePath(photo.storagePath));
+    const file = await readStoredObjectBuffer(photo.storagePath);
+    if (!file) {
+      return null;
+    }
+
     const { data, info } = await sharp(file)
       .rotate()
       .resize({
@@ -425,7 +429,7 @@ async function analyzePhotoWithVision(
   const cacheKey = getPhotoInsightCacheKey(photo);
   const imageBase64 = await readPhotoImageBase64(photo).catch(() => null);
   if (!imageBase64) {
-    warnings.push(`${photo.title} used metadata-only insight because no local image file was readable.`);
+    warnings.push(`${photo.title} used metadata-only insight because no stored image file was readable.`);
     return buildFallbackPhotoInsight(photo);
   }
 

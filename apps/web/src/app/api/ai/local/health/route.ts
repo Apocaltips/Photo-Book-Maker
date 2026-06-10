@@ -1,6 +1,5 @@
 import { NextResponse } from "next/server";
-import { checkLocalAiHealth } from "@/lib/server/book-generation-ai";
-import { getProjectStoreMode, readProjects } from "@/lib/server/project-store";
+import { getLocalAiHealthStatus } from "@/lib/server/local-ai-health-status";
 
 export async function GET() {
   if (
@@ -13,50 +12,14 @@ export async function GET() {
     );
   }
 
-  const ai = await checkLocalAiHealth();
-  const projects = await readProjects().catch(() => []);
-  const runs = projects.flatMap((project) =>
-    (project.generationRuns ?? []).map((run) => ({
-      projectId: project.id,
-      projectTitle: project.title,
-      revision: project.revision ?? 1,
-      run,
-    })),
-  );
-  const latestRun = runs.sort((left, right) =>
-    right.run.startedAt.localeCompare(left.run.startedAt),
-  )[0];
-  const savedRuns = runs.filter((entry) => entry.run.status === "saved").length;
-  const failedRuns = runs.filter((entry) => entry.run.status === "failed").length;
-  const activeRuns = runs.filter((entry) =>
-    ["analyzing_photos", "planning", "queued", "validating"].includes(entry.run.status),
-  ).length;
+  const status = await getLocalAiHealthStatus();
 
   return NextResponse.json({
-    ai,
-    queue: {
-      activeRuns,
-      failedRuns,
-      savedRuns,
-      totalRuns: runs.length,
-    },
-    latestRun: latestRun
-      ? {
-          completedAt: latestRun.run.completedAt,
-          modelNames: latestRun.run.modelNames,
-          projectId: latestRun.projectId,
-          projectRevision: latestRun.revision,
-          projectTitle: latestRun.projectTitle,
-          qualityReport: latestRun.run.qualityReport ?? null,
-          runId: latestRun.run.id,
-          startedAt: latestRun.run.startedAt,
-          status: latestRun.run.status,
-          validationWarnings: latestRun.run.validationWarnings,
-        }
-      : null,
-    store: {
-      mode: getProjectStoreMode(),
-      projectCount: projects.length,
-    },
+    ai: status.ai,
+    lastSavedRun: status.lastSavedRun,
+    latestRun: status.latestRun,
+    plannerStatus: status.plannerStatus,
+    queue: status.queue,
+    store: status.store,
   });
 }

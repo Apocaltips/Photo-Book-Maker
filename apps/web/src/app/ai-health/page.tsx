@@ -1,21 +1,19 @@
 import Link from "next/link";
-import { checkLocalAiHealth } from "@/lib/server/book-generation-ai";
-import { getProjectStoreMode, readProjects } from "@/lib/server/project-store";
+import { notFound } from "next/navigation";
+import { getLocalAiHealthStatus } from "@/lib/server/local-ai-health-status";
 
 export const dynamic = "force-dynamic";
 
 export default async function LocalAiHealthPage() {
-  const ai = await checkLocalAiHealth();
-  const projects = await readProjects().catch(() => []);
-  const runs = projects
-    .flatMap((project) =>
-      (project.generationRuns ?? []).map((run) => ({
-        project,
-        run,
-      })),
-    )
-    .sort((left, right) => right.run.startedAt.localeCompare(left.run.startedAt));
-  const latestRun = runs[0] ?? null;
+  if (
+    process.env.NODE_ENV === "production" &&
+    process.env.LOCAL_AI_HEALTH_PUBLIC !== "1"
+  ) {
+    notFound();
+  }
+
+  const status = await getLocalAiHealthStatus();
+  const { ai, lastSavedRun, latestRun, plannerStatus, projects, queue, store } = status;
   const statusTone =
     ai.status === "healthy"
       ? "bg-[#dfeee7] text-[#285940]"
@@ -45,7 +43,7 @@ export default async function LocalAiHealthPage() {
 
       <section className="grid gap-5 md:grid-cols-3">
         <HealthCard label="Ollama" value={ai.ollamaReachable ? "Reachable" : "Offline"} />
-        <HealthCard label="Store mode" value={getProjectStoreMode()} />
+        <HealthCard label="Store mode" value={store.mode} />
         <HealthCard label="Projects" value={String(projects.length)} />
       </section>
 
@@ -86,33 +84,50 @@ export default async function LocalAiHealthPage() {
         </div>
       </section>
 
+      <section className="grid gap-5 md:grid-cols-4">
+        <HealthCard label="Active runs" value={String(queue.activeRuns)} />
+        <HealthCard label="Saved runs" value={String(queue.savedRuns)} />
+        <HealthCard label="Failed runs" value={String(queue.failedRuns)} />
+        <HealthCard
+          label="Last saved planner"
+          value={formatPlannerMode(plannerStatus.lastSavedPlannerMode)}
+        />
+      </section>
+
       <section className="surface rounded-[2rem] p-6">
         <div className="eyebrow">Latest generation</div>
         {latestRun ? (
           <div className="mt-4 space-y-4">
             <div className="grid gap-3 md:grid-cols-4">
-              <HealthCard label="Project" value={latestRun.project.title} />
-              <HealthCard label="Status" value={latestRun.run.status} />
+              <HealthCard label="Project" value={latestRun.projectTitle} />
+              <HealthCard label="Status" value={latestRun.status} />
               <HealthCard
                 label="Quality"
                 value={
-                  latestRun.run.qualityReport
-                    ? `${latestRun.run.qualityReport.score}/100`
+                  latestRun.qualityReport
+                    ? `${latestRun.qualityReport.score}/100`
                     : "Not scored"
                 }
               />
               <HealthCard
                 label="Warnings"
-                value={String(latestRun.run.validationWarnings.length)}
+                value={String(latestRun.validationWarnings.length)}
               />
             </div>
-            {latestRun.run.qualityReport?.warnings.length ? (
+            {plannerStatus.fallbackUsedInLatest ? (
+              <p className="rounded-[1.2rem] bg-[#fff8f2] px-4 py-3 text-sm leading-6 text-[#7a5120]">
+                Latest run used {formatPlannerMode(plannerStatus.latestPlannerMode)}.
+                This is acceptable for local alpha when quality gates pass, but it
+                means the primary planner did not complete for that run.
+              </p>
+            ) : null}
+            {latestRun.qualityReport?.warnings.length ? (
               <div className="rounded-[1.4rem] border border-[#00000012] bg-white/72 p-4 text-sm leading-7 text-[#5b4f47]">
-                {latestRun.run.qualityReport.warnings.slice(0, 5).join(" ")}
+                {latestRun.qualityReport.warnings.slice(0, 5).join(" ")}
               </div>
             ) : null}
             <Link
-              href={`/projects/${latestRun.project.id}`}
+              href={`/projects/${latestRun.projectId}`}
               className="inline-flex rounded-full border border-[#1f18141f] bg-[#1f1814] px-5 py-2.5 text-sm font-semibold text-[#f8efe7]"
               style={{ color: "#f8efe7" }}
             >
@@ -122,6 +137,40 @@ export default async function LocalAiHealthPage() {
         ) : (
           <p className="mt-3 text-sm leading-7 text-[#5b4f47]">
             No generation runs have been saved yet.
+          </p>
+        )}
+      </section>
+
+      <section className="surface rounded-[2rem] p-6">
+        <div className="eyebrow">Last successful generation</div>
+        {lastSavedRun ? (
+          <div className="mt-4 grid gap-3 md:grid-cols-4">
+            <HealthCard label="Project" value={lastSavedRun.projectTitle} />
+            <HealthCard
+              label="Quality"
+              value={
+                lastSavedRun.qualityReport
+                  ? `${lastSavedRun.qualityReport.score}/100`
+                  : "Not scored"
+              }
+            />
+            <HealthCard
+              label="Photos used"
+              value={
+                lastSavedRun.qualityReport
+                  ? `${lastSavedRun.qualityReport.usedPhotoCount}/${lastSavedRun.qualityReport.approvedPhotoCount}`
+                  : "Unknown"
+              }
+            />
+            <HealthCard
+              label="Planner"
+              value={formatPlannerMode(plannerStatus.lastSavedPlannerMode)}
+            />
+          </div>
+        ) : (
+          <p className="mt-3 text-sm leading-7 text-[#5b4f47]">
+            No saved generation run is available yet. Run the local AI smoke
+            before using the app with outside testers.
           </p>
         )}
       </section>
@@ -147,4 +196,19 @@ function ConfigRow({ label, value }: { label: string; value: string }) {
       <div className="mt-1 break-words text-sm font-semibold text-[#1f1814]">{value}</div>
     </div>
   );
+}
+
+function formatPlannerMode(mode: string) {
+  switch (mode) {
+    case "primary-planner":
+      return "Primary";
+    case "fallback-planner":
+      return "Fallback";
+    case "deterministic-fallback":
+      return "Safe fallback";
+    case "custom-planner":
+      return "Custom";
+    default:
+      return "None";
+  }
 }

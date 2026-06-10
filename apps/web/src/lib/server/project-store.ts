@@ -141,6 +141,20 @@ async function readProjectsFromSupabase(client: SupabaseClient): Promise<Project
     .map(normalizeProjectRecord);
 }
 
+async function readProjectFromSupabase(client: SupabaseClient, projectId: string) {
+  const { data, error } = await client
+    .from(supabaseProjectsTable)
+    .select("payload")
+    .eq("id", projectId)
+    .maybeSingle();
+
+  if (error) {
+    throw new Error(`Failed to read Supabase project ${projectId}: ${error.message}`);
+  }
+
+  return data?.payload ? normalizeProjectRecord(data.payload as Project) : null;
+}
+
 async function writeProjectsToSupabase(client: SupabaseClient, projects: Project[]) {
   const { error } = await client
     .from(supabaseProjectsTable)
@@ -181,6 +195,52 @@ export async function updateProject(
     skipRevisionAdvance?: boolean;
   },
 ) {
+  const supabase = getSupabaseAdminClient();
+  if (supabase) {
+    const currentProject = await readProjectFromSupabase(supabase, projectId);
+
+    if (!currentProject) {
+      return null;
+    }
+
+    if (
+      typeof options?.expectedRevision === "number" &&
+      currentProject.revision !== options.expectedRevision
+    ) {
+      throw new RevisionConflictError({
+        currentRevision: currentProject.revision ?? 1,
+        expectedRevision: options.expectedRevision,
+      });
+    }
+
+    const updatedProject = normalizeProjectRecord(await updater(currentProject));
+    const nextProject = options?.skipRevisionAdvance
+      ? updatedProject
+      : advanceProjectRevision(updatedProject, options?.activity);
+    const expectedRevision = currentProject.revision ?? 1;
+    const { data, error } = await supabase
+      .from(supabaseProjectsTable)
+      .update(toProjectRow(nextProject))
+      .eq("id", projectId)
+      .eq("payload->>revision", String(expectedRevision))
+      .select("payload")
+      .maybeSingle();
+
+    if (error) {
+      throw new Error(`Failed to update Supabase project ${projectId}: ${error.message}`);
+    }
+
+    if (!data?.payload) {
+      const latestProject = await readProjectFromSupabase(supabase, projectId);
+      throw new RevisionConflictError({
+        currentRevision: latestProject?.revision ?? expectedRevision,
+        expectedRevision,
+      });
+    }
+
+    return normalizeProjectRecord(data.payload as Project);
+  }
+
   const projects = await readProjects();
   const index = projects.findIndex((project) => project.id === projectId);
 

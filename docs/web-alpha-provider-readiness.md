@@ -11,7 +11,9 @@ The app is not ready for outside testers until these are true:
 
 - A tester can create a real account, create a trip/yearbook, upload photos from web, answer the AI Designer questions, generate a book, edit a spread, and save a proof PDF.
 - `/ai-health` shows Ollama reachable, `qwen3:14b`, `qwen3:8b`, and `qwen2.5vl:7b` installed, no active stuck runs, and a recent saved run with a quality score.
+- `/ai-health` shows queue health plus planner mode for the latest and last successful run. If the app uses `qwen3:8b` or the deterministic safe fallback because `qwen3:14b` times out, that fallback status must stay visible in the page and benchmark report.
 - The Cap Cana 13-photo set passes `npm run test:ai:local`; the 60-photo test set must produce 10-14 spreads, use at least 35% of approved photos, include hero/detail/quiet rhythm, and avoid unsupported templates or placeholder copy.
+- `npm run test:ai:benchmark` records elapsed time, prompt pressure, planner/fallback mode, JSON acceptance, duplicate rate, photo usage, unsupported templates, quality score, and acceptance failures in a JSON report outside the repo by default.
 - The generated proof must look photo-first: filled pages, subtle floating photo borders, varied caption positions, safe-area/bleed preview, and no repeated same-corner captions across the book.
 - Direct print checkout remains disabled; testers use the PDF proof handoff.
 
@@ -61,7 +63,16 @@ npm run lint
 npm run build
 npm run test:e2e:web
 npm run test:ai:health
-npm run test:ai:local
 ```
 
 `npm run test:ai:health` expects the web app to be running and Ollama to have the required models installed. `npm run test:ai:local` expects a reachable Cap Cana-style test project unless `AI_GENERATION_PROJECT_ID` points at another test project.
+`npm run test:ai:benchmark` and `npm run test:ai:local` also run a generation
+and therefore mutate the selected project by saving a new generation run. They
+refuse to target the default local app store unless you opt in:
+
+```powershell
+$env:AI_GENERATION_ALLOW_EXISTING_STORE="1"; npm run test:ai:benchmark
+$env:AI_GENERATION_ALLOW_EXISTING_STORE="1"; npm run test:ai:local
+```
+
+Do not commit `apps/web/data/projects.json` after benchmark-only local runs.

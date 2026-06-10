@@ -6,7 +6,20 @@ import path from "node:path";
 
 const port = process.env.E2E_WEB_PORT ?? "3210";
 const defaultBaseUrl = `http://127.0.0.1:${port}`;
-const detectedExistingBaseUrl = await detectExistingBaseUrl();
+const allowExistingServer =
+  Boolean(process.env.E2E_WEB_BASE_URL) || process.env.E2E_WEB_REUSE_EXISTING === "1";
+const existingBaseUrl = await detectExistingBaseUrl();
+if (existingBaseUrl && !allowExistingServer) {
+  console.error(
+    [
+      `A Photo Book Maker dev server is already running at ${existingBaseUrl}.`,
+      "The default E2E smoke uses an isolated temp project store, but Next cannot boot a second dev server for this app directory while the first one is active.",
+      "Stop the existing dev server and rerun npm run test:e2e:web, or explicitly set E2E_WEB_REUSE_EXISTING=1 when you accept that the smoke will target the running app store.",
+    ].join(" "),
+  );
+  process.exit(1);
+}
+const detectedExistingBaseUrl = allowExistingServer ? existingBaseUrl : undefined;
 const baseUrl = (process.env.E2E_WEB_BASE_URL ?? detectedExistingBaseUrl ?? defaultBaseUrl).replace(
   /\/$/,
   "",

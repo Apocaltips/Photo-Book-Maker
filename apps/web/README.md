@@ -30,6 +30,7 @@ npm run test:e2e
 The smoke boots Next locally, verifies the root page, verifies `/api/templates`, and checks that protected proof routes require auth.
 
 When Supabase and object storage are not configured, local development runs with a dev-only tester identity and local upload storage. The E2E script uses an isolated temp store so it does not write test projects into `apps/web/data/projects.json`.
+To intentionally run the smoke against an already-running app, set `E2E_WEB_BASE_URL` or `E2E_WEB_REUSE_EXISTING=1`.
 
 ## Local AI Designer Smoke
 
@@ -43,6 +44,9 @@ The script finds the Cap Cana test project by default, calls the generation
 questionnaire route, runs `/api/projects/:projectId/generation/run`, and fails
 if the resulting draft has duplicate approved photos, unsupported templates,
 placeholder copy, too few/many spreads, or poor small-batch photo usage.
+Because this saves a generation run to the selected project, set
+`AI_GENERATION_ALLOW_EXISTING_STORE=1` when you intentionally want to run it
+against the current local app data.
 
 ## Android Local Pairing
 
