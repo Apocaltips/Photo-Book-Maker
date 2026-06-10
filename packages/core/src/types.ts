@@ -417,6 +417,7 @@ export interface GenerationRun {
   startedAt: string;
   status: "queued" | "analyzing_photos" | "planning" | "validating" | "saved" | "failed";
   validationWarnings: string[];
+  workerAttemptCount?: number;
   workerClaimedAt?: string;
   workerHeartbeatAt?: string;
   workerId?: string;

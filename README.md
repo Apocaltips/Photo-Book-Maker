@@ -81,7 +81,11 @@ job; the private worker claims it, runs local Ollama through the local processor
 app, heartbeats while the local models are running, and posts the saved draft
 back to the hosted app. Keep `LOCAL_AI_WORKER_PROCESSOR_BASE_URL` pointed at a
 private local URL. The worker refuses to use a remote hosted URL as its processor
-unless `LOCAL_AI_WORKER_ALLOW_HOSTED_PROCESSOR=1` is set intentionally.
+unless `LOCAL_AI_WORKER_ALLOW_HOSTED_PROCESSOR=1` is set intentionally. Keep
+`LOCAL_AI_WORKER_MAX_ATTEMPTS=3` for family/friend alpha unless a test session
+proves the worker needs a different retry ceiling; expired leases are reclaimed,
+but a run that exceeds the attempt ceiling is marked failed and shown on
+`/ai-health` instead of being retried forever.
 
 6. In a second terminal, start Expo:
 

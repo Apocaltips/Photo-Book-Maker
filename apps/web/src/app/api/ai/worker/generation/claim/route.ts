@@ -1,10 +1,15 @@
 import {
+  markGenerationRunFailed,
   upsertGenerationRun,
   type GenerationRun,
   type Project,
 } from "@photo-book-maker/core";
 import { NextResponse } from "next/server";
-import { authorizeAiWorkerRequest } from "@/lib/server/ai-worker-auth";
+import {
+  authorizeAiWorkerRequest,
+  getAiWorkerMaxAttempts,
+  normalizeAiWorkerLeaseSeconds,
+} from "@/lib/server/ai-worker-auth";
 import {
   isRevisionConflictError,
   readProjects,
@@ -28,24 +33,59 @@ function isActiveWorkerRun(status: GenerationRun["status"]) {
   return status === "analyzing_photos" || status === "planning" || status === "validating";
 }
 
-function isClaimableRun(run: GenerationRun, nowMs: number) {
+function getWorkerAttemptCount(run: GenerationRun) {
+  return run.workerAttemptCount ?? 0;
+}
+
+function isLeaseExpired(run: GenerationRun, nowMs: number) {
+  return Boolean(run.workerLeaseExpiresAt && Date.parse(run.workerLeaseExpiresAt) <= nowMs);
+}
+
+function isClaimableRun(run: GenerationRun, nowMs: number, maxAttempts: number) {
+  if (getWorkerAttemptCount(run) >= maxAttempts) {
+    return false;
+  }
+
   if (run.status === "queued") {
     return true;
   }
 
-  if (!isActiveWorkerRun(run.status) || !run.workerLeaseExpiresAt) {
+  if (!isActiveWorkerRun(run.status)) {
     return false;
   }
 
-  return Date.parse(run.workerLeaseExpiresAt) <= nowMs;
+  return isLeaseExpired(run, nowMs);
 }
 
-function findClaimCandidate(projects: Project[]) {
+function isExhaustedRun(run: GenerationRun, nowMs: number, maxAttempts: number) {
+  if (getWorkerAttemptCount(run) < maxAttempts) {
+    return false;
+  }
+
+  if (run.status === "queued") {
+    return true;
+  }
+
+  return isActiveWorkerRun(run.status) && isLeaseExpired(run, nowMs);
+}
+
+function findClaimCandidate(projects: Project[], maxAttempts: number) {
   const nowMs = Date.now();
   return projects
     .flatMap((project) =>
       (project.generationRuns ?? [])
-        .filter((run) => isClaimableRun(run, nowMs))
+        .filter((run) => isClaimableRun(run, nowMs, maxAttempts))
+        .map((run) => ({ project, run })),
+    )
+    .sort((left, right) => left.run.startedAt.localeCompare(right.run.startedAt))[0];
+}
+
+function findExhaustedCandidate(projects: Project[], maxAttempts: number) {
+  const nowMs = Date.now();
+  return projects
+    .flatMap((project) =>
+      (project.generationRuns ?? [])
+        .filter((run) => isExhaustedRun(run, nowMs, maxAttempts))
         .map((run) => ({ project, run })),
     )
     .sort((left, right) => left.run.startedAt.localeCompare(right.run.startedAt))[0];
@@ -65,9 +105,49 @@ export async function POST(request: Request) {
   }
 
   const body = (await request.json().catch(() => ({}))) as ClaimBody;
+  const maxAttempts = getAiWorkerMaxAttempts();
   const workerId = body.workerId?.trim() || `worker-${crypto.randomUUID()}`;
-  const leaseSeconds = Math.max(60, Math.min(body.leaseSeconds ?? 900, 3600));
-  const candidate = findClaimCandidate(await readProjects());
+  const leaseSeconds = normalizeAiWorkerLeaseSeconds(body.leaseSeconds);
+  const projects = await readProjects();
+  const exhaustedCandidate = findExhaustedCandidate(projects, maxAttempts);
+
+  if (exhaustedCandidate) {
+    const message = `Generation run exceeded ${maxAttempts} local AI worker attempt(s).`;
+
+    try {
+      const project = await updateProject(
+        exhaustedCandidate.project.id,
+        (current) => {
+          const run = current.generationRuns?.find(
+            (entry) => entry.id === exhaustedCandidate.run.id,
+          );
+          if (!run || !isExhaustedRun(run, Date.now(), maxAttempts)) {
+            throw new ClaimRaceError();
+          }
+
+          return markGenerationRunFailed(current, run.id, message);
+        },
+        {
+          skipRevisionAdvance: true,
+        },
+      );
+      const run = project?.generationRuns?.find(
+        (entry) => entry.id === exhaustedCandidate.run.id,
+      );
+
+      return NextResponse.json({
+        failedRun: run ?? null,
+        job: null,
+        message,
+      });
+    } catch (error) {
+      if (!(error instanceof ClaimRaceError) && !isRevisionConflictError(error)) {
+        throw error;
+      }
+    }
+  }
+
+  const candidate = findClaimCandidate(await readProjects(), maxAttempts);
 
   if (!candidate) {
     return NextResponse.json({ job: null });
@@ -80,14 +160,19 @@ export async function POST(request: Request) {
   try {
     project = await updateProject(candidate.project.id, (current) => {
       const run = current.generationRuns?.find((entry) => entry.id === candidate.run.id);
-      if (!run || !isClaimableRun(run, Date.now())) {
+      if (!run || !isClaimableRun(run, Date.now(), maxAttempts)) {
         throw new ClaimRaceError();
       }
 
+      const attemptCount = getWorkerAttemptCount(run) + 1;
       return upsertGenerationRun(current, {
         ...run,
-        progress: addProgress(run, `worker ${workerId} claimed generation job`),
+        progress: addProgress(
+          run,
+          `worker ${workerId} claimed generation job (attempt ${attemptCount}/${maxAttempts})`,
+        ),
         status: "analyzing_photos",
+        workerAttemptCount: attemptCount,
         workerClaimedAt: run.workerClaimedAt ?? claimedAt,
         workerHeartbeatAt: claimedAt,
         workerId,

@@ -87,6 +87,7 @@ export async function POST(request: Request) {
 
         const completedRunWithClaim: GenerationRun = {
           ...completedRun,
+          workerAttemptCount: currentRun.workerAttemptCount,
           workerClaimedAt: currentRun.workerClaimedAt,
           workerHeartbeatAt: currentRun.workerHeartbeatAt,
           workerId: currentRun.workerId,

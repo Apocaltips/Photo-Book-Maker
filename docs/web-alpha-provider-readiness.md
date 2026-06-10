@@ -69,6 +69,10 @@ Worker bridge v1:
 - The worker heartbeats during long local model calls with
   `LOCAL_AI_WORKER_HEARTBEAT_MS` so slow 60-photo and 174-photo test runs are
   not reclaimed as abandoned.
+- Expired leases can be reclaimed by another worker, but
+  `LOCAL_AI_WORKER_MAX_ATTEMPTS` limits retry loops. The default alpha ceiling
+  is 3 attempts; after that the run is marked failed and `/ai-health` surfaces
+  the failed/stale queue state for the operator.
 - All worker endpoints require `Authorization: Bearer <LOCAL_AI_WORKER_SECRET>`.
   The processor endpoint is disabled in production unless
   `LOCAL_AI_PROCESSOR_IN_PRODUCTION=1`, because Ollama should run on the private

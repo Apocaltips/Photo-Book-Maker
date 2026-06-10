@@ -72,6 +72,8 @@ const server = reuseExistingServer
           NEXT_PUBLIC_API_BASE_URL: `${baseUrl}/api`,
           PHOTO_BOOK_FILE_STORE_DIR: fileStoreDir,
           LOCAL_AI_WORKER_ENABLED: "1",
+          LOCAL_AI_WORKER_MAX_ATTEMPTS: "2",
+          LOCAL_AI_WORKER_MIN_LEASE_SECONDS: "1",
           LOCAL_AI_WORKER_SECRET: workerSecret,
         },
         shell: true,
@@ -86,6 +88,8 @@ const server = reuseExistingServer
           NEXT_PUBLIC_API_BASE_URL: `${baseUrl}/api`,
           PHOTO_BOOK_FILE_STORE_DIR: fileStoreDir,
           LOCAL_AI_WORKER_ENABLED: "1",
+          LOCAL_AI_WORKER_MAX_ATTEMPTS: "2",
+          LOCAL_AI_WORKER_MIN_LEASE_SECONDS: "1",
           LOCAL_AI_WORKER_SECRET: workerSecret,
         },
         stdio: ["ignore", "pipe", "pipe"],
@@ -282,17 +286,19 @@ async function runProjectE2E() {
     throw new Error("Generation questionnaire route did not return usable defaults.");
   }
 
-  const queuedGeneration = await apiJson(`/api/projects/${project.id}/generation/run`, {
+  const queuedRetryGeneration = await apiJson(`/api/projects/${project.id}/generation/run`, {
     method: "POST",
     body: JSON.stringify({
       expectedRevision: project.revision,
       questionnaire: generationQuestions.questionnaire.answers,
     }),
   });
-  project = queuedGeneration.project;
+  project = queuedRetryGeneration.project;
   if (
-    queuedGeneration.run?.status !== "queued" ||
-    !queuedGeneration.run?.progress?.some((entry) => entry.includes("private local AI worker"))
+    queuedRetryGeneration.run?.status !== "queued" ||
+    !queuedRetryGeneration.run?.progress?.some((entry) =>
+      entry.includes("private local AI worker"),
+    )
   ) {
     throw new Error("Worker-enabled generation route did not queue a worker job.");
   }
@@ -310,13 +316,93 @@ async function runProjectE2E() {
     throw new Error(`Worker claim route did not reject missing secret: ${unauthorizedClaim.status}`);
   }
 
+  const retryClaimOne = await workerApiJson("/api/ai/worker/generation/claim", {
+    method: "POST",
+    body: JSON.stringify({
+      leaseSeconds: 1,
+      workerId: "e2e-retry-worker-one",
+    }),
+  });
+  if (
+    retryClaimOne.job?.runId !== queuedRetryGeneration.run.id ||
+    retryClaimOne.job?.run?.workerAttemptCount !== 1
+  ) {
+    throw new Error("Worker claim route did not record the first retry attempt.");
+  }
+
+  const activeRetryClaim = await workerApiJson("/api/ai/worker/generation/claim", {
+    method: "POST",
+    body: JSON.stringify({
+      leaseSeconds: 1,
+      workerId: "e2e-retry-worker-two",
+    }),
+  });
+  if (activeRetryClaim.job) {
+    throw new Error("Worker claim route allowed a second worker before the lease expired.");
+  }
+
+  await new Promise((resolve) => setTimeout(resolve, 1200));
+
+  const retryClaimTwo = await workerApiJson("/api/ai/worker/generation/claim", {
+    method: "POST",
+    body: JSON.stringify({
+      leaseSeconds: 1,
+      workerId: "e2e-retry-worker-two",
+    }),
+  });
+  if (
+    retryClaimTwo.job?.runId !== queuedRetryGeneration.run.id ||
+    retryClaimTwo.job?.run?.workerAttemptCount !== 2
+  ) {
+    throw new Error("Worker claim route did not reclaim the expired job for attempt two.");
+  }
+
+  await new Promise((resolve) => setTimeout(resolve, 1200));
+
+  const exhaustedRetryClaim = await workerApiJson("/api/ai/worker/generation/claim", {
+    method: "POST",
+    body: JSON.stringify({
+      leaseSeconds: 1,
+      workerId: "e2e-retry-worker-three",
+    }),
+  });
+  if (
+    exhaustedRetryClaim.job ||
+    exhaustedRetryClaim.failedRun?.id !== queuedRetryGeneration.run.id ||
+    exhaustedRetryClaim.failedRun?.status !== "failed" ||
+    !/exceeded 2 local AI worker attempt/i.test(exhaustedRetryClaim.message ?? "")
+  ) {
+    throw new Error("Worker claim route did not fail an exhausted retry job.");
+  }
+
+  project = (await apiJson(`/api/projects/${project.id}`)).project;
+
+  const queuedGeneration = await apiJson(`/api/projects/${project.id}/generation/run`, {
+    method: "POST",
+    body: JSON.stringify({
+      expectedRevision: project.revision,
+      questionnaire: generationQuestions.questionnaire.answers,
+    }),
+  });
+  project = queuedGeneration.project;
+  if (
+    queuedGeneration.run?.status !== "queued" ||
+    !queuedGeneration.run?.progress?.some((entry) => entry.includes("private local AI worker"))
+  ) {
+    throw new Error("Worker-enabled generation route did not queue a second worker job.");
+  }
+
   const claimed = await workerApiJson("/api/ai/worker/generation/claim", {
     method: "POST",
     body: JSON.stringify({
       workerId: "e2e-worker",
     }),
   });
-  if (claimed.job?.runId !== queuedGeneration.run.id || claimed.job?.workerId !== "e2e-worker") {
+  if (
+    claimed.job?.runId !== queuedGeneration.run.id ||
+    claimed.job?.workerId !== "e2e-worker" ||
+    claimed.job?.run?.workerAttemptCount !== 1
+  ) {
     throw new Error("Worker claim route did not return the queued generation job.");
   }
 
@@ -612,7 +698,10 @@ try {
     return (
       Boolean(body.ai?.config?.plannerModel) &&
       Array.isArray(body.ai?.expectedModels) &&
-      body.store?.mode
+      body.store?.mode &&
+      body.worker?.maxAttempts === 2 &&
+      body.worker?.minLeaseSeconds === 1 &&
+      typeof body.queue?.staleRuns === "number"
     );
   }, "local AI health route smoke");
 

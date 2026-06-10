@@ -1,6 +1,9 @@
 import { upsertGenerationRun } from "@photo-book-maker/core";
 import { NextResponse } from "next/server";
-import { authorizeAiWorkerRequest } from "@/lib/server/ai-worker-auth";
+import {
+  authorizeAiWorkerRequest,
+  normalizeAiWorkerLeaseSeconds,
+} from "@/lib/server/ai-worker-auth";
 import { isRevisionConflictError, updateProject } from "@/lib/server/project-store";
 
 type HeartbeatBody = {
@@ -32,7 +35,7 @@ export async function POST(request: Request) {
   }
 
   const heartbeatAt = new Date().toISOString();
-  const leaseSeconds = Math.max(60, Math.min(body.leaseSeconds ?? 900, 3600));
+  const leaseSeconds = normalizeAiWorkerLeaseSeconds(body.leaseSeconds);
   const workerLeaseExpiresAt = new Date(Date.now() + leaseSeconds * 1000).toISOString();
   let project;
 

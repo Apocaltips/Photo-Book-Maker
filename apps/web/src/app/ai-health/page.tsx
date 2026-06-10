@@ -13,7 +13,7 @@ export default async function LocalAiHealthPage() {
   }
 
   const status = await getLocalAiHealthStatus();
-  const { ai, lastSavedRun, latestRun, plannerStatus, projects, queue, store } = status;
+  const { ai, lastSavedRun, latestRun, plannerStatus, projects, queue, store, worker } = status;
   const statusTone =
     ai.status === "healthy"
       ? "bg-[#dfeee7] text-[#285940]"
@@ -101,8 +101,25 @@ export default async function LocalAiHealthPage() {
 
       <section className="grid gap-5 md:grid-cols-4">
         <HealthCard label="Active runs" value={String(queue.activeRuns)} />
+        <HealthCard label="Stale runs" value={String(queue.staleRuns)} />
         <HealthCard label="Saved runs" value={String(queue.savedRuns)} />
         <HealthCard label="Failed runs" value={String(queue.failedRuns)} />
+      </section>
+
+      <section className="surface rounded-[2rem] p-6">
+        <div className="eyebrow">Private worker bridge</div>
+        <div className="mt-4 grid gap-3 md:grid-cols-4">
+          <HealthCard label="Queue enabled" value={worker.queueEnabled ? "Yes" : "No"} />
+          <HealthCard label="Secret" value={worker.secretConfigured ? "Configured" : "Missing"} />
+          <HealthCard label="Max attempts" value={String(worker.maxAttempts)} />
+          <HealthCard
+            label="Lease window"
+            value={`${worker.minLeaseSeconds}-${worker.maxLeaseSeconds}s`}
+          />
+        </div>
+      </section>
+
+      <section className="grid gap-5 md:grid-cols-1">
         <HealthCard
           label="Last saved planner"
           value={formatPlannerMode(plannerStatus.lastSavedPlannerMode)}
@@ -127,6 +144,10 @@ export default async function LocalAiHealthPage() {
               <HealthCard
                 label="Warnings"
                 value={String(latestRun.validationWarnings.length)}
+              />
+              <HealthCard
+                label="Worker attempts"
+                value={String(latestRun.workerAttemptCount)}
               />
             </div>
             {plannerStatus.fallbackUsedInLatest ? (

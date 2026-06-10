@@ -1,4 +1,5 @@
 import type { GenerationRun, Project } from "@photo-book-maker/core";
+import { getAiWorkerQueueConfig } from "@/lib/server/ai-worker-auth";
 import { checkLocalAiHealth } from "@/lib/server/book-generation-ai";
 import { getProjectStoreMode, readProjects } from "@/lib/server/project-store";
 
@@ -26,6 +27,9 @@ function summarizeRun(entry: RunEntry) {
     startedAt: entry.run.startedAt,
     status: entry.run.status,
     validationWarnings: entry.run.validationWarnings,
+    workerAttemptCount: entry.run.workerAttemptCount ?? 0,
+    workerHeartbeatAt: entry.run.workerHeartbeatAt,
+    workerLeaseExpiresAt: entry.run.workerLeaseExpiresAt,
   };
 }
 
@@ -55,6 +59,7 @@ function getPlannerMode(
 
 export async function getLocalAiHealthStatus() {
   const ai = await checkLocalAiHealth();
+  const worker = getAiWorkerQueueConfig();
   const projects = await readProjects().catch(() => []);
   const runs = projects
     .flatMap((project) =>
@@ -71,6 +76,13 @@ export async function getLocalAiHealthStatus() {
   const activeRuns = runs.filter((entry) =>
     ACTIVE_RUN_STATUSES.includes(entry.run.status),
   ).length;
+  const staleRuns = runs.filter((entry) => {
+    if (!ACTIVE_RUN_STATUSES.includes(entry.run.status) || !entry.run.workerLeaseExpiresAt) {
+      return false;
+    }
+
+    return Date.parse(entry.run.workerLeaseExpiresAt) <= Date.now();
+  }).length;
   const latestPlannerMode = getPlannerMode(latestRun?.run, ai.config);
   const lastSavedPlannerMode = getPlannerMode(lastSavedRun?.run, ai.config);
 
@@ -96,11 +108,13 @@ export async function getLocalAiHealthStatus() {
       activeRuns,
       failedRuns,
       savedRuns,
+      staleRuns,
       totalRuns: runs.length,
     },
     store: {
       mode: getProjectStoreMode(),
       projectCount: projects.length,
     },
+    worker,
   };
 }

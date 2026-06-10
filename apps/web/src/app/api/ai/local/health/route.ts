@@ -21,5 +21,6 @@ export async function GET() {
     plannerStatus: status.plannerStatus,
     queue: status.queue,
     store: status.store,
+    worker: status.worker,
   });
 }
