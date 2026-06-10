@@ -126,7 +126,9 @@ Worker bridge v1:
 - Each claimed job is signed with the private worker secret before the worker
   processes it. The signature covers project id, run id, expected revision,
   project payload digest, worker id, and lease token so a tampered job payload
-  fails locally.
+  fails locally. The private processor endpoint also verifies that signed
+  envelope, the project digest, and the one-job lease token before running
+  generation, so the local model does not process an unsigned or stale job.
 - Each claimed job also receives a one-job worker lease token. The hosted app
   stores only its hash, and heartbeat, fail, and complete calls must echo the
   token so stale workers cannot update a run they no longer own.

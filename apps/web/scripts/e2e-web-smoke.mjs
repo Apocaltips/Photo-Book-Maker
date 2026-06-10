@@ -649,6 +649,31 @@ async function runProjectE2E() {
     throw new Error("Worker heartbeat did not refresh claimed run state.");
   }
 
+  const tamperedProcess = await fetchWithTimeout(
+    `${baseUrl}/api/ai/worker/generation/process`,
+    {
+      method: "POST",
+      headers: {
+        "Authorization": `Bearer ${workerSecret}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        expectedRevision: claimed.job.expectedRevision,
+        jobSignature: "v1:tampered-signature",
+        project: claimed.job.project,
+        projectDigest: claimed.job.projectDigest,
+        runId: claimed.job.runId,
+        workerId: "e2e-worker",
+        workerLeaseToken: claimed.job.workerLeaseToken,
+      }),
+    },
+  );
+  if (tamperedProcess.status !== 401) {
+    throw new Error(
+      `Worker process route did not reject a tampered signed job payload: ${tamperedProcess.status}`,
+    );
+  }
+
   const clientRunStatusAfterClaim = await apiJsonEventually(
     `/api/projects/${project.id}/generation/runs/${queuedGeneration.run.id}`,
   );

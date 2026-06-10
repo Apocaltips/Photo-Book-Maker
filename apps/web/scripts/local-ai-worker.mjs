@@ -222,8 +222,13 @@ async function processJob(job) {
     processed = await apiJson(processorBaseUrl, "/api/ai/worker/generation/process", {
       method: "POST",
       body: JSON.stringify({
+        expectedRevision: job.expectedRevision,
+        jobSignature: job.jobSignature,
         project: job.project,
+        projectDigest: job.projectDigest,
         runId: job.runId,
+        workerId,
+        workerLeaseToken: job.workerLeaseToken,
       }),
     }, processorTimeoutMs);
   } finally {
