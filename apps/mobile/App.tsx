@@ -77,6 +77,7 @@ type AppTab = "projects" | "tasks" | "editor" | "print";
 type SyncMode = "checking" | "shared" | "offline";
 type OpenTask = ReturnType<typeof listOpenTasks>[number];
 type ImportProgress = {
+  duplicates: number;
   failed: number;
   phase: "uploading" | "saving";
   total: number;
@@ -294,6 +295,40 @@ function parseExifCoordinate(value: unknown, ref: unknown) {
   }
 
   return null;
+}
+
+async function getPickedAssetContentHash(input: {
+  capturedAt: string;
+  fileName: string;
+  height?: number;
+  uri: string;
+  width?: number;
+  assetId?: string | null;
+  fileSize?: number | null;
+}) {
+  if (input.uri.startsWith("file://")) {
+    try {
+      const fileInfo = await FileSystem.getInfoAsync(input.uri, { md5: true });
+      if (fileInfo.exists && "md5" in fileInfo && fileInfo.md5) {
+        return `md5:${fileInfo.md5}`;
+      }
+    } catch {
+      // Fall back to stable picker metadata when the file hash is unavailable.
+    }
+  }
+
+  return [
+    "metadata",
+    input.assetId ?? "",
+    input.fileName,
+    input.fileSize ?? "",
+    input.width ?? "",
+    input.height ?? "",
+    input.capturedAt,
+  ]
+    .join(":")
+    .toLowerCase()
+    .replace(/[^a-z0-9:._-]+/g, "-");
 }
 
 function getProjectCoverPhoto(project: Project) {
@@ -1248,7 +1283,14 @@ async function handleInviteCollaborator() {
 
     const importedPhotos: Parameters<typeof addPhotosRemote>[1] = [];
     const failedFileNames: string[] = [];
+    const duplicateFileNames: string[] = [];
+    const knownContentHashes = new Set(
+      selectedProject.photos
+        .map((photo) => photo.contentHash?.trim().toLowerCase())
+        .filter((hash): hash is string => Boolean(hash)),
+    );
     setImportProgress({
+      duplicates: 0,
       failed: 0,
       phase: "uploading",
       total: result.assets.length,
@@ -1283,6 +1325,23 @@ async function handleInviteCollaborator() {
         const contentType = asset.mimeType ?? "image/jpeg";
         const fileName =
           asset.fileName ?? `imported-${Date.now()}-${index}.${contentType.split("/")[1] ?? "jpg"}`;
+        const contentHash = await getPickedAssetContentHash({
+          assetId: asset.assetId,
+          capturedAt,
+          fileName,
+          fileSize: asset.fileSize,
+          height: asset.height,
+          uri: asset.uri,
+          width: asset.width,
+        });
+        const normalizedContentHash = contentHash.trim().toLowerCase();
+
+        if (knownContentHashes.has(normalizedContentHash)) {
+          duplicateFileNames.push(fileName);
+          continue;
+        }
+        knownContentHashes.add(normalizedContentHash);
+
         const remoteUpload =
           hasRemoteApi() && !asset.uri.startsWith("http")
             ? await createPhotoUploadTicketRemote(selectedProject.id, {
@@ -1303,6 +1362,7 @@ async function handleInviteCollaborator() {
         }
 
         importedPhotos.push({
+          contentHash,
           title: fileName.replace(/\.[^.]+$/, "") || `Imported photo ${index + 1}`,
           uri: remoteUpload?.downloadUrl ?? asset.uri,
           storagePath: remoteUpload?.storagePath,
@@ -1331,6 +1391,7 @@ async function handleInviteCollaborator() {
         current
           ? {
               ...current,
+              duplicates: duplicateFileNames.length,
               failed: failedFileNames.length,
               uploaded: importedPhotos.length,
             }
@@ -1342,7 +1403,9 @@ async function handleInviteCollaborator() {
       setImportProgress(null);
       Alert.alert(
         "No photos uploaded",
-        failedFileNames.length
+        duplicateFileNames.length
+          ? `${duplicateFileNames.length} duplicate photo${duplicateFileNames.length === 1 ? "" : "s"} already ${duplicateFileNames.length === 1 ? "exists" : "exist"} in this book.`
+          : failedFileNames.length
           ? `${failedFileNames.length} photos failed before the project could be updated.`
           : "The selected album did not return any importable photos.",
       );
@@ -1353,6 +1416,7 @@ async function handleInviteCollaborator() {
       current
         ? {
             ...current,
+            duplicates: duplicateFileNames.length,
             failed: failedFileNames.length,
             phase: "saving",
           }
@@ -1380,10 +1444,18 @@ async function handleInviteCollaborator() {
     markSharedSync();
     replaceProject(remoteProject);
     setSelectedProjectId(remoteProject.id);
-    if (failedFileNames.length) {
+    if (failedFileNames.length || duplicateFileNames.length) {
       Alert.alert(
-        "Partial import saved",
-        `${importedPhotos.length} photos were saved. ${failedFileNames.length} photos failed upload and can be retried.`,
+        failedFileNames.length ? "Partial import saved" : "Duplicate photos skipped",
+        `${importedPhotos.length} photo${importedPhotos.length === 1 ? "" : "s"} were saved.${
+          duplicateFileNames.length
+            ? ` ${duplicateFileNames.length} duplicate${duplicateFileNames.length === 1 ? "" : "s"} already in this book ${duplicateFileNames.length === 1 ? "was" : "were"} skipped.`
+            : ""
+        }${
+          failedFileNames.length
+            ? ` ${failedFileNames.length} photo${failedFileNames.length === 1 ? "" : "s"} failed upload and can be retried.`
+            : ""
+        }`,
       );
     }
   }
@@ -1891,6 +1963,10 @@ function ProjectsTab({
                 {importProgress.phase === "saving"
                   ? `Saving ${importProgress.uploaded} uploaded photos to the shared book...`
                   : `Uploading ${importProgress.uploaded}/${importProgress.total} photos${
+                      importProgress.duplicates
+                        ? ` - ${importProgress.duplicates} duplicate${importProgress.duplicates === 1 ? "" : "s"} skipped`
+                        : ""
+                    }${
                       importProgress.failed
                         ? ` - ${importProgress.failed} failed`
                         : ""

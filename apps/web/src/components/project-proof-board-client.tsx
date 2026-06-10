@@ -24,6 +24,7 @@ import { DEV_AUTH_ID, getDevAuthHeaders } from "@/lib/dev-auth";
 
 type UploadProgress = {
   failedFileNames: string[];
+  skippedDuplicateFileNames: string[];
   currentFile?: string;
   total: number;
   uploaded: number;
@@ -147,6 +148,7 @@ export function ProjectProofBoardClient({
     setUploadProgress({
       currentFile: files[0]?.name,
       failedFileNames: [],
+      skippedDuplicateFileNames: [],
       total: files.length,
       uploaded: 0,
     });
@@ -154,16 +156,34 @@ export function ProjectProofBoardClient({
     try {
       const photos: AddLocalPhotoInput[] = [];
       const failedFileNames: string[] = [];
+      const skippedDuplicateFileNames: string[] = [];
+      const knownContentHashes = new Set(
+        workspace.project.photos
+          .map((photo) => photo.contentHash?.trim().toLowerCase())
+          .filter((hash): hash is string => Boolean(hash)),
+      );
 
       for (const [index, file] of files.entries()) {
         setUploadProgress({
           currentFile: file.name,
           failedFileNames: [...failedFileNames],
+          skippedDuplicateFileNames: [...skippedDuplicateFileNames],
           total: files.length,
           uploaded: photos.length,
         });
 
         try {
+          const contentHash = await getFileContentHash(file);
+          const normalizedContentHash = contentHash?.trim().toLowerCase();
+
+          if (normalizedContentHash && knownContentHashes.has(normalizedContentHash)) {
+            skippedDuplicateFileNames.push(file.name || `photo ${index + 1}`);
+            continue;
+          }
+          if (normalizedContentHash) {
+            knownContentHashes.add(normalizedContentHash);
+          }
+
           const ticketResponse = await fetch(`/api/projects/${workspace.project.id}/uploads`, {
             method: "POST",
             headers: {
@@ -200,13 +220,10 @@ export function ProjectProofBoardClient({
             throw new Error(`Remote upload failed for ${file.name}.`);
           }
 
-          const [dimensions, contentHash] = await Promise.all([
-            getImageDimensions(file),
-            getFileContentHash(file),
-          ]);
+          const dimensions = await getImageDimensions(file);
           photos.push({
             capturedAt: new Date(file.lastModified || Date.now()).toISOString(),
-            contentHash,
+            ...(contentHash ? { contentHash } : {}),
             height: dimensions.height,
             locationConfidence: "missing",
             mimeType: file.type || "image/jpeg",
@@ -223,6 +240,7 @@ export function ProjectProofBoardClient({
           setUploadProgress({
             currentFile: files[index + 1]?.name,
             failedFileNames: [...failedFileNames],
+            skippedDuplicateFileNames: [...skippedDuplicateFileNames],
             total: files.length,
             uploaded: photos.length,
           });
@@ -230,6 +248,13 @@ export function ProjectProofBoardClient({
       }
 
       if (!photos.length) {
+        if (skippedDuplicateFileNames.length) {
+          setBoardMessage(
+            `No new photos added. ${skippedDuplicateFileNames.length} duplicate${skippedDuplicateFileNames.length === 1 ? "" : "s"} already ${skippedDuplicateFileNames.length === 1 ? "exists" : "exist"} in this book.`,
+          );
+          return;
+        }
+
         throw new Error(
           failedFileNames.length
             ? `No photos uploaded. Try those files again: ${failedFileNames.slice(0, 3).join(", ")}.`
@@ -241,10 +266,13 @@ export function ProjectProofBoardClient({
         method: "POST",
         body: JSON.stringify({ photos }),
       });
+      const duplicateMessage = skippedDuplicateFileNames.length
+        ? ` ${skippedDuplicateFileNames.length} duplicate${skippedDuplicateFileNames.length === 1 ? "" : "s"} already in the book ${skippedDuplicateFileNames.length === 1 ? "was" : "were"} skipped.`
+        : "";
       setBoardMessage(
         failedFileNames.length
-          ? `Added ${photos.length} photo${photos.length === 1 ? "" : "s"}. ${failedFileNames.length} file${failedFileNames.length === 1 ? "" : "s"} did not finish and can be chosen again.`
-          : `Added ${photos.length} photo${photos.length === 1 ? "" : "s"}. Next: make the first book draft.`,
+          ? `Added ${photos.length} photo${photos.length === 1 ? "" : "s"}.${duplicateMessage} ${failedFileNames.length} file${failedFileNames.length === 1 ? "" : "s"} did not finish and can be chosen again.`
+          : `Added ${photos.length} photo${photos.length === 1 ? "" : "s"}.${duplicateMessage} Next: make the first book draft.`,
       );
     } catch (caughtError) {
       const fallback =
@@ -671,14 +699,20 @@ export function ProjectProofBoardClient({
             {uploadProgress ? (
               <div className="mt-4 rounded-[1.3rem] border border-[#00000012] bg-white/72 px-4 py-4 text-sm leading-6 text-[#5b4f47]">
                 <div className="font-semibold text-[#1f1814]">
-                  Added {uploadProgress.uploaded} of {uploadProgress.total}
+                  Processed{" "}
+                  {uploadProgress.uploaded +
+                    uploadProgress.failedFileNames.length +
+                    uploadProgress.skippedDuplicateFileNames.length}{" "}
+                  of {uploadProgress.total}
                 </div>
                 <div className="mt-3 h-2 overflow-hidden rounded-full bg-[#ece2d8]">
                   <div
                     className="h-full rounded-full bg-[#2e5c4d]"
                     style={{
                       width: `${Math.round(
-                        ((uploadProgress.uploaded + uploadProgress.failedFileNames.length) /
+                        ((uploadProgress.uploaded +
+                          uploadProgress.failedFileNames.length +
+                          uploadProgress.skippedDuplicateFileNames.length) /
                           Math.max(uploadProgress.total, 1)) *
                           100,
                       )}%`,
@@ -690,6 +724,14 @@ export function ProjectProofBoardClient({
                     {uploadProgress.failedFileNames.length} file
                     {uploadProgress.failedFileNames.length === 1 ? "" : "s"} did not finish.
                     Choose them again after this batch completes.
+                  </p>
+                ) : null}
+                {uploadProgress.skippedDuplicateFileNames.length ? (
+                  <p className="mt-3 text-[#5f6f4d]">
+                    {uploadProgress.skippedDuplicateFileNames.length} duplicate
+                    {uploadProgress.skippedDuplicateFileNames.length === 1 ? "" : "s"} already
+                    in this book{" "}
+                    {uploadProgress.skippedDuplicateFileNames.length === 1 ? "was" : "were"} skipped.
                   </p>
                 ) : null}
                 {uploadProgress.currentFile ? (

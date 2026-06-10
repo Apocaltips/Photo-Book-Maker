@@ -1216,6 +1216,10 @@ export function addPhotosToProject(
     }];
   });
 
+  if (!nextPhotos.length) {
+    return project;
+  }
+
   const resolutionTasks = [
     ...project.resolutionTasks,
     ...nextPhotos
@@ -1242,6 +1246,40 @@ export function addPhotosToProject(
     ),
     resolutionTasks,
   });
+}
+
+export function summarizePhotoImport(project: Project, photos: AddLocalPhotoInput[]) {
+  const knownPhotoKeys = new Set(
+    project.photos.map((photo) =>
+      getImportedPhotoDuplicateKey({
+        contentHash: photo.contentHash,
+        title: photo.title,
+      }),
+    ),
+  );
+  let addedCount = 0;
+  let skippedDuplicateCount = 0;
+
+  for (const photo of photos) {
+    const duplicateKey = getImportedPhotoDuplicateKey({
+      contentHash: photo.contentHash,
+      title: photo.title,
+    });
+
+    if (knownPhotoKeys.has(duplicateKey)) {
+      skippedDuplicateCount += 1;
+      continue;
+    }
+
+    knownPhotoKeys.add(duplicateKey);
+    addedCount += 1;
+  }
+
+  return {
+    addedCount,
+    attemptedCount: photos.length,
+    skippedDuplicateCount,
+  };
 }
 
 export function toggleMustIncludePhoto(project: Project, photoId: string): Project {

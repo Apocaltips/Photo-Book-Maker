@@ -19,6 +19,7 @@ import {
   resolveProjectTask,
   saveWorkingDraft,
   scoreGeneratedBook,
+  summarizePhotoImport,
   upsertGenerationRun,
 } from "./index";
 
@@ -230,6 +231,34 @@ describe("project collaboration model", () => {
 
     expect(importedProject.photos).toHaveLength(1);
     expect(importedProject.photos[0]?.contentHash).toBe("same-file-hash");
+  });
+
+  it("summarizes duplicate-only photo imports without changing the project", () => {
+    const project = createProjectWithPhotos();
+    const existingPhoto = project.photos[0];
+
+    expect(existingPhoto).toBeDefined();
+
+    const duplicateInput = [
+      {
+        capturedAt: existingPhoto!.capturedAt,
+        contentHash: existingPhoto!.contentHash,
+        height: existingPhoto!.versions[0]?.height ?? 1200,
+        locationConfidence: "exact" as const,
+        locationLabel: existingPhoto!.locationLabel,
+        title: existingPhoto!.title,
+        uploaderId: existingPhoto!.uploaderId,
+        uri: existingPhoto!.imageUri ?? "https://example.com/duplicate.jpg",
+        width: existingPhoto!.versions[0]?.width ?? 1600,
+      },
+    ];
+
+    expect(summarizePhotoImport(project, duplicateInput)).toEqual({
+      addedCount: 0,
+      attemptedCount: 1,
+      skippedDuplicateCount: 1,
+    });
+    expect(addPhotosToProject(project, duplicateInput)).toBe(project);
   });
 
   it("guides non-technical users through upload, design, review, and print", () => {

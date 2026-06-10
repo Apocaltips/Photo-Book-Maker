@@ -18,6 +18,7 @@ The app is not ready for outside testers until these are true:
   local-model behavior is visible instead of being mistaken for design quality.
 - The Cap Cana 13-photo set passes `npm run test:ai:local`; the 60-photo test set must produce 10-14 spreads, use at least 35% of approved photos, include hero/detail/quiet rhythm, and avoid unsupported templates or placeholder copy.
 - `npm run test:ai:benchmark` records elapsed time, prompt pressure, planner/fallback mode, JSON acceptance, duplicate rate, photo usage, unsupported templates, quality score, and acceptance failures in a JSON report outside the repo by default.
+- Web and mobile uploads fingerprint files before saving them to a project, skip duplicate selections, and report uploaded, failed, and duplicate-skipped counts so testers can retry only the files that need attention.
 - The generated proof must look photo-first: filled pages, subtle floating photo borders, varied caption positions, safe-area/bleed preview, and no repeated same-corner captions across the book.
 - Direct print checkout remains disabled; testers use the PDF proof handoff.
 

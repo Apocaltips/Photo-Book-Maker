@@ -615,30 +615,65 @@ async function runProjectE2E() {
     throw new Error(`Local upload PUT failed: ${uploadResponse.status}`);
   }
 
-  project = (
-    await apiJson(`/api/projects/${project.id}/photos`, {
-      method: "POST",
-      body: JSON.stringify({
-        expectedRevision: project.revision,
-        photos: [
-          {
-            height: 1,
-            locationConfidence: "missing",
-            mimeType: "image/png",
-            qualityNotes: ["Automated E2E upload."],
-            storagePath: upload.storagePath,
-            title: "Android E2E upload",
-            uploaderId: "android-tester",
-            uri: upload.downloadUrl,
-            width: 1,
-          },
-        ],
-      }),
-    })
-  ).project;
+  const photoImport = await apiJson(`/api/projects/${project.id}/photos`, {
+    method: "POST",
+    body: JSON.stringify({
+      expectedRevision: project.revision,
+      photos: [
+        {
+          contentHash: "e2e-png-content-hash",
+          height: 1,
+          locationConfidence: "missing",
+          mimeType: "image/png",
+          qualityNotes: ["Automated E2E upload."],
+          storagePath: upload.storagePath,
+          title: "Android E2E upload",
+          uploaderId: "android-tester",
+          uri: upload.downloadUrl,
+          width: 1,
+        },
+      ],
+    }),
+  });
+  project = photoImport.project;
 
-  if (!project.photos?.length || !project.resolutionTasks?.length) {
+  if (
+    photoImport.photoImport?.addedCount !== 1 ||
+    !project.photos?.length ||
+    !project.resolutionTasks?.length
+  ) {
     throw new Error("Photo import did not create expected photo/task state.");
+  }
+
+  const revisionBeforeDuplicateImport = project.revision;
+  const duplicateImport = await apiJson(`/api/projects/${project.id}/photos`, {
+    method: "POST",
+    body: JSON.stringify({
+      expectedRevision: project.revision,
+      photos: [
+        {
+          contentHash: "e2e-png-content-hash",
+          height: 1,
+          locationConfidence: "missing",
+          mimeType: "image/png",
+          qualityNotes: ["Automated duplicate E2E upload."],
+          storagePath: upload.storagePath,
+          title: "Android E2E upload duplicate",
+          uploaderId: "android-tester",
+          uri: upload.downloadUrl,
+          width: 1,
+        },
+      ],
+    }),
+  });
+  project = duplicateImport.project;
+  if (
+    duplicateImport.photoImport?.addedCount !== 0 ||
+    duplicateImport.photoImport?.skippedDuplicateCount !== 1 ||
+    project.photos.length !== 1 ||
+    project.revision !== revisionBeforeDuplicateImport
+  ) {
+    throw new Error("Duplicate photo import was not skipped without a revision change.");
   }
 
   project = (
