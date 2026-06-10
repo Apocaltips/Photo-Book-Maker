@@ -8,6 +8,7 @@ import type { Project } from "@photo-book-maker/core";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
+import { getEnvValue } from "@/lib/server/env";
 
 type ProjectRow = {
   id: string;
@@ -46,8 +47,7 @@ const dataDirectory = process.env.PHOTO_BOOK_FILE_STORE_DIR
   ? path.resolve(process.env.PHOTO_BOOK_FILE_STORE_DIR)
   : path.join(process.cwd(), "data");
 const dataFile = path.join(dataDirectory, "projects.json");
-const supabaseProjectsTable =
-  process.env.SUPABASE_PROJECTS_TABLE ?? "photo_book_projects";
+const supabaseProjectsTable = getEnvValue("SUPABASE_PROJECTS_TABLE") || "photo_book_projects";
 
 let cachedSupabaseClient: SupabaseClient | null | undefined;
 
@@ -76,8 +76,8 @@ function getSupabaseAdminClient() {
     return cachedSupabaseClient;
   }
 
-  const url = process.env.SUPABASE_URL;
-  const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  const url = getEnvValue("SUPABASE_URL");
+  const serviceRoleKey = getEnvValue("SUPABASE_SERVICE_ROLE_KEY");
 
   if (!url || !serviceRoleKey) {
     cachedSupabaseClient = null;

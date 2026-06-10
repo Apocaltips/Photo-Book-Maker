@@ -3,6 +3,7 @@ import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import { NextResponse } from "next/server";
 import { readProjects } from "@/lib/server/project-store";
 import { DEV_AUTH_EMAIL, DEV_AUTH_ID, DEV_AUTH_NAME } from "@/lib/dev-auth";
+import { getEnvValue } from "@/lib/server/env";
 
 export type AuthenticatedUser = {
   email: string;
@@ -19,8 +20,8 @@ function getSupabaseAuthClient() {
     return cachedSupabaseAuthClient;
   }
 
-  const url = process.env.SUPABASE_URL;
-  const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  const url = getEnvValue("SUPABASE_URL");
+  const serviceRoleKey = getEnvValue("SUPABASE_SERVICE_ROLE_KEY");
 
   if (!url || !serviceRoleKey) {
     cachedSupabaseAuthClient = null;

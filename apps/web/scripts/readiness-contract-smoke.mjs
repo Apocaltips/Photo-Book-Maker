@@ -21,6 +21,11 @@ const alphaReadinessRouteUrl = new URL(
   "../src/app/api/alpha/readiness/route.ts",
   import.meta.url,
 );
+const serverEnvUrl = new URL("../src/lib/server/env.ts", import.meta.url);
+const publicAuthConfigUrl = new URL(
+  "../src/lib/server/public-auth-config.ts",
+  import.meta.url,
+);
 const alphaReadinessScriptPath = fileURLToPath(new URL("./alpha-readiness.mjs", import.meta.url));
 const hostedAlphaAcceptancePath = fileURLToPath(
   new URL("./hosted-alpha-acceptance.mjs", import.meta.url),
@@ -175,6 +180,8 @@ function assertHostedAlphaAcceptanceFails(overrides, expectedText) {
 const envExample = await readFile(envExampleUrl, "utf8");
 const supabaseSchema = normalizeSql(await readFile(supabaseSchemaUrl, "utf8"));
 const alphaReadinessRoute = await readFile(alphaReadinessRouteUrl, "utf8");
+const serverEnv = await readFile(serverEnvUrl, "utf8");
+const publicAuthConfig = await readFile(publicAuthConfigUrl, "utf8");
 const envKeys = getEnvExampleKeys(envExample);
 const missingEnvExampleKeys = getReadinessContractEnvNames().filter((key) => !envKeys.has(key));
 
@@ -240,6 +247,14 @@ assert(
 assert(
   alphaReadinessRoute.includes("private AI worker secret strength"),
   "Alpha readiness route must report private worker shared-secret strength.",
+);
+assert(
+  serverEnv.includes("normalizeEnvValue") && serverEnv.includes("replace(/\\\\r|\\\\n/g"),
+  "Server env helper must strip escaped CR/LF artifacts from hosted env values.",
+);
+assert(
+  publicAuthConfig.includes("getFirstEnvValue"),
+  "Public Supabase auth config must use normalized server env values.",
 );
 
 assert(!shouldRequireProviderInfrastructure("local", {}), "local mode must not require providers");

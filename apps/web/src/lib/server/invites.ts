@@ -1,6 +1,7 @@
 import { createHash, randomBytes } from "node:crypto";
 import type { Project, ProjectInvite } from "@photo-book-maker/core";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
+import { getEnvValue, getFirstEnvValue } from "@/lib/server/env";
 
 type InviteDeliveryMethod = "supabase-invite" | "magic-link" | "manual";
 
@@ -12,8 +13,8 @@ function getAdminClient() {
     return cachedAdminClient;
   }
 
-  const url = process.env.SUPABASE_URL;
-  const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  const url = getEnvValue("SUPABASE_URL");
+  const serviceRoleKey = getEnvValue("SUPABASE_SERVICE_ROLE_KEY");
 
   if (!url || !serviceRoleKey) {
     cachedAdminClient = null;
@@ -35,11 +36,12 @@ function getAnonClient() {
     return cachedAnonClient;
   }
 
-  const url = process.env.SUPABASE_URL;
-  const anonKey =
-    process.env.SUPABASE_ANON_KEY ??
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ??
-    process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY;
+  const url = getEnvValue("SUPABASE_URL");
+  const anonKey = getFirstEnvValue([
+    "SUPABASE_ANON_KEY",
+    "NEXT_PUBLIC_SUPABASE_ANON_KEY",
+    "EXPO_PUBLIC_SUPABASE_ANON_KEY",
+  ]);
 
   if (!url || !anonKey) {
     cachedAnonClient = null;
