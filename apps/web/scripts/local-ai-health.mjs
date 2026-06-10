@@ -1,26 +1,126 @@
-/* global console, fetch, process */
+/* global AbortSignal, console, fetch, process */
 
-const baseUrl = (process.env.LOCAL_AI_HEALTH_BASE_URL ?? "http://127.0.0.1:3000").replace(
-  /\/$/,
-  "",
-);
+import { access, copyFile, cp, mkdtemp, mkdir, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { dirname, join, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
+import { createNextDevServerController } from "./lib/next-dev-server.mjs";
+
+const scriptDir = dirname(fileURLToPath(import.meta.url));
+const port = process.env.LOCAL_AI_HEALTH_PORT ?? "3224";
+const explicitBaseUrl = process.env.LOCAL_AI_HEALTH_BASE_URL;
+const defaultBaseUrl = `http://127.0.0.1:${port}`;
+const baseUrl = (explicitBaseUrl ?? defaultBaseUrl).replace(/\/$/, "");
+const sourceDataDir = process.env.LOCAL_AI_HEALTH_SOURCE_DATA_DIR
+  ? resolve(process.env.LOCAL_AI_HEALTH_SOURCE_DATA_DIR)
+  : resolve(scriptDir, "../data");
 const strict = process.env.LOCAL_AI_HEALTH_STRICT !== "0";
 const requireSavedRun = process.env.LOCAL_AI_HEALTH_REQUIRE_SAVED_RUN !== "0";
 const minQualityScore = Number.parseInt(process.env.LOCAL_AI_HEALTH_MIN_SCORE ?? "75", 10);
 const disallowDeterministicFallback =
   process.env.LOCAL_AI_HEALTH_DISALLOW_DETERMINISTIC_FALLBACK === "1";
+let fileStoreDir;
+let serverController;
 
-async function main() {
-  const healthUrl = `${baseUrl}/api/ai/local/health`;
+async function pathExists(path) {
+  try {
+    await access(path);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+async function detectExistingBaseUrl() {
+  if (explicitBaseUrl) {
+    return null;
+  }
+
+  const probeUrls = [
+    "http://127.0.0.1:3000",
+    defaultBaseUrl,
+    "http://127.0.0.1:3210",
+    "http://127.0.0.1:3221",
+    "http://127.0.0.1:3222",
+    "http://127.0.0.1:3223",
+  ];
+
+  for (const probeUrl of [...new Set(probeUrls)]) {
+    try {
+      const response = await fetch(probeUrl, {
+        signal: AbortSignal.timeout(1_500),
+      });
+      const text = await response.text();
+
+      if (response.ok && text.includes("Photo Book Maker")) {
+        return probeUrl.replace(/\/$/, "");
+      }
+    } catch {
+      // Keep probing known local development ports.
+    }
+  }
+
+  return null;
+}
+
+async function prepareIsolatedStore() {
+  fileStoreDir = await mkdtemp(join(tmpdir(), "photo-book-maker-ai-health-"));
+  await mkdir(fileStoreDir, { recursive: true });
+
+  const sourceProjects = join(sourceDataDir, "projects.json");
+  if (await pathExists(sourceProjects)) {
+    await copyFile(sourceProjects, join(fileStoreDir, "projects.json"));
+  }
+
+  const sourceUploads = join(sourceDataDir, "local-uploads");
+  if (await pathExists(sourceUploads)) {
+    await cp(sourceUploads, join(fileStoreDir, "local-uploads"), {
+      force: true,
+      recursive: true,
+    });
+  }
+}
+
+async function startIsolatedServer() {
+  await prepareIsolatedStore();
+  serverController = createNextDevServerController({
+    baseUrl,
+    cwd: process.cwd(),
+    env: {
+      ...process.env,
+      EXPO_PUBLIC_API_BASE_URL: `${baseUrl}/api`,
+      NEXT_PUBLIC_API_BASE_URL: `${baseUrl}/api`,
+      NEXT_TELEMETRY_DISABLED: "1",
+      PHOTO_BOOK_FILE_STORE_DIR: fileStoreDir,
+    },
+    label: "Local AI health server",
+    port,
+  });
+  await serverController.start();
+}
+
+async function stopIsolatedServer() {
+  if (serverController) {
+    await serverController.stop();
+  }
+  if (fileStoreDir) {
+    await rm(fileStoreDir, { force: true, recursive: true });
+  }
+}
+
+async function fetchHealth(healthBaseUrl) {
+  const healthUrl = `${healthBaseUrl}/api/ai/local/health`;
   let response;
 
   try {
-    response = await fetch(healthUrl);
+    response = await fetch(healthUrl, {
+      signal: AbortSignal.timeout(10_000),
+    });
   } catch (error) {
     throw new Error(
       [
         `Local AI health endpoint was not reachable at ${healthUrl}.`,
-        "Start the web app first with `npm run dev:web`, or set LOCAL_AI_HEALTH_BASE_URL to a running Photo Book Maker web app.",
+        "Set LOCAL_AI_HEALTH_BASE_URL only when targeting an already-running Photo Book Maker app; otherwise the script starts an isolated local server automatically.",
         error instanceof Error ? `Original error: ${error.message}` : null,
       ]
         .filter(Boolean)
@@ -36,7 +136,21 @@ async function main() {
     );
   }
 
+  return body;
+}
+
+async function main() {
+  const existingBaseUrl = await detectExistingBaseUrl();
+  const healthBaseUrl = existingBaseUrl ?? baseUrl;
+
+  if (!explicitBaseUrl && !existingBaseUrl) {
+    await startIsolatedServer();
+  }
+
+  const body = await fetchHealth(healthBaseUrl);
   const summary = {
+    baseUrl: healthBaseUrl,
+    isolated: Boolean(serverController),
     lastSavedRun: body.lastSavedRun
       ? {
           plannerMode: body.plannerStatus?.lastSavedPlannerMode ?? null,
@@ -65,7 +179,9 @@ async function main() {
     plannerStatus: body.plannerStatus,
     queue: body.queue,
     runtimeConfig: body.ai?.config ?? null,
+    sourceDataDir: serverController ? sourceDataDir : null,
     store: body.store,
+    tempStoreDir: fileStoreDir ?? null,
   };
 
   console.log(JSON.stringify(summary, null, 2));
@@ -119,5 +235,9 @@ async function main() {
   }
 }
 
-await main();
-console.log("local AI health passed");
+try {
+  await main();
+  console.log("local AI health passed");
+} finally {
+  await stopIsolatedServer();
+}

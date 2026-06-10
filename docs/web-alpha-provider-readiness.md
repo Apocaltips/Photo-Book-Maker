@@ -235,8 +235,15 @@ accepts JPEG, PNG, WebP, HEIC, and HEIF files.
 it should fail until hosted auth/storage/private-worker, Stripe, email,
 observability, direct print-provider adapter variables, and the reviewed sample
 order gate are all configured.
-`npm run test:ai:health` expects the web app to be running and Ollama to have
-the required models installed.
+`npm run test:ai:health` is self-contained for local alpha checks: when
+`LOCAL_AI_HEALTH_BASE_URL` is not set, it auto-detects a running Photo Book
+Maker web app or starts an isolated local server on `LOCAL_AI_HEALTH_PORT`
+(`3224` by default), copies the local project store/uploads into a temp
+directory, verifies Ollama/model availability, checks for active or stale
+generation runs, and confirms the latest saved run meets the configured quality
+gate without mutating `apps/web/data/projects.json`. Set
+`LOCAL_AI_HEALTH_BASE_URL` only when intentionally targeting a specific running
+app/store.
 `npm run test:ai:local` expects a reachable Cap Cana-style test project unless
 `AI_GENERATION_PROJECT_ID` points at another test project.
 `npm run test:proof:quality` is read-only by default: it copies the current

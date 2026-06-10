@@ -221,6 +221,13 @@ combined `*-summary.json` report without mutating `apps/web/data/projects.json`.
 Use `AI_ALPHA_BENCHMARK_SMALL_PROJECT_ID` and `AI_ALPHA_BENCHMARK_60_PROJECT_ID`
 when you need to pin exact projects.
 
+`npm run test:ai:health` is the quick local Ollama/readiness gate. If
+`LOCAL_AI_HEALTH_BASE_URL` is not set, it auto-detects a running Photo Book
+Maker web app or starts an isolated local server on `LOCAL_AI_HEALTH_PORT`
+(`3224` by default), copies `apps/web/data/projects.json` and local uploads
+into a temp store, checks Ollama/model availability, and verifies the latest
+saved run quality without mutating the source project data.
+
 `npm run test:ai:benchmark` runs the health gate and a full local generation
 smoke against an isolated temporary copy of `apps/web/data/projects.json` and
 `apps/web/data/local-uploads`, then writes JSON benchmark reports to the system

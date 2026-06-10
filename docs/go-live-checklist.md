@@ -320,6 +320,12 @@ companion `*-proof-quality.json`, and combined `*-summary.json` reports, and
 removes the temp store. Keep the summary and companion report paths with
 tester-session notes:
 
+`npm run test:ai:health` is also safe to run from a cold local checkout. Without
+`LOCAL_AI_HEALTH_BASE_URL`, it auto-detects a running app or starts an isolated
+local server on `LOCAL_AI_HEALTH_PORT` and verifies Ollama, model availability,
+queue state, and latest saved-run quality against a temp copy of the local
+project store.
+
 ```powershell
 npm run test:ai:alpha-benchmark
 npm run test:ai:benchmark
