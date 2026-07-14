@@ -104,6 +104,7 @@ export function createNextDevServerController({
           })
         : spawn("npm", ["run", "dev", "--", "--hostname", "127.0.0.1", "--port", portArg], {
             cwd,
+            detached: true,
             env,
             stdio: ["ignore", "pipe", "pipe"],
           });
@@ -160,13 +161,28 @@ export function createNextDevServerController({
           killer.on("exit", resolve);
           killer.on("error", resolve);
         });
+      } else if (childToStop.pid) {
+        try {
+          process.kill(-childToStop.pid, "SIGTERM");
+        } catch {
+          childToStop.kill("SIGTERM");
+        }
       } else {
         childToStop.kill("SIGTERM");
       }
     }
 
     await waitForExit;
-    await waitForUrlDown(baseUrl);
+    const stopped = await waitForUrlDown(baseUrl);
+
+    if (!stopped && process.platform !== "win32" && childToStop.pid) {
+      try {
+        process.kill(-childToStop.pid, "SIGKILL");
+      } catch {
+        // The process group may already have exited between probes.
+      }
+      await waitForUrlDown(baseUrl);
+    }
   }
 
   async function start() {
