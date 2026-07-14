@@ -1,10 +1,11 @@
 /* global console, process */
 
 import { spawn } from "node:child_process";
-import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, extname, join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { prepareLocalAlphaFixtureStore } from "./lib/local-alpha-fixtures.mjs";
 
 const scriptDir = dirname(fileURLToPath(import.meta.url));
 const reportPath =
@@ -90,11 +91,25 @@ function runNodeStep(step, scriptName, env = {}) {
   });
 }
 
-async function main() {
+async function main(fixtureStoreDir) {
   const steps = [
     ["readiness contract", "readiness-contract-smoke.mjs"],
-    ["local alpha readiness", "alpha-readiness.mjs"],
-    ["local AI health", "local-ai-health.mjs"],
+    [
+      "local alpha readiness",
+      "alpha-readiness.mjs",
+      {
+        ALPHA_READINESS_REQUIRE_SAVED_RUN: "0",
+        ALPHA_READINESS_SOURCE_DATA_DIR: fixtureStoreDir,
+      },
+    ],
+    [
+      "local AI health",
+      "local-ai-health.mjs",
+      {
+        LOCAL_AI_HEALTH_REQUIRE_SAVED_RUN: "0",
+        LOCAL_AI_HEALTH_SOURCE_DATA_DIR: fixtureStoreDir,
+      },
+    ],
     ["local AI worker preflight", "local-ai-worker-preflight-smoke.mjs"],
   ];
 
@@ -104,6 +119,7 @@ async function main() {
       "local-ai-alpha-benchmark.mjs",
       {
         AI_ALPHA_BENCHMARK_REPORT_PATH: benchmarkReportPath,
+        AI_ALPHA_BENCHMARK_SOURCE_DATA_DIR: fixtureStoreDir,
         AI_ALPHA_BENCHMARK_SUMMARY_REPORT_PATH: benchmarkSummaryReportPath,
       },
     ]);
@@ -158,4 +174,10 @@ async function main() {
   console.log(JSON.stringify(summary, null, 2));
 }
 
-await main();
+const fixtureStoreDir = await mkdtemp(join(tmpdir(), "photo-book-local-alpha-acceptance-"));
+try {
+  await prepareLocalAlphaFixtureStore(fixtureStoreDir);
+  await main(fixtureStoreDir);
+} finally {
+  await rm(fixtureStoreDir, { force: true, recursive: true });
+}

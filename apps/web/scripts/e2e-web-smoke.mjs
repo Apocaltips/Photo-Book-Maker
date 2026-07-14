@@ -36,6 +36,10 @@ const devAuthHeaders = {
   "X-Photo-Book-Dev-Id": "android-tester",
   "X-Photo-Book-Dev-Name": "Android Tester",
 };
+const recycledEmailDevAuthHeaders = {
+  ...devAuthHeaders,
+  "X-Photo-Book-Dev-Id": "different-account-reusing-owner-email",
+};
 const workerSecret = "photo-book-e2e-worker-secret";
 const readinessSecret =
   process.env.E2E_ALPHA_READINESS_SECRET ?? "photo-book-e2e-readiness-secret";
@@ -399,6 +403,39 @@ async function runProjectE2E() {
     throw new Error("Project creation did not return a revisioned project.");
   }
 
+  const duplicateTitleProject = (
+    await apiJson("/api/projects", {
+      method: "POST",
+      body: JSON.stringify({
+        endDate: "2026-07-14",
+        startDate: "2026-07-11",
+        subtitle: "Duplicate-title isolation check",
+        timezone: "America/Denver",
+        title: `Android E2E ${stamp}`,
+        type: "trip",
+      }),
+    })
+  ).project;
+
+  if (
+    !duplicateTitleProject?.id ||
+    duplicateTitleProject.id === project.id ||
+    project.ownerId !== devAuthHeaders["X-Photo-Book-Dev-Id"] ||
+    duplicateTitleProject.ownerId !== devAuthHeaders["X-Photo-Book-Dev-Id"]
+  ) {
+    throw new Error("Duplicate-title projects did not receive isolated server identities.");
+  }
+
+  const recycledEmailProjectResponse = await fetchWithTimeout(
+    `${baseUrl}/api/projects/${project.id}`,
+    { headers: recycledEmailDevAuthHeaders },
+  );
+  if (recycledEmailProjectResponse.status !== 403) {
+    throw new Error(
+      `A different account reusing the owner email was not blocked: ${recycledEmailProjectResponse.status}`,
+    );
+  }
+
   const forbiddenProjectResponse = await fetchWithTimeout(`${baseUrl}/api/projects/${project.id}`, {
     headers: otherDevAuthHeaders,
   });
@@ -602,6 +639,20 @@ async function runProjectE2E() {
     queuedRetryStatus.run?.status !== "queued"
   ) {
     throw new Error("Generation run status route did not return the queued worker run.");
+  }
+
+  const unauthorizedWorkerHealth = await fetchWithTimeout(
+    `${baseUrl}/api/ai/worker/health`,
+  );
+  if (unauthorizedWorkerHealth.status !== 401) {
+    throw new Error(
+      `Worker health route did not reject missing secret: ${unauthorizedWorkerHealth.status}`,
+    );
+  }
+
+  const workerHealth = await workerApiJson("/api/ai/worker/health");
+  if (workerHealth.status !== "ready" || !workerHealth.queue?.enabled) {
+    throw new Error("Worker health route did not verify the configured worker secret.");
   }
 
   const unauthorizedClaim = await fetchWithTimeout(`${baseUrl}/api/ai/worker/generation/claim`, {

@@ -9,6 +9,7 @@
     "start": "next start",
     "lint": "eslint",
     "test:readiness:contract": "node scripts/readiness-contract-smoke.mjs",
+    "test:alpha:fixtures": "node scripts/local-alpha-fixtures-smoke.mjs",
     "test:alpha:local": "node scripts/local-alpha-acceptance.mjs",
     "test:alpha:hosted": "node scripts/hosted-alpha-acceptance.mjs",
     "test:alpha:readiness": "node scripts/alpha-readiness.mjs",

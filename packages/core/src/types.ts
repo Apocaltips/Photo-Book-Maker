@@ -531,6 +531,8 @@ export interface CreateProjectInput {
   timezone: string;
   ownerName: string;
   ownerEmail: string;
+  ownerId?: string;
+  projectId?: string;
   yearbookCycle?: YearbookCycle;
   anniversaryDate?: string;
 }

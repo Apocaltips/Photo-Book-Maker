@@ -108,15 +108,20 @@ export async function getAuthenticatedUser(request: Request): Promise<Authentica
   };
 }
 
-export function getProjectAccess(project: Project, email: string) {
-  const normalizedEmail = email.toLowerCase();
-  const isMember = project.members.some(
-    (member) => member.email.toLowerCase() === normalizedEmail,
-  );
-  const isOwner = project.members.some(
+export function getProjectAccess(
+  project: Project,
+  user: Pick<AuthenticatedUser, "email" | "id">,
+) {
+  const normalizedEmail = user.email.toLowerCase();
+  const memberByUserId = project.members.find((member) => member.id === user.id);
+  const legacyOwnerByEmail = project.members.find(
     (member) =>
-      member.id === project.ownerId && member.email.toLowerCase() === normalizedEmail,
+      member.id === "owner-generated" &&
+      member.email.toLowerCase() === normalizedEmail,
   );
+  const member = memberByUserId ?? legacyOwnerByEmail;
+  const isMember = Boolean(member);
+  const isOwner = member?.id === project.ownerId;
 
   return {
     canView: isMember,
@@ -125,8 +130,11 @@ export function getProjectAccess(project: Project, email: string) {
   };
 }
 
-export function filterProjectsForUser(projects: Project[], email: string) {
-  return projects.filter((project) => getProjectAccess(project, email).canView);
+export function filterProjectsForUser(
+  projects: Project[],
+  user: Pick<AuthenticatedUser, "email" | "id">,
+) {
+  return projects.filter((project) => getProjectAccess(project, user).canView);
 }
 
 export function unauthorizedResponse() {
@@ -160,7 +168,7 @@ export async function authorizeProjectRequest(
     } as const;
   }
 
-  const access = getProjectAccess(project, user.email);
+  const access = getProjectAccess(project, user);
   const isAllowed =
     accessLevel === "manage"
       ? access.canManage

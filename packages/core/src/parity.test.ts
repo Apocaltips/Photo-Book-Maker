@@ -48,6 +48,46 @@ function createProjectWithPhotos() {
   );
 }
 
+describe("project identity", () => {
+  it("creates distinct project and owner identities for duplicate titles", () => {
+    const input = {
+      type: "trip" as const,
+      title: "Cap Cana",
+      subtitle: "Same title, separate private books",
+      startDate: "2026-07-11",
+      endDate: "2026-07-14",
+      timezone: "America/Denver",
+      ownerName: "Vince",
+      ownerEmail: "vince@example.com",
+    };
+    const first = createProjectRecord(input);
+    const second = createProjectRecord(input);
+
+    expect(first.id).not.toBe(second.id);
+    expect(first.ownerId).not.toBe(second.ownerId);
+  });
+
+  it("preserves authenticated owner and server-generated project identities", () => {
+    const project = createProjectRecord({
+      type: "yearbook",
+      title: "2026 Family Yearbook",
+      subtitle: "A private annual book",
+      startDate: "2026-01-01",
+      endDate: "2026-12-31",
+      timezone: "America/Denver",
+      ownerName: "Vince",
+      ownerEmail: "vince@example.com",
+      ownerId: "supabase-user-id",
+      projectId: "yearbook-server-uuid",
+    });
+
+    expect(project.id).toBe("yearbook-server-uuid");
+    expect(project.ownerId).toBe("supabase-user-id");
+    expect(project.members[0]?.id).toBe("supabase-user-id");
+    expect(project.invites[0]?.acceptedByUserId).toBe("supabase-user-id");
+  });
+});
+
 describe("template catalog", () => {
   it("ships the v1 template-pack and spread-template floor", () => {
     expect(BOOK_TEMPLATE_PACKS).toHaveLength(16);

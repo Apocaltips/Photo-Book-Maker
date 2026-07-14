@@ -165,6 +165,16 @@ async function writeProjectsToSupabase(client: SupabaseClient, projects: Project
   }
 }
 
+async function insertProjectIntoSupabase(client: SupabaseClient, project: Project) {
+  const { error } = await client
+    .from(supabaseProjectsTable)
+    .insert(toProjectRow(normalizeProjectRecord(project)));
+
+  if (error) {
+    throw new Error(`Failed to create Supabase project ${project.id}: ${error.message}`);
+  }
+}
+
 export async function readProjects(): Promise<Project[]> {
   const supabase = getSupabaseAdminClient();
 
@@ -184,6 +194,24 @@ export async function writeProjects(projects: Project[]) {
   }
 
   return writeProjectsToSupabase(supabase, normalizedProjects);
+}
+
+export async function insertProject(project: Project) {
+  const supabase = getSupabaseAdminClient();
+  const normalizedProject = normalizeProjectRecord(project);
+
+  if (supabase) {
+    await insertProjectIntoSupabase(supabase, normalizedProject);
+    return normalizedProject;
+  }
+
+  const projects = await readProjectsFromFile();
+  if (projects.some((entry) => entry.id === normalizedProject.id)) {
+    throw new Error(`Project ${normalizedProject.id} already exists.`);
+  }
+
+  await writeProjectsToFile([normalizedProject, ...projects]);
+  return normalizedProject;
 }
 
 export async function updateProject(

@@ -1,11 +1,12 @@
 import { createProjectRecord } from "@photo-book-maker/core";
 import { NextResponse } from "next/server";
+import { randomUUID } from "node:crypto";
 import {
   filterProjectsForUser,
   getAuthenticatedUser,
   unauthorizedResponse,
 } from "@/lib/server/auth";
-import { readProjects, writeProjects } from "@/lib/server/project-store";
+import { insertProject, readProjects } from "@/lib/server/project-store";
 import {
   hydrateProjectForClient,
   hydrateProjectsForClient,
@@ -22,7 +23,7 @@ export async function GET(request: Request) {
 
     return NextResponse.json({
       projects: await hydrateProjectsForClient(
-        filterProjectsForUser(await readProjects(), user.email),
+        filterProjectsForUser(await readProjects(), user),
         origin,
       ),
     });
@@ -45,10 +46,11 @@ export async function POST(request: Request) {
     const project = createProjectRecord({
       ...body,
       ownerEmail: user.email,
+      ownerId: user.id,
       ownerName: user.name,
+      projectId: `${body.type === "yearbook" ? "yearbook" : "trip"}-${randomUUID()}`,
     });
-    const projects = await readProjects();
-    await writeProjects([project, ...projects]);
+    await insertProject(project);
 
     return NextResponse.json(
       {

@@ -240,6 +240,7 @@ async function main() {
           LOCAL_AI_WORKER_HOSTED_BASE_URL:
             process.env.LOCAL_AI_WORKER_HOSTED_BASE_URL ?? baseUrl,
           LOCAL_AI_WORKER_PREFLIGHT_ONLY: "1",
+          LOCAL_AI_WORKER_VERIFY_HOSTED_AUTH: "1",
         },
       ]);
     }

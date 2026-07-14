@@ -1,0 +1,53 @@
+name: Photo Book Maker CI
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+
+concurrency:
+  group: photo-book-maker-ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run core tests
+        run: npm run test
+
+      - name: Verify readiness contract
+        run: npm run test:readiness:contract
+
+      - name: Verify self-contained alpha fixtures
+        run: npm run test:alpha:fixtures
+
+      - name: Verify private worker preflight
+        run: npm run test:worker:preflight
+
+      - name: Typecheck all workspaces
+        run: npm run typecheck
+
+      - name: Lint web app
+        run: npm run lint
+
+      - name: Build production web app
+        run: npm run build
+
+      - name: Run isolated web E2E
+        run: npm run test:e2e:web

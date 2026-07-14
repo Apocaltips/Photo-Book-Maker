@@ -5,9 +5,18 @@ This repo can run in two backend modes:
 - `file` mode: local JSON store for development
 - `supabase` mode: hosted project store in Supabase plus S3-compatible object storage for photos
 
+## Account Isolation Requirement
+
+Production resources must live in dedicated **Photo Book Maker** accounts or
+organizations. Do not create this app's Supabase project, Cloudflare R2 bucket,
+Vercel project, payment resources, or monitoring resources inside Utlyze, New
+Rewards, or another product's account. Record each production organization and
+project ID in the private deployment notes before adding credentials to Vercel.
+
 ## 1. Create Supabase
 
-1. Create a new Supabase project.
+1. Create or select a dedicated Photo Book Maker Supabase organization, then
+   create a new Supabase project in that organization.
 2. In the SQL editor, run [`docs/supabase-photo-book-schema.sql`](supabase-photo-book-schema.sql).
    The schema enables RLS, revokes `anon` and `authenticated` direct table
    access, and keeps project payload reads/writes behind the Next API service
@@ -21,9 +30,26 @@ This repo can run in two backend modes:
 
 Recommended: Cloudflare R2
 
-1. Create a bucket for photos, for example `photo-book-maker`.
+1. Create or select a dedicated Photo Book Maker Cloudflare account, then
+   create a bucket for photos, for example `photo-book-maker-prod`.
 2. Create an API token with object read/write access for that bucket.
-3. Copy:
+3. In the bucket's **Settings > CORS Policy**, add this policy. Replace the
+   origin with the exact Vercel production origin and add any stable custom or
+   preview origin that will upload photos. Do not make the bucket public.
+
+   ```json
+   [
+     {
+       "AllowedOrigins": ["https://YOUR-WEB-APP"],
+       "AllowedMethods": ["GET", "HEAD", "PUT"],
+       "AllowedHeaders": ["Content-Type"],
+       "ExposeHeaders": ["ETag"],
+       "MaxAgeSeconds": 3600
+     }
+   ]
+   ```
+
+4. Copy:
    - bucket name
    - S3 endpoint
    - access key id
@@ -156,9 +182,10 @@ The authoritative API for v1 is the Next.js app in `apps/web`.
     `ALPHA_READINESS_SECRET` set in the local shell. Hosted mode calls the
     protected `/api/alpha/readiness` route so the deployed app proves its own
     Supabase, R2, project-store, template-catalog, private-worker setup,
-    direct Supabase project-table access denial, synthetic photo upload-ticket
-    signing, clean generation queue state, and latest saved AI generation
-    quality score.
+    direct Supabase project-table access denial, signed photo upload-ticket
+    creation, exact-origin browser CORS, private signed reads, a byte-verified
+    object-storage write/read/delete canary, clean generation queue state, and
+    the latest saved AI generation quality score.
     Treat any failed check as a no-go for family/friend testers.
 11. Create at least three real Supabase Auth tester accounts: an owner, an
     invited collaborator, and a wrong-user control account. The owner must

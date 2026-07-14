@@ -54,6 +54,7 @@ const maxConsecutiveFailures = parseWorkerIntegerEnv(
 const loop = process.env.LOCAL_AI_WORKER_LOOP === "1";
 const preflightOnly = process.env.LOCAL_AI_WORKER_PREFLIGHT_ONLY === "1";
 const skipProcessorHealth = process.env.LOCAL_AI_WORKER_SKIP_PROCESSOR_HEALTH === "1";
+const verifyHostedAuth = process.env.LOCAL_AI_WORKER_VERIFY_HOSTED_AUTH === "1";
 
 if (!secret) {
   throw new Error("LOCAL_AI_WORKER_SECRET or AI_WORKER_SECRET is required.");
@@ -197,8 +198,32 @@ async function assertProcessorHealth() {
   );
 }
 
+async function assertHostedWorkerAuth() {
+  if (!verifyHostedAuth) {
+    return;
+  }
+
+  const body = await apiJson(hostedBaseUrl, "/api/ai/worker/health");
+  if (body.status !== "ready" || !body.queue?.enabled) {
+    throw new Error("Hosted AI worker handshake succeeded, but the queue is not ready.");
+  }
+
+  console.log(
+    JSON.stringify(
+      {
+        hostedBaseUrl,
+        hostedWorkerAuth: "verified",
+        queueEnabled: true,
+      },
+      null,
+      2,
+    ),
+  );
+}
+
 async function preflightWorker() {
   await assertProcessorHealth();
+  await assertHostedWorkerAuth();
   if (preflightOnly) {
     console.log("Local AI worker preflight passed.");
   }

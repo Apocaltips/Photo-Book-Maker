@@ -21,6 +21,12 @@ const alphaReadinessRouteUrl = new URL(
   "../src/app/api/alpha/readiness/route.ts",
   import.meta.url,
 );
+const aiWorkerHealthRouteUrl = new URL(
+  "../src/app/api/ai/worker/health/route.ts",
+  import.meta.url,
+);
+const localAiWorkerScriptUrl = new URL("./local-ai-worker.mjs", import.meta.url);
+const objectStorageUrl = new URL("../src/lib/server/object-storage.ts", import.meta.url);
 const serverEnvUrl = new URL("../src/lib/server/env.ts", import.meta.url);
 const publicAuthConfigUrl = new URL(
   "../src/lib/server/public-auth-config.ts",
@@ -180,6 +186,10 @@ function assertHostedAlphaAcceptanceFails(overrides, expectedText) {
 const envExample = await readFile(envExampleUrl, "utf8");
 const supabaseSchema = normalizeSql(await readFile(supabaseSchemaUrl, "utf8"));
 const alphaReadinessRoute = await readFile(alphaReadinessRouteUrl, "utf8");
+const aiWorkerHealthRoute = await readFile(aiWorkerHealthRouteUrl, "utf8");
+const localAiWorkerScript = await readFile(localAiWorkerScriptUrl, "utf8");
+const hostedAlphaAcceptanceSource = await readFile(hostedAlphaAcceptancePath, "utf8");
+const objectStorageSource = await readFile(objectStorageUrl, "utf8");
 const serverEnv = await readFile(serverEnvUrl, "utf8");
 const publicAuthConfig = await readFile(publicAuthConfigUrl, "utf8");
 const envKeys = getEnvExampleKeys(envExample);
@@ -195,6 +205,7 @@ for (const key of [
   "HOSTED_ALPHA_ACCEPTANCE_DRY_RUN",
   "HOSTED_ALPHA_ACCEPTANCE_SKIP_CONTRACT",
   "HOSTED_ALPHA_ACCEPTANCE_SKIP_WORKER_PREFLIGHT",
+  "LOCAL_AI_WORKER_VERIFY_HOSTED_AUTH",
 ]) {
   assert(envKeys.has(key), `.env.example is missing hosted alpha acceptance variable: ${key}`);
 }
@@ -233,12 +244,41 @@ assert(
   "Alpha readiness route must include the direct Supabase project table access probe.",
 );
 assert(
+  aiWorkerHealthRoute.includes("authorizeAiWorkerRequest") &&
+    aiWorkerHealthRoute.includes("getAiWorkerQueueConfig"),
+  "AI worker health route must authenticate the worker secret and report queue readiness.",
+);
+assert(
+  localAiWorkerScript.includes('apiJson(hostedBaseUrl, "/api/ai/worker/health")'),
+  "Local AI worker preflight must support an authenticated hosted worker handshake.",
+);
+assert(
+  hostedAlphaAcceptanceSource.includes('LOCAL_AI_WORKER_VERIFY_HOSTED_AUTH: "1"'),
+  "Hosted alpha acceptance must require the authenticated hosted worker handshake.",
+);
+assert(
   alphaReadinessRoute.includes("isDirectAccessDenied"),
   "Alpha readiness route must fail closed unless the anon direct-access probe is denied.",
 );
 assert(
   alphaReadinessRoute.includes("photo upload ticket signing"),
   "Alpha readiness route must prove object storage can mint a photo upload ticket.",
+);
+assert(
+  alphaReadinessRoute.includes("object storage round trip"),
+  "Alpha readiness route must prove an object-storage write/read/delete round trip.",
+);
+assert(
+  alphaReadinessRoute.includes("object storage browser CORS"),
+  "Alpha readiness route must prove browser CORS for the deployed app origin.",
+);
+assert(
+  objectStorageSource.includes("verifyObjectStorageBrowserCors"),
+  "Object storage must expose a browser CORS preflight verifier.",
+);
+assert(
+  objectStorageSource.includes("[401, 403].includes(unsignedReadResponse.status)"),
+  "Object-storage round trip must require an explicit authentication denial for an unsigned read.",
 );
 assert(
   alphaReadinessRoute.includes("alpha readiness secret strength"),

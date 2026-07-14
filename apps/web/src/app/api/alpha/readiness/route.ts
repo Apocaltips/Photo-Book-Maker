@@ -17,6 +17,9 @@ import {
   createPhotoUploadTicket,
   isLocalObjectStorageEnabled,
   isObjectStorageConfigured,
+  isPublicObjectStorageConfigured,
+  verifyObjectStorageBrowserCors,
+  verifyObjectStorageRoundTrip,
 } from "@/lib/server/object-storage";
 import { getProjectStoreMode, readProjects } from "@/lib/server/project-store";
 import { getPublicSupabaseAuthConfig } from "@/lib/server/public-auth-config";
@@ -387,9 +390,14 @@ async function addSupabaseDirectAccessChecks(
   );
 }
 
-async function addStorageChecks(checks: ReadinessCheck[], requireProviders: boolean) {
+async function addStorageChecks(
+  checks: ReadinessCheck[],
+  requireProviders: boolean,
+  requestOrigin: string,
+) {
   const objectStorageConfigured = isObjectStorageConfigured();
   const localStorageEnabled = isLocalObjectStorageEnabled();
+  const publicStorageConfigured = isPublicObjectStorageConfigured();
 
   addEnvGroupCheck(
     checks,
@@ -426,6 +434,16 @@ async function addStorageChecks(checks: ReadinessCheck[], requireProviders: bool
     );
   }
 
+  addCheck(
+    checks,
+    requireProviders && publicStorageConfigured ? "fail" : "pass",
+    "private photo storage",
+    publicStorageConfigured
+      ? "PHOTO_STORAGE_PUBLIC_BASE_URL is configured; private family photos must use signed reads."
+      : "Photo reads use expiring signed URLs instead of a permanent public base URL.",
+    { publicStorageConfigured },
+  );
+
   if (!objectStorageConfigured) {
     addCheck(
       checks,
@@ -442,6 +460,8 @@ async function addStorageChecks(checks: ReadinessCheck[], requireProviders: bool
     return;
   }
 
+  let uploadTicketValid = false;
+  let uploadUrl: string | null = null;
   try {
     const upload = await createPhotoUploadTicket({
       contentType: "image/jpeg",
@@ -450,10 +470,12 @@ async function addStorageChecks(checks: ReadinessCheck[], requireProviders: bool
     });
     const isRemoteProjectPath = upload.storagePath.startsWith("projects/alpha-readiness-probe/");
     const hasSignedUrls = upload.uploadUrl.startsWith("http") && upload.downloadUrl.startsWith("http");
+    uploadTicketValid = isRemoteProjectPath && hasSignedUrls;
+    uploadUrl = uploadTicketValid ? upload.uploadUrl : null;
 
     addCheck(
       checks,
-      isRemoteProjectPath && hasSignedUrls ? "pass" : "fail",
+      uploadTicketValid ? "pass" : "fail",
       "photo upload ticket signing",
       isRemoteProjectPath && hasSignedUrls
         ? "Object storage can mint a signed photo upload ticket without writing data."
@@ -466,15 +488,80 @@ async function addStorageChecks(checks: ReadinessCheck[], requireProviders: bool
         storagePathPrefix: upload.storagePath.split("/").slice(0, 2).join("/"),
       },
     );
+
   } catch (error) {
     addCheck(
       checks,
       "fail",
       "photo upload ticket signing",
       error instanceof Error ? error.message : "Unable to create an object-storage upload ticket.",
-      {
-        objectStorageConfigured,
-      },
+      { objectStorageConfigured },
+    );
+  }
+
+  if (requireProviders && uploadTicketValid && uploadUrl) {
+    try {
+      const cors = await verifyObjectStorageBrowserCors({
+        origin: requestOrigin,
+        uploadUrl,
+      });
+      addCheck(
+        checks,
+        cors.allowed ? "pass" : "fail",
+        "object storage browser CORS",
+        cors.allowed
+          ? "Object storage allows signed browser uploads from this exact app origin."
+          : "Object storage does not allow signed browser uploads from this exact app origin.",
+        cors,
+      );
+    } catch (error) {
+      addCheck(
+        checks,
+        "fail",
+        "object storage browser CORS",
+        error instanceof Error
+          ? error.message
+          : "Unable to complete the object-storage browser CORS preflight.",
+        { objectStorageConfigured },
+      );
+    }
+
+    try {
+      const roundTrip = await verifyObjectStorageRoundTrip();
+      addCheck(
+        checks,
+        roundTrip.privateSignedReads ? "pass" : "fail",
+        "object storage round trip",
+        roundTrip.privateSignedReads
+          ? "Object storage wrote, read, byte-verified, and deleted a private readiness canary."
+          : "Object storage canary passed, but reads are configured through a permanent public base URL.",
+        roundTrip,
+      );
+    } catch (error) {
+      addCheck(
+        checks,
+        "fail",
+        "object storage round trip",
+        error instanceof Error
+          ? error.message
+          : "Unable to complete the object-storage readiness canary.",
+        { objectStorageConfigured },
+      );
+    }
+  } else if (requireProviders) {
+    addCheck(
+      checks,
+      "fail",
+      "object storage browser CORS",
+      "Browser CORS preflight was not attempted because upload-ticket signing failed.",
+      { objectStorageConfigured },
+    );
+    addCheck(
+      checks,
+      "fail",
+      "object storage round trip",
+      "Object-storage canary was not attempted because upload-ticket signing failed.",
+      { objectStorageConfigured },
     );
   }
 }
@@ -682,7 +769,7 @@ export async function GET(request: Request) {
   addTemplateCatalogChecks(checks);
   addAuthChecks(checks, requireProviders);
   await addSupabaseDirectAccessChecks(checks, requireProviders);
-  await addStorageChecks(checks, requireProviders);
+  await addStorageChecks(checks, requireProviders, new URL(request.url).origin);
   addWorkerChecks(checks, mode, requireWorker);
   addPhaseTwoProviderChecks(checks, mode);
   const projects = await addProjectStoreChecks(

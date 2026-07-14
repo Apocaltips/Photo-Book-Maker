@@ -1,4 +1,9 @@
-import { GetObjectCommand, PutObjectCommand, S3Client } from "@aws-sdk/client-s3";
+import {
+  DeleteObjectCommand,
+  GetObjectCommand,
+  PutObjectCommand,
+  S3Client,
+} from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import { Buffer } from "node:buffer";
 import { randomUUID } from "node:crypto";
@@ -253,6 +258,56 @@ export function isObjectStorageConfigured() {
   return Boolean(getS3Client() && getBucketName());
 }
 
+export function isPublicObjectStorageConfigured() {
+  return Boolean(getPublicBaseUrl());
+}
+
+function commaSeparatedHeaderIncludes(value: string | null, expected: string) {
+  return (
+    value
+      ?.split(",")
+      .map((entry) => entry.trim().toLowerCase())
+      .includes(expected.toLowerCase()) ?? false
+  );
+}
+
+export async function verifyObjectStorageBrowserCors(input: {
+  origin: string;
+  uploadUrl: string;
+}) {
+  const origin = new URL(input.origin).origin;
+  const response = await fetch(input.uploadUrl, {
+    headers: {
+      "Access-Control-Request-Headers": "content-type",
+      "Access-Control-Request-Method": "PUT",
+      Origin: origin,
+    },
+    method: "OPTIONS",
+    redirect: "manual",
+    signal: AbortSignal.timeout(10_000),
+  });
+  const allowedOrigin = response.headers.get("access-control-allow-origin");
+  const exactOriginAllowed = allowedOrigin === origin;
+  const wildcardOriginConfigured = allowedOrigin === "*";
+  const putAllowed = commaSeparatedHeaderIncludes(
+    response.headers.get("access-control-allow-methods"),
+    "PUT",
+  );
+  const contentTypeAllowed = commaSeparatedHeaderIncludes(
+    response.headers.get("access-control-allow-headers"),
+    "content-type",
+  );
+
+  return {
+    allowed: response.ok && exactOriginAllowed && putAllowed && contentTypeAllowed,
+    contentTypeAllowed,
+    exactOriginAllowed,
+    preflightStatus: response.status,
+    putAllowed,
+    wildcardOriginConfigured,
+  };
+}
+
 export async function readStoredObjectBuffer(storagePath: string) {
   if (isLocalObjectStorageEnabled() && isLocalUploadStoragePath(storagePath)) {
     return readFile(getLocalUploadFilePath(storagePath));
@@ -322,6 +377,80 @@ export async function signObjectReadUrl(
     }),
     { expiresIn: expiresInSeconds },
   );
+}
+
+export async function verifyObjectStorageRoundTrip() {
+  const bucket = getBucketName();
+  const client = getS3Client();
+
+  if (!bucket || !client) {
+    throw new Error("Object storage is not configured.");
+  }
+
+  const storagePath = `readiness/${Date.now()}-${randomUUID()}.txt`;
+  const expected = Buffer.from("photo-book-maker-object-storage-readiness-v1", "utf8");
+  let objectCreated = false;
+
+  try {
+    await client.send(
+      new PutObjectCommand({
+        Body: expected,
+        Bucket: bucket,
+        CacheControl: "no-store",
+        ContentType: "text/plain; charset=utf-8",
+        Key: storagePath,
+      }),
+    );
+    objectCreated = true;
+
+    const sdkReceived = await readStoredObjectBuffer(storagePath);
+    if (!sdkReceived || !sdkReceived.equals(expected)) {
+      throw new Error("Object storage readiness canary did not read back the bytes it wrote.");
+    }
+
+    const signedReadUrl = await signObjectReadUrl(storagePath, 60);
+    if (!signedReadUrl) {
+      throw new Error("Object storage readiness canary could not mint a signed read URL.");
+    }
+
+    const signedReadResponse = await fetch(signedReadUrl, {
+      redirect: "manual",
+      signal: AbortSignal.timeout(10_000),
+    });
+    const signedReadBytes = Buffer.from(await signedReadResponse.arrayBuffer());
+    if (!signedReadResponse.ok || !signedReadBytes.equals(expected)) {
+      throw new Error("Object storage signed-read canary did not return the bytes it wrote.");
+    }
+
+    const unsignedReadUrl = new URL(signedReadUrl);
+    unsignedReadUrl.search = "";
+    const unsignedReadResponse = await fetch(unsignedReadUrl, {
+      redirect: "manual",
+      signal: AbortSignal.timeout(10_000),
+    });
+    const unsignedReadExplicitlyDenied = [401, 403].includes(unsignedReadResponse.status);
+    const privateSignedReads =
+      !isPublicObjectStorageConfigured() && unsignedReadExplicitlyDenied;
+    await unsignedReadResponse.body?.cancel();
+
+    return {
+      bytesVerified: sdkReceived.length,
+      privateSignedReads,
+      signedReadBytesVerified: signedReadBytes.length,
+      storagePathPrefix: "readiness",
+      unsignedReadExplicitlyDenied,
+      unsignedReadStatus: unsignedReadResponse.status,
+    };
+  } finally {
+    if (objectCreated) {
+      await client.send(
+        new DeleteObjectCommand({
+          Bucket: bucket,
+          Key: storagePath,
+        }),
+      );
+    }
+  }
 }
 
 export async function createPhotoUploadTicket(input: {

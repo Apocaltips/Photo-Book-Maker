@@ -191,9 +191,11 @@ npm run test:proof:quality
 
 `npm run test:alpha:local` is the one-command local family/friend readiness
 gate. It runs the readiness contract, local readiness, local AI health, worker
-preflight, and local AI alpha benchmark sequentially, then writes a combined
-JSON report. Use the lower-level commands below when diagnosing a specific
-failure. Do not skip the benchmark for outside-tester readiness.
+preflight, and local AI alpha benchmark sequentially against generated 13-photo
+and 60-photo temporary projects, then writes a combined JSON report. It does not
+depend on uncommitted operator data. Use the lower-level commands below when
+diagnosing a specific failure. Do not skip the benchmark for outside-tester
+readiness.
 
 For the hosted family/friend gate, run:
 
@@ -253,10 +255,13 @@ generation to include a quality score at or above
 It also probes the `photo_book_projects` table with the public anon key and
 fails hosted readiness unless direct table access is denied, because project
 payloads must stay behind the Next API service-role path.
-For uploads, hosted readiness mints a synthetic JPEG upload ticket without
-writing an object; that catches missing or malformed R2/S3 signing config
-before a tester tries to upload a trip batch. The upload-ticket route only
-accepts JPEG, PNG, WebP, HEIC, and HEIF files.
+For uploads, hosted readiness mints a synthetic JPEG upload ticket, verifies an
+exact-origin browser `PUT` preflight with `Content-Type`, writes and byte-checks
+a tiny private canary through both SDK and signed-read paths, confirms the same
+object is blocked without its signature, and deletes it. That catches malformed
+R2/S3 credentials, signing, privacy, and CORS before a tester tries to upload a
+trip batch. The upload-ticket route only accepts JPEG, PNG, WebP, HEIC, and HEIF
+files.
 `npm run test:provider:readiness` is also read-only. It defaults
 `ALPHA_READINESS_MODE=provider` and requires the protected readiness route, so
 it should fail until hosted auth/storage/private-worker, Stripe, email,

@@ -1069,16 +1069,17 @@ export function isDemoProject(project: Pick<Project, "id">) {
   return isDemoProjectId(project.id);
 }
 
-export function createProjectRecord(input: CreateProjectInput): Project {
-  const owner: ProjectMember = {
-    id: "owner-generated",
-    name: input.ownerName,
-    email: input.ownerEmail,
-    role: "owner",
-    avatarLabel: input.ownerName.slice(0, 1).toUpperCase(),
-    homeBase: "To be added",
-  };
+function createUniqueEntityId(prefix: string) {
+  const randomUuid = globalThis.crypto?.randomUUID?.();
 
+  if (randomUuid) {
+    return `${prefix}-${randomUuid}`;
+  }
+
+  return `${prefix}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 12)}`;
+}
+
+export function createProjectRecord(input: CreateProjectInput): Project {
   const titleSeed = input.title
     .trim()
     .toLowerCase()
@@ -1086,9 +1087,20 @@ export function createProjectRecord(input: CreateProjectInput): Project {
     .replace(/(^-|-$)/g, "");
 
   const createdAt = new Date().toISOString();
+  const projectId =
+    input.projectId?.trim() ||
+    createUniqueEntityId(`${input.type}-${titleSeed || "new-project"}`);
+  const owner: ProjectMember = {
+    id: input.ownerId?.trim() || createUniqueEntityId("owner"),
+    name: input.ownerName,
+    email: input.ownerEmail,
+    role: "owner",
+    avatarLabel: input.ownerName.slice(0, 1).toUpperCase(),
+    homeBase: "To be added",
+  };
 
   return normalizeProjectRecord(normalizeProjectDraftState({
-    id: `${input.type}-${titleSeed || "new-project"}`,
+    id: projectId,
     type: input.type,
     title: input.title,
     subtitle: input.subtitle,
@@ -1106,7 +1118,7 @@ export function createProjectRecord(input: CreateProjectInput): Project {
     members: [owner],
     invites: [
       {
-        id: `invite-${titleSeed || "new"}`,
+        id: `invite-${projectId}`,
         name: owner.name,
         email: owner.email,
         role: "owner",
@@ -1123,7 +1135,7 @@ export function createProjectRecord(input: CreateProjectInput): Project {
     bookThemes: cloneThemes(),
     selectedThemeId: editorialThemes[0].id,
     bookDraft: {
-      id: `draft-${titleSeed || "new"}`,
+      id: `draft-${projectId}`,
       title: input.title,
       format: "12x12 square",
       status: "draft",
