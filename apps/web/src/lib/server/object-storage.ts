@@ -10,6 +10,7 @@ import { randomUUID } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { Readable } from "node:stream";
+import { isUnsignedObjectReadDenied } from "@/lib/alpha-readiness-contract";
 
 type UploadTicket = {
   contentType: string;
@@ -428,7 +429,7 @@ export async function verifyObjectStorageRoundTrip() {
       redirect: "manual",
       signal: AbortSignal.timeout(10_000),
     });
-    const unsignedReadExplicitlyDenied = [401, 403].includes(unsignedReadResponse.status);
+    const unsignedReadExplicitlyDenied = isUnsignedObjectReadDenied(unsignedReadResponse.status);
     const privateSignedReads =
       !isPublicObjectStorageConfigured() && unsignedReadExplicitlyDenied;
     await unsignedReadResponse.body?.cancel();

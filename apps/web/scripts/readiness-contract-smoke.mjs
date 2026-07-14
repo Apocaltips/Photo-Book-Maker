@@ -9,6 +9,7 @@ import {
   MIN_HOSTED_SHARED_SECRET_LENGTH,
   collectPhaseTwoProviderChecks,
   getReadinessContractEnvNames,
+  isUnsignedObjectReadDenied,
   makeSharedSecretStrengthCheck,
   shouldCheckPhaseTwoProviders,
   shouldRequirePrivateWorker,
@@ -277,9 +278,25 @@ assert(
   "Object storage must expose a browser CORS preflight verifier.",
 );
 assert(
-  objectStorageSource.includes("[401, 403].includes(unsignedReadResponse.status)"),
-  "Object-storage round trip must require an explicit authentication denial for an unsigned read.",
+  objectStorageSource.includes("isUnsignedObjectReadDenied(unsignedReadResponse.status)"),
+  "Object-storage round trip must use the shared unsigned-read denial predicate.",
 );
+assert(
+  typeof isUnsignedObjectReadDenied === "function",
+  "Readiness contract must expose the unsigned object-read denial predicate.",
+);
+for (const status of [400, 401, 403, 404]) {
+  assert(
+    isUnsignedObjectReadDenied(status),
+    `Unsigned object-read status ${status} must count as an explicit denial.`,
+  );
+}
+for (const status of [200, 302, 500]) {
+  assert(
+    !isUnsignedObjectReadDenied(status),
+    `Unsigned object-read status ${status} must not count as an explicit denial.`,
+  );
+}
 assert(
   alphaReadinessRoute.includes("alpha readiness secret strength"),
   "Alpha readiness route must report readiness shared-secret strength.",
