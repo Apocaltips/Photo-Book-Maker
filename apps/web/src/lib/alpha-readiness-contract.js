@@ -1,3 +1,5 @@
+/* global URL */
+
 export const ALLOWED_PRINT_PROVIDERS = Object.freeze([
   "manual_pdf",
   "peecho",
@@ -95,8 +97,51 @@ export function isUnsignedObjectReadDenied(status) {
   return [400, 401, 403, 404].includes(status);
 }
 
-export function isAuthenticatedSupabaseAccessDenied(status) {
-  return status === 403;
+export function isAuthenticatedSupabaseAccessDenied(status, body) {
+  return status === 403 && body?.code === "42501";
+}
+
+function getUrlOrigin(value) {
+  if (!value) {
+    return null;
+  }
+
+  try {
+    return new URL(value).origin;
+  } catch {
+    return null;
+  }
+}
+
+export function getSupabaseOriginAlignment({ backendUrl, publicUrl }) {
+  const backendOrigin = getUrlOrigin(backendUrl);
+  const publicOrigin = getUrlOrigin(publicUrl);
+
+  return {
+    aligned: Boolean(backendOrigin && publicOrigin && backendOrigin === publicOrigin),
+    backendOrigin,
+    publicOrigin,
+  };
+}
+
+export function isSupabaseProbeTargetMatch({
+  expectedOrigin,
+  expectedTable,
+  probeTable,
+  probeUrl,
+}) {
+  if (!expectedOrigin || !expectedTable || !probeTable || !probeUrl) {
+    return false;
+  }
+
+  const normalizedExpectedOrigin = getUrlOrigin(expectedOrigin);
+  const normalizedProbeOrigin = getUrlOrigin(probeUrl);
+
+  return (
+    Boolean(normalizedExpectedOrigin && normalizedProbeOrigin) &&
+    normalizedExpectedOrigin === normalizedProbeOrigin &&
+    expectedTable.trim() === probeTable.trim()
+  );
 }
 
 export function getSharedSecretStrengthIssue(

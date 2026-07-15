@@ -105,6 +105,21 @@ async function writeReport(summary) {
   await writeFile(reportPath, `${JSON.stringify(summary, null, 2)}\n`, "utf8");
 }
 
+function getRequiredPassedCheck(report, name) {
+  const check = report.checks?.find((entry) => entry.name === name);
+
+  if (!check) {
+    throw new Error(`Hosted alpha readiness report is missing required check: ${name}.`);
+  }
+  if (check.status !== "pass") {
+    throw new Error(
+      `Hosted alpha readiness check "${name}" must pass; received ${check.status ?? "unknown"}.`,
+    );
+  }
+
+  return check;
+}
+
 function runNode(scriptName, env = {}) {
   return new Promise((resolve, reject) => {
     const child = spawn(process.execPath, [join(scriptDir, scriptName)], {
@@ -156,6 +171,7 @@ await runNode("alpha-readiness.mjs", {
 });
 
 const readinessReport = await readJsonReport(readinessReportPath);
+getRequiredPassedCheck(readinessReport, "authenticated Supabase direct access");
 let proofReport = null;
 
 if (requireProof) {

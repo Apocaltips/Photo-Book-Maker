@@ -7,6 +7,7 @@ import {
   collectPhaseTwoProviderChecks,
   getMissingEnv,
   isAuthenticatedSupabaseAccessDenied,
+  isSupabaseProbeTargetMatch,
   makeSharedSecretStrengthCheck,
   shouldRequirePrivateWorker,
   shouldRequireProviderInfrastructure,
@@ -59,6 +60,7 @@ const checks = [];
 let fileStoreDir;
 let missingRequiredTargetUrl = false;
 let serverController;
+let deployedSupabaseProbeTarget = null;
 
 function isLoopbackUrl(value) {
   try {
@@ -426,6 +428,8 @@ async function checkAppSideReadiness() {
       return;
     }
 
+    deployedSupabaseProbeTarget = body.supabaseProbeTarget ?? null;
+
     pass("app-side readiness", "Protected readiness route is reachable.", {
       appStatus: body.status ?? null,
       status: response.status,
@@ -498,10 +502,10 @@ async function checkAuthenticatedSupabaseIsolation() {
   }
 
   const supabaseUrl = (
-    process.env.NEXT_PUBLIC_SUPABASE_URL ?? process.env.SUPABASE_URL ?? ""
+    process.env.SUPABASE_URL ?? process.env.NEXT_PUBLIC_SUPABASE_URL ?? ""
   ).replace(/\/$/, "");
   const anonKey =
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ?? process.env.SUPABASE_ANON_KEY ?? "";
+    process.env.SUPABASE_ANON_KEY ?? process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ?? "";
   const table = process.env.SUPABASE_PROJECTS_TABLE?.trim() || "photo_book_projects";
   const missing = [];
 
@@ -514,12 +518,35 @@ async function checkAuthenticatedSupabaseIsolation() {
   if (!authenticatedProofBearerToken) {
     missing.push("HOSTED_ALPHA_PROOF_BEARER_TOKEN or PROOF_QUALITY_BEARER_TOKEN");
   }
+  if (!deployedSupabaseProbeTarget?.origin || !deployedSupabaseProbeTarget?.table) {
+    missing.push("deployed Supabase probe target from protected readiness");
+  }
 
   if (missing.length) {
-    warn(
+    fail(
       "authenticated Supabase direct access",
       `Authenticated direct-table isolation was not probed because the caller is missing: ${missing.join(", ")}.`,
       { missing, table },
+    );
+    return;
+  }
+
+  if (
+    !isSupabaseProbeTargetMatch({
+      expectedOrigin: deployedSupabaseProbeTarget.origin,
+      expectedTable: deployedSupabaseProbeTarget.table,
+      probeTable: table,
+      probeUrl: supabaseUrl,
+    })
+  ) {
+    fail(
+      "authenticated Supabase direct access",
+      "The caller-side Supabase probe target does not match the deployed app readiness target.",
+      {
+        deployedOrigin: deployedSupabaseProbeTarget.origin,
+        deployedTable: deployedSupabaseProbeTarget.table,
+        probeTable: table,
+      },
     );
     return;
   }
@@ -535,13 +562,21 @@ async function checkAuthenticatedSupabaseIsolation() {
         signal: AbortSignal.timeout(10_000),
       },
     );
-    await response.text();
+    const responseText = await response.text();
+    const responseBody = await Promise.resolve()
+      .then(() => (responseText ? JSON.parse(responseText) : {}))
+      .catch(() => ({}));
 
-    if (isAuthenticatedSupabaseAccessDenied(response.status)) {
+    if (isAuthenticatedSupabaseAccessDenied(response.status, responseBody)) {
       pass(
         "authenticated Supabase direct access",
-        "A valid signed-in tester is denied direct project-table access.",
-        { status: response.status, table },
+        "A valid signed-in tester is denied direct project-table access by Postgres permissions.",
+        {
+          code: responseBody.code,
+          origin: deployedSupabaseProbeTarget.origin,
+          status: response.status,
+          table,
+        },
       );
       return;
     }
@@ -550,8 +585,10 @@ async function checkAuthenticatedSupabaseIsolation() {
       "authenticated Supabase direct access",
       response.status === 401
         ? "The tester token was not accepted, so authenticated table isolation was not proven."
-        : `Expected authenticated direct-table denial with 403, got ${response.status}.`,
-      { status: response.status, table },
+        : response.status === 403
+          ? `Expected Postgres permission code 42501 in the 403 response, got ${responseBody.code ?? "no code"}.`
+          : `Expected authenticated direct-table denial with 403, got ${response.status}.`,
+      { code: responseBody.code ?? null, status: response.status, table },
     );
   } catch (error) {
     fail(

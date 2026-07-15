@@ -7,6 +7,7 @@ import { createClient } from "@supabase/supabase-js";
 import { NextResponse } from "next/server";
 import {
   collectPhaseTwoProviderChecks,
+  getSupabaseOriginAlignment,
   makeSharedSecretStrengthCheck,
   getMissingEnv,
   shouldRequirePrivateWorker,
@@ -270,6 +271,10 @@ async function addProjectStoreChecks(
 
 function addAuthChecks(checks: ReadinessCheck[], requireProviders: boolean) {
   const publicConfig = getPublicSupabaseAuthConfig();
+  const originAlignment = getSupabaseOriginAlignment({
+    backendUrl: process.env.SUPABASE_URL,
+    publicUrl: publicConfig.supabaseUrl,
+  });
   const publicAuthConfigured = Boolean(
     publicConfig.supabaseUrl && publicConfig.supabaseAnonKey,
   );
@@ -296,6 +301,28 @@ function addAuthChecks(checks: ReadinessCheck[], requireProviders: boolean) {
       hasNextPublicAuth,
       hasPublicAnonKey: Boolean(publicConfig.supabaseAnonKey),
       hasPublicUrl: Boolean(publicConfig.supabaseUrl),
+    },
+  );
+
+  const hasBothSupabaseOrigins = Boolean(
+    originAlignment.backendOrigin && originAlignment.publicOrigin,
+  );
+  addCheck(
+    checks,
+    originAlignment.aligned
+      ? "pass"
+      : hasBothSupabaseOrigins || requireProviders
+        ? "fail"
+        : "skip",
+    "Supabase auth/store project alignment",
+    originAlignment.aligned
+      ? "Browser Auth and the protected project store use the same Supabase project."
+      : hasBothSupabaseOrigins
+        ? "Browser Auth and the protected project store point at different Supabase projects."
+        : "Supabase Auth/store project alignment cannot be checked until both URLs are configured.",
+    {
+      backendOrigin: originAlignment.backendOrigin,
+      publicOrigin: originAlignment.publicOrigin,
     },
   );
 
@@ -781,11 +808,19 @@ export async function GET(request: Request) {
 
   const failCount = checks.filter((check) => check.status === "fail").length;
   const warnCount = checks.filter((check) => check.status === "warn").length;
+  const supabaseOriginAlignment = getSupabaseOriginAlignment({
+    backendUrl: process.env.SUPABASE_URL,
+    publicUrl: getPublicSupabaseAuthConfig().supabaseUrl,
+  });
 
   return NextResponse.json({
     checks,
     mode,
     status: failCount ? "failed" : warnCount ? "warning" : "passed",
+    supabaseProbeTarget: {
+      origin: supabaseOriginAlignment.backendOrigin,
+      table: process.env.SUPABASE_PROJECTS_TABLE ?? "photo_book_projects",
+    },
     totals: {
       fail: failCount,
       pass: checks.filter((check) => check.status === "pass").length,

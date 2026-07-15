@@ -9,7 +9,9 @@ import {
   MIN_HOSTED_SHARED_SECRET_LENGTH,
   collectPhaseTwoProviderChecks,
   getReadinessContractEnvNames,
+  getSupabaseOriginAlignment,
   isAuthenticatedSupabaseAccessDenied,
+  isSupabaseProbeTargetMatch,
   isUnsignedObjectReadDenied,
   makeSharedSecretStrengthCheck,
   shouldCheckPhaseTwoProviders,
@@ -197,6 +199,7 @@ const inviteAcceptanceRoute = await readFile(inviteAcceptanceRouteUrl, "utf8");
 const aiWorkerHealthRoute = await readFile(aiWorkerHealthRouteUrl, "utf8");
 const localAiWorkerScript = await readFile(localAiWorkerScriptUrl, "utf8");
 const hostedAlphaAcceptanceSource = await readFile(hostedAlphaAcceptancePath, "utf8");
+const hostedAlphaSmokeSource = await readFile(hostedAlphaSmokePath, "utf8");
 const objectStorageSource = await readFile(objectStorageUrl, "utf8");
 const serverEnv = await readFile(serverEnvUrl, "utf8");
 const publicAuthConfig = await readFile(publicAuthConfigUrl, "utf8");
@@ -279,6 +282,17 @@ assert(
   "Hosted alpha readiness must probe direct table access with a signed-in tester token.",
 );
 assert(
+  alphaReadinessRoute.includes("supabaseProbeTarget") &&
+    alphaReadinessRoute.includes("Supabase auth/store project alignment") &&
+    alphaReadinessScriptSource.includes("isSupabaseProbeTargetMatch") &&
+    alphaReadinessScriptSource.includes("process.env.SUPABASE_URL ?? process.env.NEXT_PUBLIC_SUPABASE_URL"),
+  "Hosted alpha readiness must bind the caller-side probe to the deployed backend Supabase target and reject Auth/store drift.",
+);
+assert(
+  hostedAlphaSmokeSource.includes('getRequiredPassedCheck(readinessReport, "authenticated Supabase direct access")'),
+  "Hosted alpha smoke must independently require the authenticated Supabase isolation check to pass.",
+);
+assert(
   alphaReadinessRoute.includes("photo upload ticket signing"),
   "Alpha readiness route must prove object storage can mint a photo upload ticket.",
 );
@@ -315,15 +329,65 @@ for (const status of [200, 302, 500]) {
   );
 }
 assert(
-  isAuthenticatedSupabaseAccessDenied(403),
-  "A valid authenticated Supabase user must prove direct-table denial with 403.",
+  isAuthenticatedSupabaseAccessDenied(403, { code: "42501" }),
+  "A valid authenticated Supabase user must prove direct-table denial with Postgres permission code 42501.",
+);
+assert(
+  !isAuthenticatedSupabaseAccessDenied(403, { code: "generic_forbidden" }),
+  "A generic 403 must not count as proven Supabase table isolation.",
 );
 for (const status of [200, 401, 404, 500]) {
   assert(
-    !isAuthenticatedSupabaseAccessDenied(status),
+    !isAuthenticatedSupabaseAccessDenied(status, { code: "42501" }),
     `Authenticated direct-table status ${status} must not count as proven isolation.`,
   );
 }
+assert(
+  isSupabaseProbeTargetMatch({
+    expectedOrigin: "https://project-ref.supabase.co",
+    expectedTable: "photo_book_projects",
+    probeUrl: "https://project-ref.supabase.co/",
+    probeTable: "photo_book_projects",
+  }),
+  "The authenticated isolation probe must accept the exact deployed Supabase origin and table.",
+);
+assert(
+  !isSupabaseProbeTargetMatch({
+    expectedOrigin: "https://project-ref.supabase.co",
+    expectedTable: "photo_book_projects",
+    probeUrl: "https://decoy.supabase.co",
+    probeTable: "photo_book_projects",
+  }),
+  "The authenticated isolation probe must reject a different Supabase origin.",
+);
+assert(
+  !isSupabaseProbeTargetMatch({
+    expectedOrigin: "not-a-url",
+    expectedTable: "photo_book_projects",
+    probeUrl: "also-not-a-url",
+    probeTable: "photo_book_projects",
+  }),
+  "Invalid Supabase URLs must never count as a matching probe target.",
+);
+const alignedSupabaseOrigins = getSupabaseOriginAlignment({
+  backendUrl: "https://project-ref.supabase.co",
+  publicUrl: "https://project-ref.supabase.co/",
+});
+assert(
+  alignedSupabaseOrigins.aligned &&
+    alignedSupabaseOrigins.backendOrigin === "https://project-ref.supabase.co",
+  "Equivalent public Auth and backend store URLs must be recognized as aligned.",
+);
+const driftedSupabaseOrigins = getSupabaseOriginAlignment({
+  backendUrl: "https://store-project.supabase.co",
+  publicUrl: "https://auth-project.supabase.co",
+});
+assert(
+  !driftedSupabaseOrigins.aligned &&
+    driftedSupabaseOrigins.backendOrigin === "https://store-project.supabase.co" &&
+    driftedSupabaseOrigins.publicOrigin === "https://auth-project.supabase.co",
+  "Supabase project drift must fail while keeping the backend store as the advertised probe target.",
+);
 assert(
   alphaReadinessRoute.includes("alpha readiness secret strength"),
   "Alpha readiness route must report readiness shared-secret strength.",
@@ -487,6 +551,26 @@ for (const modeName of ["hosted", "provider"]) {
     !output.includes("fetch failed"),
     `${modeName} readiness should fail before route fetches when ALPHA_READINESS_BASE_URL is missing. Output: ${output}`,
   );
+}
+
+const missingSupabaseProbeTmpDir = await mkdtemp(
+  join(tmpdir(), "photo-book-missing-supabase-probe-"),
+);
+try {
+  const reportPath = join(missingSupabaseProbeTmpDir, "alpha-readiness-report.json");
+  const result = runAlphaReadiness({
+    ALPHA_READINESS_BASE_URL: "http://127.0.0.1:1",
+    ALPHA_READINESS_MODE: "hosted",
+    ALPHA_READINESS_REPORT_PATH: reportPath,
+    ALPHA_READINESS_SECRET: STRONG_ALPHA_READINESS_SECRET,
+  });
+  const output = getChildOutput(result);
+
+  assert(result.status !== 0, `Hosted readiness without Supabase probe inputs must fail. Output: ${output}`);
+  const report = JSON.parse(await readFile(reportPath, "utf8"));
+  assertStatus(report.checks, "authenticated Supabase direct access", "fail");
+} finally {
+  await rm(missingSupabaseProbeTmpDir, { force: true, recursive: true });
 }
 
 assertHostedAlphaSmokeFails({}, "Hosted alpha smoke is missing");
