@@ -9,6 +9,13 @@ import { deriveStoryChapters } from "@/lib/book-editor";
 
 const OPENAI_RESPONSES_API_URL = "https://api.openai.com/v1/responses";
 const OPENAI_DRAFT_MODEL = process.env.OPENAI_DRAFT_MODEL ?? "gpt-4.1-mini";
+const LOCAL_AI_MODEL =
+  process.env.LOCAL_AI_MODEL ?? process.env.OLLAMA_MODEL ?? "llama3.1:latest";
+
+type AiDraftProvider = Exclude<
+  NonNullable<BookDraftEditorState["aiProvider"]>,
+  "manual"
+>;
 
 type DraftRefreshInput = {
   bookDraft?: Project["bookDraft"];
@@ -26,6 +33,52 @@ type DraftSuggestionPayload = {
   }>;
   summary: string;
 };
+
+function normalizeLocalAiBaseUrl(value: string | null | undefined) {
+  const rawValue = value?.trim();
+  if (!rawValue) {
+    return "http://127.0.0.1:11434";
+  }
+
+  const withProtocol = /^https?:\/\//i.test(rawValue)
+    ? rawValue
+    : `http://${rawValue}`;
+
+  return withProtocol.replace(/\/$/, "");
+}
+
+function getLocalAiBaseUrl() {
+  return normalizeLocalAiBaseUrl(
+    process.env.LOCAL_AI_BASE_URL ??
+      process.env.OLLAMA_BASE_URL ??
+      process.env.OLLAMA_HOST,
+  );
+}
+
+function getConfiguredAiProvider(): AiDraftProvider {
+  const configuredProvider = (
+    process.env.AI_DRAFT_PROVIDER ??
+    (process.env.OPENAI_API_KEY?.trim() ? "openai" : "ollama")
+  )
+    .trim()
+    .toLowerCase();
+
+  if (configuredProvider === "openai") {
+    return "openai";
+  }
+
+  if (configuredProvider === "local" || configuredProvider === "ollama") {
+    return "ollama";
+  }
+
+  if (configuredProvider === "auto") {
+    return process.env.OPENAI_API_KEY?.trim() ? "openai" : "ollama";
+  }
+
+  throw new Error(
+    `AI draft refresh provider "${configuredProvider}" is not supported. Use "ollama", "local", "openai", or "auto".`,
+  );
+}
 
 const BOOK_LAYOUT_SYSTEM_PROMPT = `You are BookLayoutAI, a premium photo-book art director for mobile memory books.
 
@@ -165,6 +218,96 @@ function extractResponseText(responseBody: unknown) {
   return "";
 }
 
+function extractOllamaResponseText(responseBody: unknown) {
+  if (
+    responseBody &&
+    typeof responseBody === "object" &&
+    "message" in responseBody &&
+    responseBody.message &&
+    typeof responseBody.message === "object" &&
+    "content" in responseBody.message &&
+    typeof responseBody.message.content === "string"
+  ) {
+    return responseBody.message.content.trim();
+  }
+
+  if (
+    responseBody &&
+    typeof responseBody === "object" &&
+    "response" in responseBody &&
+    typeof responseBody.response === "string"
+  ) {
+    return responseBody.response.trim();
+  }
+
+  return "";
+}
+
+function parseDraftSuggestionPayload(
+  outputText: string,
+  providerLabel: string,
+): DraftSuggestionPayload {
+  const trimmedText = outputText.trim();
+  const candidateJson =
+    trimmedText.startsWith("{") && trimmedText.endsWith("}")
+      ? trimmedText
+      : trimmedText.slice(trimmedText.indexOf("{"), trimmedText.lastIndexOf("}") + 1);
+
+  let parsedPayload: unknown;
+  try {
+    parsedPayload = JSON.parse(candidateJson);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Invalid JSON.";
+    throw new Error(`${providerLabel} draft refresh returned invalid JSON: ${message}`);
+  }
+
+  if (!parsedPayload || typeof parsedPayload !== "object") {
+    throw new Error(`${providerLabel} draft refresh returned an invalid payload.`);
+  }
+
+  const payload = parsedPayload as {
+    pageSuggestions?: unknown;
+    summary?: unknown;
+  };
+
+  const pageSuggestions = Array.isArray(payload.pageSuggestions)
+    ? payload.pageSuggestions
+        .map((suggestion) => {
+          if (!suggestion || typeof suggestion !== "object") {
+            return null;
+          }
+
+          const candidate = suggestion as {
+            caption?: unknown;
+            pageId?: unknown;
+            title?: unknown;
+          };
+
+          if (
+            typeof candidate.caption !== "string" ||
+            typeof candidate.pageId !== "string" ||
+            typeof candidate.title !== "string"
+          ) {
+            return null;
+          }
+
+          return {
+            caption: candidate.caption,
+            pageId: candidate.pageId,
+            title: candidate.title,
+          };
+        })
+        .filter((suggestion): suggestion is DraftSuggestionPayload["pageSuggestions"][number] =>
+          Boolean(suggestion),
+        )
+    : [];
+
+  return {
+    pageSuggestions,
+    summary: typeof payload.summary === "string" ? payload.summary : "",
+  };
+}
+
 async function requestOpenAiDraftSuggestions(
   project: Project,
   editorState: BookDraftEditorState,
@@ -248,13 +391,83 @@ async function requestOpenAiDraftSuggestions(
     throw new Error("OpenAI draft refresh returned an empty response.");
   }
 
-  return JSON.parse(outputText) as DraftSuggestionPayload;
+  return parseDraftSuggestionPayload(outputText, "OpenAI");
+}
+
+async function requestOllamaDraftSuggestions(
+  project: Project,
+  editorState: BookDraftEditorState,
+) {
+  const response = await fetch(`${getLocalAiBaseUrl()}/api/chat`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      model: LOCAL_AI_MODEL,
+      stream: false,
+      format: "json",
+      options: {
+        num_predict: 1800,
+        temperature: 0.35,
+      },
+      messages: [
+        {
+          role: "system",
+          content: `${BOOK_LAYOUT_SYSTEM_PROMPT}
+
+Return only valid JSON with this exact shape:
+{"summary":"string","pageSuggestions":[{"pageId":"string","title":"string","caption":"string"}]}`,
+        },
+        {
+          role: "user",
+          content: JSON.stringify(buildDraftSuggestionRequest(project, editorState)),
+        },
+      ],
+    }),
+  });
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    throw new Error(
+      `Local Ollama draft refresh failed: ${response.status} ${errorText}`,
+    );
+  }
+
+  const responseBody = (await response.json()) as unknown;
+  const outputText = extractOllamaResponseText(responseBody);
+
+  if (!outputText) {
+    throw new Error("Local Ollama draft refresh returned an empty response.");
+  }
+
+  return parseDraftSuggestionPayload(outputText, "Local Ollama");
+}
+
+async function requestDraftSuggestions(
+  project: Project,
+  editorState: BookDraftEditorState,
+) {
+  const provider = getConfiguredAiProvider();
+
+  if (provider === "openai") {
+    return {
+      provider,
+      suggestions: await requestOpenAiDraftSuggestions(project, editorState),
+    };
+  }
+
+  return {
+    provider,
+    suggestions: await requestOllamaDraftSuggestions(project, editorState),
+  };
 }
 
 function applyDraftSuggestions(
   project: Project,
   suggestions: DraftSuggestionPayload,
   editorState: BookDraftEditorState,
+  provider: AiDraftProvider,
 ) {
   const pageSuggestions = new Map(
     suggestions.pageSuggestions.map((suggestion) => [suggestion.pageId, suggestion]),
@@ -287,7 +500,7 @@ function applyDraftSuggestions(
     },
     draftEditorState: {
       ...editorState,
-      aiProvider: "openai",
+      aiProvider: provider,
       lastAiRefreshAt: new Date().toISOString(),
     },
   });
@@ -300,6 +513,9 @@ export async function refreshProjectDraftWithAi(
   const savedProject = saveWorkingDraft(normalizeProjectDraftState(project), payload);
   const rebuiltProject = regenerateBookDraft(savedProject);
   const editorState = rebuiltProject.draftEditorState ?? normalizeProjectDraftState(rebuiltProject).draftEditorState!;
-  const suggestions = await requestOpenAiDraftSuggestions(rebuiltProject, editorState);
-  return applyDraftSuggestions(rebuiltProject, suggestions, editorState);
+  const { provider, suggestions } = await requestDraftSuggestions(
+    rebuiltProject,
+    editorState,
+  );
+  return applyDraftSuggestions(rebuiltProject, suggestions, editorState, provider);
 }

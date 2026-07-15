@@ -11,3 +11,7 @@ npm-debug.log*
 .eas-inspect
 .vercel
 .codex-logs
+tmp/
+.playwright-mcp/
+photo-book-*.png
+photo-book-*-snapshot.md

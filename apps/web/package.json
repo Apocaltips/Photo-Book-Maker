@@ -2,21 +2,39 @@
   "name": "@photo-book-maker/web",
   "version": "0.1.0",
   "private": true,
+  "type": "module",
   "scripts": {
     "dev": "next dev --hostname 0.0.0.0",
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "typecheck": "tsc -p tsconfig.json --noEmit"
+    "test:readiness:contract": "node scripts/readiness-contract-smoke.mjs",
+    "test:alpha:fixtures": "node scripts/local-alpha-fixtures-smoke.mjs",
+    "test:alpha:local": "node scripts/local-alpha-acceptance.mjs",
+    "test:alpha:hosted": "node scripts/hosted-alpha-acceptance.mjs",
+    "test:alpha:readiness": "node scripts/alpha-readiness.mjs",
+    "test:hosted:alpha": "node scripts/hosted-alpha-smoke.mjs",
+    "test:provider:readiness": "node scripts/provider-readiness.mjs",
+    "test:ai:health": "node scripts/local-ai-health.mjs",
+    "test:ai:alpha-benchmark": "node scripts/local-ai-alpha-benchmark.mjs",
+    "test:ai:benchmark": "node scripts/local-ai-benchmark.mjs",
+    "test:ai:local": "node scripts/ai-generation-smoke.mjs",
+    "test:worker:e2e": "node scripts/local-ai-worker-e2e-smoke.mjs",
+    "test:worker:preflight": "node scripts/local-ai-worker-preflight-smoke.mjs",
+    "test:proof:quality": "node scripts/proof-quality-smoke.mjs",
+    "test:e2e": "node scripts/e2e-web-smoke.mjs",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "worker:ai:local": "node scripts/local-ai-worker.mjs"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1019.0",
     "@aws-sdk/s3-request-presigner": "^3.1019.0",
     "@photo-book-maker/core": "*",
     "@supabase/supabase-js": "^2.100.1",
-    "next": "16.2.1",
+    "next": "^16.2.7",
     "react": "19.2.4",
-    "react-dom": "19.2.4"
+    "react-dom": "19.2.4",
+    "sharp": "^0.34.5"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",

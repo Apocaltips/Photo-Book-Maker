@@ -1,15 +1,17 @@
 import { createProjectRecord } from "@photo-book-maker/core";
 import { NextResponse } from "next/server";
+import { randomUUID } from "node:crypto";
 import {
   filterProjectsForUser,
   getAuthenticatedUser,
   unauthorizedResponse,
 } from "@/lib/server/auth";
-import { readProjects, writeProjects } from "@/lib/server/project-store";
+import { insertProject, readProjects } from "@/lib/server/project-store";
 import {
   hydrateProjectForClient,
   hydrateProjectsForClient,
 } from "@/lib/server/project-response";
+import { getRequestOrigin } from "@/lib/server/request-origin";
 
 export async function GET(request: Request) {
   try {
@@ -17,10 +19,12 @@ export async function GET(request: Request) {
     if (!user) {
       return unauthorizedResponse();
     }
+    const origin = getRequestOrigin(request);
 
     return NextResponse.json({
       projects: await hydrateProjectsForClient(
-        filterProjectsForUser(await readProjects(), user.email),
+        filterProjectsForUser(await readProjects(), user),
+        origin,
       ),
     });
   } catch (error) {
@@ -42,15 +46,16 @@ export async function POST(request: Request) {
     const project = createProjectRecord({
       ...body,
       ownerEmail: user.email,
+      ownerId: user.id,
       ownerName: user.name,
+      projectId: `${body.type === "yearbook" ? "yearbook" : "trip"}-${randomUUID()}`,
     });
-    const projects = await readProjects();
-    await writeProjects([project, ...projects]);
+    await insertProject(project);
 
     return NextResponse.json(
       {
         message: "Project created.",
-        project: await hydrateProjectForClient(project),
+        project: await hydrateProjectForClient(project, getRequestOrigin(request)),
       },
       { status: 201 },
     );

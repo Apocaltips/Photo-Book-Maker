@@ -2,6 +2,8 @@ import { findProjectById, type Project } from "@photo-book-maker/core";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import { NextResponse } from "next/server";
 import { readProjects } from "@/lib/server/project-store";
+import { DEV_AUTH_EMAIL, DEV_AUTH_ID, DEV_AUTH_NAME } from "@/lib/dev-auth";
+import { getEnvValue } from "@/lib/server/env";
 
 export type AuthenticatedUser = {
   email: string;
@@ -18,8 +20,8 @@ function getSupabaseAuthClient() {
     return cachedSupabaseAuthClient;
   }
 
-  const url = process.env.SUPABASE_URL;
-  const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  const url = getEnvValue("SUPABASE_URL");
+  const serviceRoleKey = getEnvValue("SUPABASE_SERVICE_ROLE_KEY");
 
   if (!url || !serviceRoleKey) {
     cachedSupabaseAuthClient = null;
@@ -46,6 +48,27 @@ function getBearerToken(request: Request) {
   return header.slice("Bearer ".length).trim() || null;
 }
 
+function isDevAuthEnabled() {
+  return !getSupabaseAuthClient() && process.env.NODE_ENV !== "production";
+}
+
+function getDevAuthenticatedUser(request: Request): AuthenticatedUser {
+  const email =
+    request.headers.get("x-photo-book-dev-email")?.trim().toLowerCase() ||
+    DEV_AUTH_EMAIL;
+  const name = request.headers.get("x-photo-book-dev-name")?.trim() || DEV_AUTH_NAME;
+  const id =
+    request.headers.get("x-photo-book-dev-id")?.trim() ||
+    email.replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "") ||
+    DEV_AUTH_ID;
+
+  return {
+    email,
+    id,
+    name,
+  };
+}
+
 function getDisplayName(email: string, metadata: Record<string, unknown> | null | undefined) {
   const fullName =
     typeof metadata?.full_name === "string"
@@ -65,6 +88,10 @@ export async function getAuthenticatedUser(request: Request): Promise<Authentica
   const token = getBearerToken(request);
   const client = getSupabaseAuthClient();
 
+  if (!client && isDevAuthEnabled()) {
+    return getDevAuthenticatedUser(request);
+  }
+
   if (!token || !client) {
     return null;
   }
@@ -81,15 +108,13 @@ export async function getAuthenticatedUser(request: Request): Promise<Authentica
   };
 }
 
-export function getProjectAccess(project: Project, email: string) {
-  const normalizedEmail = email.toLowerCase();
-  const isMember = project.members.some(
-    (member) => member.email.toLowerCase() === normalizedEmail,
-  );
-  const isOwner = project.members.some(
-    (member) =>
-      member.id === project.ownerId && member.email.toLowerCase() === normalizedEmail,
-  );
+export function getProjectAccess(
+  project: Project,
+  user: Pick<AuthenticatedUser, "id">,
+) {
+  const member = project.members.find((entry) => entry.id === user.id);
+  const isMember = Boolean(member);
+  const isOwner = member?.id === project.ownerId;
 
   return {
     canView: isMember,
@@ -98,8 +123,11 @@ export function getProjectAccess(project: Project, email: string) {
   };
 }
 
-export function filterProjectsForUser(projects: Project[], email: string) {
-  return projects.filter((project) => getProjectAccess(project, email).canView);
+export function filterProjectsForUser(
+  projects: Project[],
+  user: Pick<AuthenticatedUser, "id">,
+) {
+  return projects.filter((project) => getProjectAccess(project, user).canView);
 }
 
 export function unauthorizedResponse() {
@@ -133,7 +161,7 @@ export async function authorizeProjectRequest(
     } as const;
   }
 
-  const access = getProjectAccess(project, user.email);
+  const access = getProjectAccess(project, user);
   const isAllowed =
     accessLevel === "manage"
       ? access.canManage

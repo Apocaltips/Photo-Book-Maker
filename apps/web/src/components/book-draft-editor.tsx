@@ -1,8 +1,12 @@
 "use client";
 
 import {
+  BOOK_TEMPLATE_PACKS,
+  SPREAD_TEMPLATES,
+  applyBookTemplatePack,
   buildDefaultDraftEditorState,
   ensureDraftEditorState,
+  getBookTemplatePack,
   getBookDraftFormatLabel,
   normalizeProjectDraftState,
   type BookDraftEditorState,
@@ -286,6 +290,10 @@ export function BookDraftEditor({
     editorState.project.bookThemes.find(
       (theme) => theme.id === editorState.project.selectedThemeId,
     ) ?? editorState.project.bookThemes[0];
+  const selectedTemplatePack =
+    getBookTemplatePack(editorState.templatePackId) ??
+    BOOK_TEMPLATE_PACKS.find((pack) => pack.category === "travel") ??
+    BOOK_TEMPLATE_PACKS[0];
   const publishedDrafts = editorState.project.publishedDrafts ?? [];
   const selectedPageIndex = Math.max(
     0,
@@ -337,6 +345,28 @@ export function BookDraftEditor({
       ...current,
       project: updater(current.project),
     }));
+  }
+
+  function handleTemplatePackSelect(templatePackId: string) {
+    updateEditorState((current) => {
+      const templatedProject = applyBookTemplatePack(
+        {
+          ...current.project,
+          draftEditorState: {
+            ...current,
+          },
+        },
+        templatePackId,
+      );
+      const nextDraftEditorState =
+        templatedProject.draftEditorState ?? buildDefaultDraftEditorState(templatedProject);
+
+      return {
+        ...nextDraftEditorState,
+        project: templatedProject,
+      };
+    });
+    setPublishMessage("Template pack applied. Review the active spread before publishing.");
   }
 
   function handlePhotoMove(photoId: string, targetPageId: string) {
@@ -526,7 +556,7 @@ export function BookDraftEditor({
                 className="rounded-full px-3.5 py-2 text-xs font-semibold uppercase tracking-[0.14em] transition-colors hover:bg-white"
                 style={themePresentation.secondaryButtonStyle}
               >
-                Back to proof board
+                Back to book
               </Link>
               <Link
                 href={previewHref?.() ?? `/projects/${project.id}/preview`}
@@ -534,6 +564,13 @@ export function BookDraftEditor({
                 style={themePresentation.primaryButtonStyle}
               >
                 Open clean preview
+              </Link>
+              <Link
+                href={`/projects/${project.id}/proof`}
+                className="rounded-full px-3.5 py-2 text-xs font-semibold uppercase tracking-[0.14em] transition-colors"
+                style={themePresentation.secondaryButtonStyle}
+              >
+                Print proof
               </Link>
               <span
                 className="rounded-full px-3.5 py-2 text-xs font-semibold uppercase tracking-[0.14em]"
@@ -773,6 +810,27 @@ export function BookDraftEditor({
         <section className="rounded-[1.6rem] border border-[#00000012] bg-white/92 p-4">
           <div className="eyebrow">Book system</div>
           <div className="mt-3 space-y-3">
+            <SelectField
+              label="Template pack"
+              helper="Choose the full book system: trim, typography, story mode, and spread library."
+              options={BOOK_TEMPLATE_PACKS.map((pack) => ({
+                helper: `${pack.category} / ${pack.description}`,
+                id: pack.id,
+                label: pack.name,
+              }))}
+              selectedId={selectedTemplatePack?.id ?? editorState.templatePackId ?? ""}
+              onSelect={handleTemplatePackSelect}
+            />
+            <div className="rounded-[1.1rem] border border-[#0000000d] bg-[#fff9f4] px-3.5 py-3 text-xs leading-5 text-[#6a5f58]">
+              <div className="font-semibold uppercase tracking-[0.16em] text-[#7a6e65]">
+                Catalog scope
+              </div>
+              <div className="mt-1">
+                {BOOK_TEMPLATE_PACKS.length} book packs and {SPREAD_TEMPLATES.length}{" "}
+                spread templates ship in v1. The selected pack saves with the draft so
+                iOS and web reopen the same design.
+              </div>
+            </div>
             <SelectField
               label="Book size"
               helper="Choose the print trim before publishing a draft."

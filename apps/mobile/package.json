@@ -4,15 +4,19 @@
   "main": "index.js",
   "scripts": {
     "start": "expo start",
+    "android:lan": "expo start --lan",
+    "android:tunnel": "expo start --tunnel",
     "android": "expo run:android",
     "ios": "expo run:ios",
     "web": "expo start --web",
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
+    "@photo-book-maker/core": "*",
     "@supabase/supabase-js": "^2.101.0",
-    "expo": "~54.0.33",
-    "expo-image-picker": "~17.0.10",
+    "expo": "~54.0.35",
+    "expo-file-system": "~19.0.23",
+    "expo-image-picker": "~17.0.11",
     "expo-print": "~15.0.8",
     "expo-sharing": "~14.0.8",
     "expo-status-bar": "~3.0.9",

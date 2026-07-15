@@ -82,22 +82,22 @@ export function ProjectCard({ project }: { project: Project }) {
             </>
           ) : (
             <p className="mt-3 text-sm leading-7 text-[#5d524b]">
-              No curated spreads yet. Upload photos and notes to start the first proof.
+              No book spreads yet. Add photos, then make the first AI draft.
             </p>
           )}
         </div>
 
         <div className="grid grid-cols-2 gap-3 text-sm">
-          <Stat label="Approved photos" value={summary.approvedPhotos} />
-          <Stat label="Must include" value={summary.mustIncludePhotos} />
-          <Stat label="Open tasks" value={summary.openTasks} />
-          <Stat label="Pages" value={summary.pageCount} />
+          <Stat label="Photos ready" value={summary.approvedPhotos} />
+          <Stat label="Favorites" value={summary.mustIncludePhotos} />
+          <Stat label="Fix before print" value={summary.openTasks} />
+          <Stat label="Spreads" value={summary.pageCount} />
         </div>
 
         <div className="flex items-center justify-between pt-2 text-sm font-medium text-[#1e1713]">
           <span>{summary.acceptedInvites} collaborators joined</span>
           <span className="text-[#bf6a3d] transition-transform duration-300 group-hover:translate-x-1">
-            Open project
+            Continue book
           </span>
         </div>
       </div>

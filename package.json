@@ -11,6 +11,23 @@
     "dev:mobile": "npm run start -w @photo-book-maker/mobile",
     "build": "npm run build -w @photo-book-maker/web",
     "lint": "npm run lint -w @photo-book-maker/web",
-    "typecheck": "npm run typecheck -w @photo-book-maker/core && npm run typecheck -w @photo-book-maker/web && npm run typecheck -w @photo-book-maker/mobile"
+    "typecheck": "npm run typecheck -w @photo-book-maker/core && npm run typecheck -w @photo-book-maker/web && npm run typecheck -w @photo-book-maker/mobile",
+    "test": "npm run test -w @photo-book-maker/core",
+    "test:readiness:contract": "npm run test:readiness:contract -w @photo-book-maker/web",
+    "test:alpha:fixtures": "npm run test:alpha:fixtures -w @photo-book-maker/web",
+    "test:alpha:local": "npm run test:alpha:local -w @photo-book-maker/web",
+    "test:alpha:hosted": "npm run test:alpha:hosted -w @photo-book-maker/web",
+    "test:alpha:readiness": "npm run test:alpha:readiness -w @photo-book-maker/web",
+    "test:hosted:alpha": "npm run test:hosted:alpha -w @photo-book-maker/web",
+    "test:provider:readiness": "npm run test:provider:readiness -w @photo-book-maker/web",
+    "test:ai:health": "npm run test:ai:health -w @photo-book-maker/web",
+    "test:ai:alpha-benchmark": "npm run test:ai:alpha-benchmark -w @photo-book-maker/web",
+    "test:ai:benchmark": "npm run test:ai:benchmark -w @photo-book-maker/web",
+    "test:ai:local": "npm run test:ai:local -w @photo-book-maker/web",
+    "test:worker:e2e": "npm run test:worker:e2e -w @photo-book-maker/web",
+    "test:worker:preflight": "npm run test:worker:preflight -w @photo-book-maker/web",
+    "test:proof:quality": "npm run test:proof:quality -w @photo-book-maker/web",
+    "test:e2e:web": "npm run test:e2e -w @photo-book-maker/web",
+    "worker:ai:local": "npm run worker:ai:local -w @photo-book-maker/web"
   }
 }

@@ -38,7 +38,7 @@ export default ({ config }: ConfigContext): ExpoConfig => {
     },
     android: {
       package: "com.vince.photobookmaker",
-      versionCode: 1,
+      versionCode: 21,
       blockedPermissions: [
         "android.permission.CAMERA",
         "android.permission.RECORD_AUDIO",

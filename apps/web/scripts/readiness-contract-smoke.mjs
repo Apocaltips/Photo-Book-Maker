@@ -1,0 +1,701 @@
+/* global URL, console, process */
+import { spawnSync } from "node:child_process";
+import { mkdtemp, readFile, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { fileURLToPath } from "node:url";
+import {
+  ALLOWED_PRINT_PROVIDERS,
+  MIN_HOSTED_SHARED_SECRET_LENGTH,
+  collectPhaseTwoProviderChecks,
+  getReadinessContractEnvNames,
+  getSupabaseOriginAlignment,
+  isAuthenticatedSupabaseAccessDenied,
+  isSupabaseProbeTargetMatch,
+  isUnsignedObjectReadDenied,
+  makeSharedSecretStrengthCheck,
+  shouldCheckPhaseTwoProviders,
+  shouldRequirePrivateWorker,
+  shouldRequireProviderInfrastructure,
+} from "../src/lib/alpha-readiness-contract.js";
+
+const envExampleUrl = new URL("../../../.env.example", import.meta.url);
+const supabaseSchemaUrl = new URL("../../../docs/supabase-photo-book-schema.sql", import.meta.url);
+const alphaReadinessRouteUrl = new URL(
+  "../src/app/api/alpha/readiness/route.ts",
+  import.meta.url,
+);
+const inviteAcceptanceRouteUrl = new URL(
+  "../src/app/api/projects/[projectId]/invites/[inviteId]/accept/route.ts",
+  import.meta.url,
+);
+const aiWorkerHealthRouteUrl = new URL(
+  "../src/app/api/ai/worker/health/route.ts",
+  import.meta.url,
+);
+const localAiWorkerScriptUrl = new URL("./local-ai-worker.mjs", import.meta.url);
+const objectStorageUrl = new URL("../src/lib/server/object-storage.ts", import.meta.url);
+const serverEnvUrl = new URL("../src/lib/server/env.ts", import.meta.url);
+const publicAuthConfigUrl = new URL(
+  "../src/lib/server/public-auth-config.ts",
+  import.meta.url,
+);
+const alphaReadinessScriptPath = fileURLToPath(new URL("./alpha-readiness.mjs", import.meta.url));
+const hostedAlphaAcceptancePath = fileURLToPath(
+  new URL("./hosted-alpha-acceptance.mjs", import.meta.url),
+);
+const hostedAlphaSmokePath = fileURLToPath(new URL("./hosted-alpha-smoke.mjs", import.meta.url));
+const HOSTED_ALPHA_TOKEN_SENTINEL = "proof-token-that-must-not-leak";
+const HOSTED_ALPHA_WORKER_SECRET_SENTINEL = "worker-secret-that-must-not-leak-2026";
+const STRONG_ALPHA_READINESS_SECRET = "hosted-alpha-readiness-secret-2026-random";
+
+function assert(condition, message) {
+  if (!condition) {
+    throw new Error(message);
+  }
+}
+
+function getEnvExampleKeys(source) {
+  const keys = new Set();
+
+  for (const line of source.split(/\r?\n/)) {
+    const trimmed = line.trim();
+    if (!trimmed || trimmed.startsWith("#") || !trimmed.includes("=")) {
+      continue;
+    }
+
+    keys.add(trimmed.slice(0, trimmed.indexOf("=")));
+  }
+
+  return keys;
+}
+
+function getCheck(checks, name) {
+  const check = checks.find((entry) => entry.name === name);
+  assert(check, `Missing readiness check: ${name}`);
+  return check;
+}
+
+function assertStatus(checks, name, status) {
+  const check = getCheck(checks, name);
+  assert(
+    check.status === status,
+    `${name} expected status ${status}, received ${check.status}: ${check.detail}`,
+  );
+}
+
+function normalizeSql(source) {
+  return source.toLowerCase().replace(/\s+/g, " ").trim();
+}
+
+function assertSqlContains(sql, expected) {
+  const normalizedExpected = normalizeSql(expected);
+  assert(
+    sql.includes(normalizedExpected),
+    `Supabase schema must include: ${normalizedExpected}`,
+  );
+}
+
+function makeHostedAlphaSmokeEnv(overrides = {}) {
+  const env = {
+    HOME: process.env.HOME,
+    PATH: process.env.PATH,
+    Path: process.env.Path,
+    SystemRoot: process.env.SystemRoot,
+    SYSTEMROOT: process.env.SYSTEMROOT,
+    TEMP: process.env.TEMP,
+    TMP: process.env.TMP,
+    USERPROFILE: process.env.USERPROFILE,
+    ...overrides,
+  };
+
+  for (const [key, value] of Object.entries(env)) {
+    if (value === undefined) {
+      delete env[key];
+    }
+  }
+
+  return env;
+}
+
+function runHostedAlphaSmoke(overrides = {}) {
+  return spawnSync(process.execPath, [hostedAlphaSmokePath], {
+    encoding: "utf8",
+    env: makeHostedAlphaSmokeEnv(overrides),
+  });
+}
+
+function runHostedAlphaAcceptance(overrides = {}) {
+  return spawnSync(process.execPath, [hostedAlphaAcceptancePath], {
+    encoding: "utf8",
+    env: makeHostedAlphaSmokeEnv(overrides),
+  });
+}
+
+function runAlphaReadiness(overrides = {}) {
+  return spawnSync(process.execPath, [alphaReadinessScriptPath], {
+    encoding: "utf8",
+    env: makeHostedAlphaSmokeEnv(overrides),
+  });
+}
+
+function getChildOutput(result) {
+  return `${result.stdout ?? ""}\n${result.stderr ?? ""}`;
+}
+
+function assertAlphaReadinessFails(overrides, expectedText) {
+  const result = runAlphaReadiness(overrides);
+  const output = getChildOutput(result);
+
+  assert(
+    result.status !== 0,
+    `Alpha readiness should fail. Output: ${output}`,
+  );
+  assert(
+    output.includes(expectedText),
+    `Alpha readiness failure must mention "${expectedText}". Output: ${output}`,
+  );
+
+  return output;
+}
+
+function assertHostedAlphaSmokeFails(overrides, expectedText) {
+  const result = runHostedAlphaSmoke(overrides);
+  const output = getChildOutput(result);
+
+  assert(
+    result.status !== 0,
+    `Hosted alpha smoke should fail. Output: ${output}`,
+  );
+  assert(
+    output.includes(expectedText),
+    `Hosted alpha smoke failure must mention "${expectedText}". Output: ${output}`,
+  );
+
+  return output;
+}
+
+function assertHostedAlphaAcceptanceFails(overrides, expectedText) {
+  const result = runHostedAlphaAcceptance(overrides);
+  const output = getChildOutput(result);
+
+  assert(
+    result.status !== 0,
+    `Hosted alpha acceptance should fail. Output: ${output}`,
+  );
+  assert(
+    output.includes(expectedText),
+    `Hosted alpha acceptance failure must mention "${expectedText}". Output: ${output}`,
+  );
+
+  return output;
+}
+
+const envExample = await readFile(envExampleUrl, "utf8");
+const supabaseSchema = normalizeSql(await readFile(supabaseSchemaUrl, "utf8"));
+const alphaReadinessRoute = await readFile(alphaReadinessRouteUrl, "utf8");
+const alphaReadinessScriptSource = await readFile(alphaReadinessScriptPath, "utf8");
+const inviteAcceptanceRoute = await readFile(inviteAcceptanceRouteUrl, "utf8");
+const aiWorkerHealthRoute = await readFile(aiWorkerHealthRouteUrl, "utf8");
+const localAiWorkerScript = await readFile(localAiWorkerScriptUrl, "utf8");
+const hostedAlphaAcceptanceSource = await readFile(hostedAlphaAcceptancePath, "utf8");
+const hostedAlphaSmokeSource = await readFile(hostedAlphaSmokePath, "utf8");
+const objectStorageSource = await readFile(objectStorageUrl, "utf8");
+const serverEnv = await readFile(serverEnvUrl, "utf8");
+const publicAuthConfig = await readFile(publicAuthConfigUrl, "utf8");
+const envKeys = getEnvExampleKeys(envExample);
+const missingEnvExampleKeys = getReadinessContractEnvNames().filter((key) => !envKeys.has(key));
+
+assert(
+  !missingEnvExampleKeys.length,
+  `.env.example is missing readiness contract variable(s): ${missingEnvExampleKeys.join(", ")}`,
+);
+for (const key of [
+  "HOSTED_ALPHA_ACCEPTANCE_REPORT_PATH",
+  "HOSTED_ALPHA_ACCEPTANCE_HOSTED_REPORT_PATH",
+  "HOSTED_ALPHA_ACCEPTANCE_DRY_RUN",
+  "HOSTED_ALPHA_ACCEPTANCE_SKIP_CONTRACT",
+  "HOSTED_ALPHA_ACCEPTANCE_SKIP_WORKER_PREFLIGHT",
+  "LOCAL_AI_WORKER_VERIFY_HOSTED_AUTH",
+]) {
+  assert(envKeys.has(key), `.env.example is missing hosted alpha acceptance variable: ${key}`);
+}
+
+assert(
+  ALLOWED_PRINT_PROVIDERS.includes("manual_pdf") && ALLOWED_PRINT_PROVIDERS.includes("peecho"),
+  "Allowed print providers must include Phase 1 manual_pdf and a direct print candidate.",
+);
+assertSqlContains(
+  supabaseSchema,
+  "alter table public.photo_book_projects enable row level security",
+);
+assertSqlContains(
+  supabaseSchema,
+  "alter table public.photo_book_projects force row level security",
+);
+assertSqlContains(supabaseSchema, "revoke all on table public.photo_book_projects from anon");
+assertSqlContains(
+  supabaseSchema,
+  "revoke all on table public.photo_book_projects from authenticated",
+);
+assertSqlContains(
+  supabaseSchema,
+  "grant select, insert, update, delete on table public.photo_book_projects to service_role",
+);
+assertSqlContains(
+  supabaseSchema,
+  "revoke execute on function public.touch_photo_book_project_updated_at() from anon",
+);
+assertSqlContains(
+  supabaseSchema,
+  "revoke execute on function public.touch_photo_book_project_updated_at() from authenticated",
+);
+assert(
+  alphaReadinessRoute.includes("direct Supabase project table access"),
+  "Alpha readiness route must include the direct Supabase project table access probe.",
+);
+assert(
+  aiWorkerHealthRoute.includes("authorizeAiWorkerRequest") &&
+    aiWorkerHealthRoute.includes("getAiWorkerQueueConfig"),
+  "AI worker health route must authenticate the worker secret and report queue readiness.",
+);
+assert(
+  localAiWorkerScript.includes('apiJson(hostedBaseUrl, "/api/ai/worker/health")'),
+  "Local AI worker preflight must support an authenticated hosted worker handshake.",
+);
+assert(
+  hostedAlphaAcceptanceSource.includes('LOCAL_AI_WORKER_VERIFY_HOSTED_AUTH: "1"'),
+  "Hosted alpha acceptance must require the authenticated hosted worker handshake.",
+);
+assert(
+  inviteAcceptanceRoute.includes("expectedRevision: currentProject.revision") &&
+    inviteAcceptanceRoute.includes("isRevisionConflictError"),
+  "Invite acceptance must use compare-and-set and resolve concurrent idempotent accepts safely.",
+);
+assert(
+  alphaReadinessRoute.includes("isDirectAccessDenied"),
+  "Alpha readiness route must fail closed unless the anon direct-access probe is denied.",
+);
+assert(
+  alphaReadinessScriptSource.includes("isAuthenticatedSupabaseAccessDenied") &&
+    alphaReadinessScriptSource.includes("authenticated Supabase direct access"),
+  "Hosted alpha readiness must probe direct table access with a signed-in tester token.",
+);
+assert(
+  alphaReadinessRoute.includes("supabaseProbeTarget") &&
+    alphaReadinessRoute.includes("Supabase auth/store project alignment") &&
+    alphaReadinessScriptSource.includes("isSupabaseProbeTargetMatch") &&
+    alphaReadinessScriptSource.includes("process.env.SUPABASE_URL ?? process.env.NEXT_PUBLIC_SUPABASE_URL"),
+  "Hosted alpha readiness must bind the caller-side probe to the deployed backend Supabase target and reject Auth/store drift.",
+);
+assert(
+  hostedAlphaSmokeSource.includes('getRequiredPassedCheck(readinessReport, "authenticated Supabase direct access")'),
+  "Hosted alpha smoke must independently require the authenticated Supabase isolation check to pass.",
+);
+assert(
+  alphaReadinessRoute.includes("photo upload ticket signing"),
+  "Alpha readiness route must prove object storage can mint a photo upload ticket.",
+);
+assert(
+  alphaReadinessRoute.includes("object storage round trip"),
+  "Alpha readiness route must prove an object-storage write/read/delete round trip.",
+);
+assert(
+  alphaReadinessRoute.includes("object storage browser CORS"),
+  "Alpha readiness route must prove browser CORS for the deployed app origin.",
+);
+assert(
+  objectStorageSource.includes("verifyObjectStorageBrowserCors"),
+  "Object storage must expose a browser CORS preflight verifier.",
+);
+assert(
+  objectStorageSource.includes("isUnsignedObjectReadDenied(unsignedReadResponse.status)"),
+  "Object-storage round trip must use the shared unsigned-read denial predicate.",
+);
+assert(
+  typeof isUnsignedObjectReadDenied === "function",
+  "Readiness contract must expose the unsigned object-read denial predicate.",
+);
+for (const status of [400, 401, 403, 404]) {
+  assert(
+    isUnsignedObjectReadDenied(status),
+    `Unsigned object-read status ${status} must count as an explicit denial.`,
+  );
+}
+for (const status of [200, 302, 500]) {
+  assert(
+    !isUnsignedObjectReadDenied(status),
+    `Unsigned object-read status ${status} must not count as an explicit denial.`,
+  );
+}
+assert(
+  isAuthenticatedSupabaseAccessDenied(403, { code: "42501" }),
+  "A valid authenticated Supabase user must prove direct-table denial with Postgres permission code 42501.",
+);
+assert(
+  !isAuthenticatedSupabaseAccessDenied(403, { code: "generic_forbidden" }),
+  "A generic 403 must not count as proven Supabase table isolation.",
+);
+for (const status of [200, 401, 404, 500]) {
+  assert(
+    !isAuthenticatedSupabaseAccessDenied(status, { code: "42501" }),
+    `Authenticated direct-table status ${status} must not count as proven isolation.`,
+  );
+}
+assert(
+  isSupabaseProbeTargetMatch({
+    expectedOrigin: "https://project-ref.supabase.co",
+    expectedTable: "photo_book_projects",
+    probeUrl: "https://project-ref.supabase.co/",
+    probeTable: "photo_book_projects",
+  }),
+  "The authenticated isolation probe must accept the exact deployed Supabase origin and table.",
+);
+assert(
+  !isSupabaseProbeTargetMatch({
+    expectedOrigin: "https://project-ref.supabase.co",
+    expectedTable: "photo_book_projects",
+    probeUrl: "https://decoy.supabase.co",
+    probeTable: "photo_book_projects",
+  }),
+  "The authenticated isolation probe must reject a different Supabase origin.",
+);
+assert(
+  !isSupabaseProbeTargetMatch({
+    expectedOrigin: "not-a-url",
+    expectedTable: "photo_book_projects",
+    probeUrl: "also-not-a-url",
+    probeTable: "photo_book_projects",
+  }),
+  "Invalid Supabase URLs must never count as a matching probe target.",
+);
+const alignedSupabaseOrigins = getSupabaseOriginAlignment({
+  backendUrl: "https://project-ref.supabase.co",
+  publicUrl: "https://project-ref.supabase.co/",
+});
+assert(
+  alignedSupabaseOrigins.aligned &&
+    alignedSupabaseOrigins.backendOrigin === "https://project-ref.supabase.co",
+  "Equivalent public Auth and backend store URLs must be recognized as aligned.",
+);
+const driftedSupabaseOrigins = getSupabaseOriginAlignment({
+  backendUrl: "https://store-project.supabase.co",
+  publicUrl: "https://auth-project.supabase.co",
+});
+assert(
+  !driftedSupabaseOrigins.aligned &&
+    driftedSupabaseOrigins.backendOrigin === "https://store-project.supabase.co" &&
+    driftedSupabaseOrigins.publicOrigin === "https://auth-project.supabase.co",
+  "Supabase project drift must fail while keeping the backend store as the advertised probe target.",
+);
+assert(
+  alphaReadinessRoute.includes("alpha readiness secret strength"),
+  "Alpha readiness route must report readiness shared-secret strength.",
+);
+assert(
+  alphaReadinessRoute.includes("private AI worker secret strength"),
+  "Alpha readiness route must report private worker shared-secret strength.",
+);
+assert(
+  serverEnv.includes("normalizeEnvValue") && serverEnv.includes("replace(/\\\\r|\\\\n/g"),
+  "Server env helper must strip escaped CR/LF artifacts from hosted env values.",
+);
+assert(
+  publicAuthConfig.includes("getFirstEnvValue"),
+  "Public Supabase auth config must use normalized server env values.",
+);
+
+assert(!shouldRequireProviderInfrastructure("local", {}), "local mode must not require providers");
+assert(shouldRequireProviderInfrastructure("hosted", {}), "hosted mode must require providers");
+assert(shouldRequireProviderInfrastructure("provider", {}), "provider mode must require providers");
+assert(!shouldRequirePrivateWorker("local", {}), "local mode must not require a private worker");
+assert(shouldRequirePrivateWorker("hosted", {}), "hosted mode must require a private worker");
+assert(!shouldCheckPhaseTwoProviders("local", {}), "local mode must skip Phase 2 providers");
+assert(shouldCheckPhaseTwoProviders("hosted", {}), "hosted mode must warn on Phase 2 providers");
+assert(shouldCheckPhaseTwoProviders("provider", {}), "provider mode must require Phase 2 providers");
+
+const missingLocalReadinessSecretCheck = makeSharedSecretStrengthCheck({
+  label: "Alpha readiness secret",
+  name: "alpha readiness secret strength",
+  required: false,
+  value: "",
+  variable: "ALPHA_READINESS_SECRET",
+});
+assert(
+  missingLocalReadinessSecretCheck.status === "skip",
+  "Optional local readiness secret strength must skip when no secret is configured.",
+);
+
+const shortHostedReadinessSecretCheck = makeSharedSecretStrengthCheck({
+  label: "Alpha readiness secret",
+  name: "alpha readiness secret strength",
+  required: true,
+  value: "short-secret",
+  variable: "ALPHA_READINESS_SECRET",
+});
+assert(
+  shortHostedReadinessSecretCheck.status === "fail",
+  "Hosted readiness secret strength must fail short shared secrets.",
+);
+assert(
+  shortHostedReadinessSecretCheck.evidence?.minLength === MIN_HOSTED_SHARED_SECRET_LENGTH,
+  "Hosted readiness secret strength evidence must include the minimum length.",
+);
+
+const placeholderWorkerSecretCheck = makeSharedSecretStrengthCheck({
+  label: "Private AI worker secret",
+  name: "private AI worker secret strength",
+  required: true,
+  value: "same-readiness-secret-as-hosted",
+  variable: "LOCAL_AI_WORKER_SECRET",
+});
+assert(
+  placeholderWorkerSecretCheck.status === "fail",
+  "Private worker secret strength must fail placeholder-looking secrets.",
+);
+const hostedWorkerPlaceholderSecretCheck = makeSharedSecretStrengthCheck({
+  label: "Private AI worker secret",
+  name: "private AI worker secret strength",
+  required: true,
+  value: "same-worker-secret-as-hosted",
+  variable: "LOCAL_AI_WORKER_SECRET",
+});
+assert(
+  hostedWorkerPlaceholderSecretCheck.status === "fail",
+  "Private worker secret strength must fail hosted worker placeholder secrets.",
+);
+
+const strongWorkerSecretCheck = makeSharedSecretStrengthCheck({
+  label: "Private AI worker secret",
+  name: "private AI worker secret strength",
+  required: true,
+  value: "photo-book-alpha-worker-2026-very-long-random-secret",
+  variable: "LOCAL_AI_WORKER_SECRET",
+});
+assert(
+  strongWorkerSecretCheck.status === "pass",
+  "Private worker secret strength must pass long non-placeholder secrets.",
+);
+
+const localChecks = collectPhaseTwoProviderChecks({
+  env: {},
+  mode: "local",
+});
+assertStatus(localChecks, "phase 2 provider env", "skip");
+
+const hostedChecks = collectPhaseTwoProviderChecks({
+  env: {},
+  mode: "hosted",
+});
+assertStatus(hostedChecks, "Stripe checkout env", "warn");
+assertStatus(hostedChecks, "transactional email provider", "warn");
+assertStatus(hostedChecks, "Sentry observability", "warn");
+assertStatus(hostedChecks, "print provider choice", "warn");
+
+const providerManualPdfChecks = collectPhaseTwoProviderChecks({
+  env: {
+    PRINT_PROVIDER: "manual_pdf",
+  },
+  mode: "provider",
+});
+assertStatus(providerManualPdfChecks, "Stripe checkout env", "fail");
+assertStatus(providerManualPdfChecks, "print provider choice", "fail");
+assertStatus(providerManualPdfChecks, "print sample order", "fail");
+
+const providerInvalidChecks = collectPhaseTwoProviderChecks({
+  env: {
+    PRINT_PROVIDER: "unknown_vendor",
+  },
+  mode: "provider",
+});
+assertStatus(providerInvalidChecks, "print provider choice", "fail");
+
+const providerConfiguredChecks = collectPhaseTwoProviderChecks({
+  env: {
+    NEXT_PUBLIC_POSTHOG_HOST: "https://us.i.posthog.com",
+    NEXT_PUBLIC_POSTHOG_KEY: "posthog-key",
+    NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY: "pk_test",
+    PRINT_PROVIDER: "peecho",
+    PRINT_PROVIDER_API_KEY: "print-key",
+    PRINT_PROVIDER_PRODUCT_TRIP_SKU: "trip-sku",
+    PRINT_PROVIDER_PRODUCT_YEARBOOK_SKU: "yearbook-sku",
+    PRINT_PROVIDER_SAMPLE_ORDER_CONFIRMED: "1",
+    PRINT_PROVIDER_WEBHOOK_SECRET: "print-webhook",
+    RESEND_API_KEY: "resend-key",
+    SENTRY_DSN: "https://sentry.example",
+    STRIPE_PRICE_TRIP_BOOK_ID: "price_trip",
+    STRIPE_PRICE_YEARBOOK_ID: "price_yearbook",
+    STRIPE_SECRET_KEY: "sk_test",
+    STRIPE_WEBHOOK_SECRET: "whsec",
+    TRANSACTIONAL_EMAIL_FROM: "Photo Book Maker <hello@example.com>",
+  },
+  mode: "provider",
+});
+const failedConfiguredChecks = providerConfiguredChecks.filter((check) => check.status === "fail");
+assert(
+  !failedConfiguredChecks.length,
+  `Fully configured provider env should not fail: ${JSON.stringify(failedConfiguredChecks, null, 2)}`,
+);
+
+for (const modeName of ["hosted", "provider"]) {
+  const output = assertAlphaReadinessFails(
+    {
+      ALPHA_READINESS_BASE_URL: "",
+      ALPHA_READINESS_MODE: modeName,
+      ALPHA_READINESS_SECRET: STRONG_ALPHA_READINESS_SECRET,
+    },
+    "ALPHA_READINESS_BASE_URL is required for hosted/provider readiness.",
+  );
+
+  assert(
+    !output.includes("fetch failed"),
+    `${modeName} readiness should fail before route fetches when ALPHA_READINESS_BASE_URL is missing. Output: ${output}`,
+  );
+}
+
+const missingSupabaseProbeTmpDir = await mkdtemp(
+  join(tmpdir(), "photo-book-missing-supabase-probe-"),
+);
+try {
+  const reportPath = join(missingSupabaseProbeTmpDir, "alpha-readiness-report.json");
+  const result = runAlphaReadiness({
+    ALPHA_READINESS_BASE_URL: "http://127.0.0.1:1",
+    ALPHA_READINESS_MODE: "hosted",
+    ALPHA_READINESS_REPORT_PATH: reportPath,
+    ALPHA_READINESS_SECRET: STRONG_ALPHA_READINESS_SECRET,
+  });
+  const output = getChildOutput(result);
+
+  assert(result.status !== 0, `Hosted readiness without Supabase probe inputs must fail. Output: ${output}`);
+  const report = JSON.parse(await readFile(reportPath, "utf8"));
+  assertStatus(report.checks, "authenticated Supabase direct access", "fail");
+} finally {
+  await rm(missingSupabaseProbeTmpDir, { force: true, recursive: true });
+}
+
+assertHostedAlphaSmokeFails({}, "Hosted alpha smoke is missing");
+assertHostedAlphaSmokeFails(
+  {
+    ALPHA_READINESS_SECRET: STRONG_ALPHA_READINESS_SECRET,
+    HOSTED_ALPHA_BASE_URL: "http://127.0.0.1:3000",
+    HOSTED_ALPHA_DRY_RUN: "1",
+    HOSTED_ALPHA_PROOF_BEARER_TOKEN: HOSTED_ALPHA_TOKEN_SENTINEL,
+    HOSTED_ALPHA_PROOF_PROJECT_ID: "alpha-proof-project",
+  },
+  "requires a hosted URL",
+);
+assertHostedAlphaSmokeFails(
+  {
+    ALPHA_READINESS_SECRET: "short-secret",
+    HOSTED_ALPHA_ALLOW_LOCAL_BASE_URL: "1",
+    HOSTED_ALPHA_BASE_URL: "http://127.0.0.1:3000",
+    HOSTED_ALPHA_DRY_RUN: "1",
+    HOSTED_ALPHA_PROOF_BEARER_TOKEN: HOSTED_ALPHA_TOKEN_SENTINEL,
+    HOSTED_ALPHA_PROOF_PROJECT_ID: "alpha-proof-project",
+  },
+  `Alpha readiness secret must be at least ${MIN_HOSTED_SHARED_SECRET_LENGTH} characters.`,
+);
+assertHostedAlphaAcceptanceFails({}, "Hosted alpha acceptance is missing");
+assertHostedAlphaAcceptanceFails(
+  {
+    ALPHA_READINESS_SECRET: "short-secret",
+    HOSTED_ALPHA_ACCEPTANCE_DRY_RUN: "1",
+    HOSTED_ALPHA_ACCEPTANCE_SKIP_CONTRACT: "1",
+    HOSTED_ALPHA_ALLOW_LOCAL_BASE_URL: "1",
+    HOSTED_ALPHA_BASE_URL: "http://127.0.0.1:3000",
+    HOSTED_ALPHA_PROOF_BEARER_TOKEN: HOSTED_ALPHA_TOKEN_SENTINEL,
+    HOSTED_ALPHA_PROOF_PROJECT_ID: "alpha-proof-project",
+    LOCAL_AI_WORKER_PROCESSOR_BASE_URL: "http://127.0.0.1:3000",
+    LOCAL_AI_WORKER_SECRET: HOSTED_ALPHA_WORKER_SECRET_SENTINEL,
+  },
+  `Alpha readiness secret must be at least ${MIN_HOSTED_SHARED_SECRET_LENGTH} characters.`,
+);
+
+const hostedAlphaSmokeTmpDir = await mkdtemp(
+  join(tmpdir(), "photo-book-hosted-alpha-contract-"),
+);
+try {
+  const reportPath = join(hostedAlphaSmokeTmpDir, "hosted-alpha-smoke-report.json");
+  const result = runHostedAlphaSmoke({
+    ALPHA_READINESS_SECRET: STRONG_ALPHA_READINESS_SECRET,
+    HOSTED_ALPHA_ALLOW_LOCAL_BASE_URL: "1",
+    HOSTED_ALPHA_BASE_URL: "http://127.0.0.1:3000",
+    HOSTED_ALPHA_DRY_RUN: "1",
+    HOSTED_ALPHA_PROOF_BEARER_TOKEN: HOSTED_ALPHA_TOKEN_SENTINEL,
+    HOSTED_ALPHA_PROOF_PROJECT_ID: "alpha-proof-project",
+    HOSTED_ALPHA_REPORT_PATH: reportPath,
+  });
+  const output = getChildOutput(result);
+
+  assert(result.status === 0, `Hosted alpha smoke dry run should pass. Output: ${output}`);
+  assert(!output.includes(HOSTED_ALPHA_TOKEN_SENTINEL), "Hosted alpha smoke output leaked the proof bearer token.");
+
+  const report = await readFile(reportPath, "utf8");
+  assert(!report.includes(HOSTED_ALPHA_TOKEN_SENTINEL), "Hosted alpha smoke report leaked the proof bearer token.");
+
+  const summary = JSON.parse(report);
+  assert(summary.status === "hosted alpha smoke dry run passed", "Hosted alpha smoke report must record dry-run pass status.");
+  assert(summary.proofBearerTokenConfigured === true, "Hosted alpha smoke report must record proof token presence without leaking it.");
+  assert(summary.requireProof === true, "Hosted alpha smoke report must keep proof required by default.");
+} finally {
+  await rm(hostedAlphaSmokeTmpDir, { force: true, recursive: true });
+}
+
+const hostedAlphaAcceptanceTmpDir = await mkdtemp(
+  join(tmpdir(), "photo-book-hosted-alpha-acceptance-contract-"),
+);
+try {
+  const reportPath = join(
+    hostedAlphaAcceptanceTmpDir,
+    "hosted-alpha-acceptance-report.json",
+  );
+  const result = runHostedAlphaAcceptance({
+    ALPHA_READINESS_SECRET: STRONG_ALPHA_READINESS_SECRET,
+    HOSTED_ALPHA_ACCEPTANCE_DRY_RUN: "1",
+    HOSTED_ALPHA_ACCEPTANCE_SKIP_CONTRACT: "1",
+    HOSTED_ALPHA_ALLOW_LOCAL_BASE_URL: "1",
+    HOSTED_ALPHA_BASE_URL: "http://127.0.0.1:3000",
+    HOSTED_ALPHA_PROOF_BEARER_TOKEN: HOSTED_ALPHA_TOKEN_SENTINEL,
+    HOSTED_ALPHA_PROOF_PROJECT_ID: "alpha-proof-project",
+    HOSTED_ALPHA_ACCEPTANCE_REPORT_PATH: reportPath,
+    LOCAL_AI_WORKER_PROCESSOR_BASE_URL: "http://127.0.0.1:3000",
+    LOCAL_AI_WORKER_SECRET: HOSTED_ALPHA_WORKER_SECRET_SENTINEL,
+  });
+  const output = getChildOutput(result);
+
+  assert(result.status === 0, `Hosted alpha acceptance dry run should pass. Output: ${output}`);
+  for (const secret of [
+    HOSTED_ALPHA_TOKEN_SENTINEL,
+    HOSTED_ALPHA_WORKER_SECRET_SENTINEL,
+    STRONG_ALPHA_READINESS_SECRET,
+  ]) {
+    assert(!output.includes(secret), `Hosted alpha acceptance output leaked a secret: ${secret}`);
+  }
+
+  const report = await readFile(reportPath, "utf8");
+  for (const secret of [
+    HOSTED_ALPHA_TOKEN_SENTINEL,
+    HOSTED_ALPHA_WORKER_SECRET_SENTINEL,
+    STRONG_ALPHA_READINESS_SECRET,
+  ]) {
+    assert(!report.includes(secret), `Hosted alpha acceptance report leaked a secret: ${secret}`);
+  }
+
+  const summary = JSON.parse(report);
+  assert(
+    summary.status === "hosted alpha acceptance dry run passed",
+    "Hosted alpha acceptance report must record dry-run pass status.",
+  );
+  assert(
+    summary.hostedAlpha?.status === "hosted alpha smoke dry run passed",
+    "Hosted alpha acceptance report must include hosted alpha smoke digest.",
+  );
+  assert(
+    summary.config?.workerSecretConfigured === true,
+    "Hosted alpha acceptance report must record worker secret presence without leaking it.",
+  );
+} finally {
+  await rm(hostedAlphaAcceptanceTmpDir, { force: true, recursive: true });
+}
+
+console.log("readiness contract smoke passed");

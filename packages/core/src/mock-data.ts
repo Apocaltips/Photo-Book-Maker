@@ -8,6 +8,7 @@ import {
   type ProjectSummary,
 } from "./types";
 import { normalizeProjectDraftState } from "./editorial";
+import { createProjectActivityEvent, normalizeProjectRecord } from "./lifecycle";
 
 const editorialThemes: BookTheme[] = [
   {
@@ -1044,7 +1045,10 @@ export function createSeedProjects(): Project[] {
     },
   };
 
-  return [normalizeProjectDraftState(weekendTrip), normalizeProjectDraftState(yearbook)];
+  return [
+    normalizeProjectRecord(normalizeProjectDraftState(weekendTrip)),
+    normalizeProjectRecord(normalizeProjectDraftState(yearbook)),
+  ];
 }
 
 export function getProjectSummary(project: Project): ProjectSummary {
@@ -1065,9 +1069,29 @@ export function isDemoProject(project: Pick<Project, "id">) {
   return isDemoProjectId(project.id);
 }
 
+function createUniqueEntityId(prefix: string) {
+  const randomUuid = globalThis.crypto?.randomUUID?.();
+
+  if (randomUuid) {
+    return `${prefix}-${randomUuid}`;
+  }
+
+  return `${prefix}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 12)}`;
+}
+
 export function createProjectRecord(input: CreateProjectInput): Project {
+  const titleSeed = input.title
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/(^-|-$)/g, "");
+
+  const createdAt = new Date().toISOString();
+  const projectId =
+    input.projectId?.trim() ||
+    createUniqueEntityId(`${input.type}-${titleSeed || "new-project"}`);
   const owner: ProjectMember = {
-    id: "owner-generated",
+    id: input.ownerId?.trim() || createUniqueEntityId("owner"),
     name: input.ownerName,
     email: input.ownerEmail,
     role: "owner",
@@ -1075,14 +1099,8 @@ export function createProjectRecord(input: CreateProjectInput): Project {
     homeBase: "To be added",
   };
 
-  const titleSeed = input.title
-    .trim()
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/(^-|-$)/g, "");
-
-  return normalizeProjectDraftState({
-    id: `${input.type}-${titleSeed || "new-project"}`,
+  return normalizeProjectRecord(normalizeProjectDraftState({
+    id: projectId,
     type: input.type,
     title: input.title,
     subtitle: input.subtitle,
@@ -1100,13 +1118,13 @@ export function createProjectRecord(input: CreateProjectInput): Project {
     members: [owner],
     invites: [
       {
-        id: `invite-${titleSeed || "new"}`,
+        id: `invite-${projectId}`,
         name: owner.name,
         email: owner.email,
         role: "owner",
         status: "accepted",
-        sentAt: new Date().toISOString(),
-        acceptedAt: new Date().toISOString(),
+        sentAt: createdAt,
+        acceptedAt: createdAt,
         acceptedByUserId: owner.id,
       },
     ],
@@ -1117,7 +1135,7 @@ export function createProjectRecord(input: CreateProjectInput): Project {
     bookThemes: cloneThemes(),
     selectedThemeId: editorialThemes[0].id,
     bookDraft: {
-      id: `draft-${titleSeed || "new"}`,
+      id: `draft-${projectId}`,
       title: input.title,
       format: "12x12 square",
       status: "draft",
@@ -1126,5 +1144,16 @@ export function createProjectRecord(input: CreateProjectInput): Project {
         "The draft book will appear here once uploads and memory notes give the layout engine enough material to curate a real first proof.",
       pages: [],
     },
-  });
+    revision: 1,
+    updatedAt: createdAt,
+    activity: [
+      createProjectActivityEvent({
+        actorEmail: owner.email,
+        actorId: owner.id,
+        createdAt,
+        message: `${owner.name} created ${input.title}.`,
+        type: "project_created",
+      }),
+    ],
+  }));
 }

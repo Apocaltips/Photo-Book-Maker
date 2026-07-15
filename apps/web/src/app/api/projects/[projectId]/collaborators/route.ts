@@ -7,8 +7,10 @@ import {
   hashInviteToken,
   sendProjectInviteEmail,
 } from "@/lib/server/invites";
+import { mutationErrorResponse } from "@/lib/server/mutation-response";
 import { updateProject } from "@/lib/server/project-store";
 import { hydrateProjectForClient } from "@/lib/server/project-response";
+import { getRequestOrigin } from "@/lib/server/request-origin";
 
 export async function POST(
   request: Request,
@@ -19,7 +21,11 @@ export async function POST(
   if ("response" in auth) {
     return auth.response;
   }
-  const body = (await request.json()) as { email?: string; name?: string };
+  const body = (await request.json()) as {
+    email?: string;
+    expectedRevision?: number;
+    name?: string;
+  };
   const email = body.email?.trim().toLowerCase();
   const name = body.name?.trim();
 
@@ -38,15 +44,33 @@ export async function POST(
   }
 
   const inviteToken = createInviteToken();
-  const origin = new URL(request.url).origin;
-  const updatedProject = await updateProject(projectId, (project) =>
-    inviteCollaborator(project, {
-      email,
-      name,
-      invitedByMemberId: auth.user.id,
-      token: hashInviteToken(inviteToken),
-    }),
-  );
+  const origin = getRequestOrigin(request);
+  let updatedProject;
+
+  try {
+    updatedProject = await updateProject(
+      projectId,
+      (project) =>
+        inviteCollaborator(project, {
+          email,
+          name,
+          invitedByMemberId: auth.user.id,
+          token: hashInviteToken(inviteToken),
+        }),
+      {
+        expectedRevision: body.expectedRevision,
+        activity: {
+          actorEmail: auth.user.email,
+          actorId: auth.user.id,
+          message: `${auth.user.name} invited ${name}.`,
+          metadata: { inviteeEmail: email },
+          type: "invite_sent",
+        },
+      },
+    );
+  } catch (error) {
+    return mutationErrorResponse(error, "Unable to invite this collaborator.");
+  }
 
   if (!updatedProject) {
     return NextResponse.json({ message: "Project not found." }, { status: 404 });
@@ -75,6 +99,6 @@ export async function POST(
   return NextResponse.json({
     inviteUrl,
     message: delivery.message,
-    project: await hydrateProjectForClient(updatedProject),
+    project: await hydrateProjectForClient(updatedProject, getRequestOrigin(request)),
   });
 }

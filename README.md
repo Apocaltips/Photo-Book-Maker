@@ -1,50 +1,209 @@
 # Photo Book Maker
 
-Mobile-first collaborative trip and yearbook app with an Expo client, Next.js companion app, Supabase-backed shared project storage, S3-compatible photo upload support, live collaborator invites, and proof PDF export.
+iOS-first collaborative trip and yearbook app with an Expo client, Next.js web/API app, Supabase-backed shared project storage, S3-compatible photo upload support, live collaborator invites, shared template-driven draft editing, and print-review proof PDF export.
 
 ## Workspace
 
-- `apps/mobile`: Expo React Native client for iOS and Android.
-- `apps/web`: Next.js companion app plus API routes for the live shared workspace, draft editor, preview, and invite acceptance.
-- `packages/core`: shared domain types, development seed data, and book-generation helpers.
+- `apps/mobile`: Expo React Native client with native iOS-first project, upload, curation, editor, draft version, and proof export flows.
+- `apps/web`: Next.js web app plus API routes for project creation, uploads, invites, curation, draft editing, preview, print proof, and activity.
+- `packages/core`: shared domain types, template catalog, draft lifecycle, proof renderer, and book-generation helpers.
 
 ## Local Test Setup
 
 1. Install dependencies:
 
 ```bash
-npm install
+npm ci
 ```
 
 2. Copy `.env.example` to `.env.local` in the repo root.
 
-3. For physical phones, set `EXPO_PUBLIC_API_BASE_URL` to your laptop LAN IP, for example:
+3. The AI Designer runs locally through Ollama. For the quality-first local
+   stack, install the planner, vision, and fallback models:
+
+```bash
+ollama pull qwen3:14b
+ollama pull qwen2.5vl:7b
+ollama pull qwen3:8b
+```
+
+Then point the web API at Ollama:
+
+```bash
+AI_DRAFT_PROVIDER=ollama
+LOCAL_AI_BASE_URL=http://127.0.0.1:11434
+LOCAL_AI_PLANNER_MODEL=qwen3:14b
+LOCAL_AI_VISION_MODEL=qwen2.5vl:7b
+LOCAL_AI_FALLBACK_PLANNER_MODEL=qwen3:8b
+LOCAL_AI_PRIMARY_PLANNER_TIMEOUT_MS=120000
+LOCAL_AI_FALLBACK_PLANNER_TIMEOUT_MS=180000
+LOCAL_AI_PRIMARY_PLANNER_NUM_PREDICT=1200
+LOCAL_AI_FALLBACK_PLANNER_NUM_PREDICT=1200
+```
+
+The primary planner is quality-first and can be slow on an 8 GB laptop GPU. The
+fallback planner has its own timeout so `qwen3:8b` gets a real chance to return
+valid compact JSON before the deterministic editorial fallback takes over.
+
+4. For physical phones, set `EXPO_PUBLIC_API_BASE_URL` to your laptop LAN IP, for example:
 
 ```bash
 EXPO_PUBLIC_API_BASE_URL=http://192.168.1.50:3000/api
 ```
 
-4. Start the shared local API and web companion:
+5. Start the shared local API and web app:
 
 ```bash
 npm run dev:web
 ```
 
-5. In a second terminal, start Expo:
+Open `http://127.0.0.1:3000/ai-health` before tester sessions to confirm
+Ollama, required local models, project storage mode, and the latest generation
+quality score. The page also shows whether the latest saved book used the
+primary planner, fallback planner, or the deterministic safe fallback. A safe
+fallback can be acceptable for local alpha when the quality score passes, but
+it should stay visible instead of being treated like a primary-model success.
+
+For hosted web alpha with local AI, do not expose Ollama. Configure
+`LOCAL_AI_WORKER_SECRET` and `ALPHA_READINESS_SECRET` on the hosted web app,
+configure the same worker secret on this PC, set `LOCAL_AI_WORKER_ENABLED=1` on
+the hosted app, then run the private worker from this checkout:
+
+```powershell
+$env:LOCAL_AI_WORKER_SECRET="same-secret-as-hosted"
+$env:LOCAL_AI_WORKER_HOSTED_BASE_URL="https://YOUR-WEB-APP"
+$env:LOCAL_AI_WORKER_PROCESSOR_BASE_URL="http://127.0.0.1:3000"
+$env:LOCAL_AI_WORKER_PREFLIGHT_ONLY="1"
+npm run worker:ai:local
+Remove-Item Env:LOCAL_AI_WORKER_PREFLIGHT_ONLY
+$env:LOCAL_AI_WORKER_LOOP="1"
+npm run worker:ai:local
+```
+
+Use `LOCAL_AI_WORKER_PREFLIGHT_ONLY=1` first. It verifies the processor URL is
+loopback/LAN/private and checks `/api/ai/local/health` so the worker does not
+claim a hosted job before local Ollama and the required models are reachable.
+Run `npm run test:worker:preflight` when changing worker environment handling;
+it checks the no-network preflight path, required secret, private processor URL
+guard, and the explicit hosted-processor override.
+Run `npm run test:worker:e2e` before outside tester sessions. It boots an
+isolated temp project store, queues a generation job with the worker bridge
+enabled, runs the real local worker once against the local processor route,
+verifies the completed run and quality report, then runs proof-quality against
+the saved draft.
+Use `LOCAL_AI_WORKER_LOOP=1` for continuous polling after preflight passes. The
+hosted app queues the job; the private worker claims it, runs local Ollama
+through the local processor app, heartbeats while the local models are running,
+and posts the saved draft back to the hosted app. Keep
+`LOCAL_AI_WORKER_PROCESSOR_BASE_URL` pointed at a private local URL. The worker
+refuses to use a public processor URL unless
+`LOCAL_AI_WORKER_ALLOW_HOSTED_PROCESSOR=1` is set intentionally. Keep
+`LOCAL_AI_WORKER_REQUEST_TIMEOUT_MS=30000`,
+`LOCAL_AI_WORKER_PROCESS_TIMEOUT_MS=3600000`, and
+`LOCAL_AI_WORKER_MAX_ATTEMPTS=3` for family/friend alpha unless a test session
+proves the worker needs different limits; expired leases are reclaimed, but a
+run that exceeds the attempt ceiling is marked failed and shown on `/ai-health`
+instead of being retried forever.
+Web and mobile clients poll the generation run status after a queued response,
+then refresh the project automatically when the private worker saves or fails
+the draft.
+
+Before inviting outside testers, run the read-only readiness gate. In local
+mode, leave `ALPHA_READINESS_BASE_URL` unset to auto-detect a running app or
+start an isolated local server on `ALPHA_READINESS_PORT` (`3225` by default)
+using a temp copy of the local project store:
+
+```powershell
+$env:ALPHA_READINESS_MODE="local"
+npm run test:alpha:readiness
+```
+
+For a hosted alpha URL, require real auth/provider/worker gates:
+
+```powershell
+$env:ALPHA_READINESS_MODE="hosted"
+$env:ALPHA_READINESS_BASE_URL="https://YOUR-WEB-APP"
+$env:ALPHA_READINESS_SECRET="placeholder-readiness-secret"
+npm run test:alpha:readiness
+```
+
+Hosted readiness calls the protected `/api/alpha/readiness` route so the
+deployed app reports its own Supabase, R2, project-store, template-catalog, and
+private-worker configuration. In hosted mode it also inspects the deployed
+project store for active/stale generation runs and requires the latest saved
+AI generation to have a quality score at or above
+`ALPHA_READINESS_MIN_QUALITY_SCORE` unless
+`ALPHA_READINESS_REQUIRE_SAVED_RUN=0` is set intentionally. The route returns
+only booleans, counts, mode names, and missing variable names; it never returns
+secret values. In hosted mode the CLI skips caller-env checks by default
+because the local shell may not match Vercel. Set
+`ALPHA_READINESS_CHECK_CALLER_ENV=1` when you also want to verify this PC's
+worker-side environment before a tester session.
+
+For live family/friend testing, create at least three real Supabase Auth tester
+accounts before sharing the app: one owner, one invited collaborator, and one
+wrong-user control account. The owner should create a book and send an invite,
+the collaborator should accept it with the invited email and edit the shared
+book, and the wrong-user account should fail to open the private project or
+accept the invite. The local `npm run test:e2e:web` smoke covers the same
+isolation matrix with dev-auth headers.
+
+Before inviting outside testers, run the hosted alpha acceptance gate against a
+real generated proof from the hosted project store and the private worker on
+this PC:
+
+```powershell
+$env:HOSTED_ALPHA_BASE_URL="https://YOUR-WEB-APP"
+$env:ALPHA_READINESS_SECRET="placeholder-readiness-secret"
+$env:HOSTED_ALPHA_PROOF_BEARER_TOKEN="tester-account-access-token"
+$env:HOSTED_ALPHA_PROOF_PROJECT_ID="hosted-project-id-with-saved-ai-generation"
+$env:LOCAL_AI_WORKER_SECRET="placeholder-worker-secret"
+$env:LOCAL_AI_WORKER_PROCESSOR_BASE_URL="http://127.0.0.1:3000"
+$env:HOSTED_ALPHA_ACCEPTANCE_REPORT_PATH="$env:TEMP\\photo-book-hosted-alpha-acceptance.json"
+npm run test:alpha:hosted
+```
+
+This runs the readiness contract, the protected hosted readiness route, hosted
+proof-quality, and a private local-worker preflight in sequence. Set
+`HOSTED_ALPHA_REQUIRE_PROOF=0` only for a deployment smoke before a hosted
+tester project exists; the outside-tester gate should include proof quality.
+Replace the placeholder secret values with real 24+ character random shared
+secrets from the hosted app and private worker; the gate intentionally rejects
+placeholder-looking values.
+Set `HOSTED_ALPHA_ACCEPTANCE_DRY_RUN=1` only to verify environment shape
+without touching the hosted app or local processor. The lower-level
+`npm run test:hosted:alpha` command remains available when diagnosing hosted
+readiness or proof failures without the worker preflight.
+
+Phase 2 direct-print readiness has a separate cross-platform command:
+
+```powershell
+$env:ALPHA_READINESS_BASE_URL="https://YOUR-WEB-APP"
+$env:ALPHA_READINESS_SECRET="placeholder-readiness-secret"
+npm run test:provider:readiness
+```
+
+That gate is expected to fail until Stripe, transactional email, Sentry,
+PostHog, a concrete print provider adapter, and a reviewed sample order are
+configured. Phase 1 remains PDF-first; do not treat a missing direct print
+provider as a blocker for family/friend proof testing.
+
+6. In a second terminal, start Expo:
 
 ```bash
 npm run dev:mobile
 ```
 
-6. Open the Expo app on the tester phones.
+7. Open the Expo app on the tester phones.
 
-- The web server is already configured to listen on `0.0.0.0`, so other devices on the same network can reach it.
-- In local development without Supabase, the shared project state can still live in `apps/web/data/projects.json`.
-- The phone app now depends on the shared API for mutations. If it cannot reach the backend, cached books stay visible but new changes do not save until connectivity returns.
+- The web server listens on `0.0.0.0`, so other devices on the same network can reach it.
+- In local development without Supabase, shared project state can live in `apps/web/data/projects.json`.
+- The phone app depends on the shared API for mutations. Cached books stay visible if the API is offline, but new changes do not save until connectivity returns.
+- For USB-connected Android testing, enable Developer Options, turn on USB debugging, accept the PC fingerprint prompt, and confirm `adb devices -l` lists the phone as `device`.
 
 ## Hosted Backend Mode
 
-The web API now supports a hosted mode:
+The web API supports hosted mode:
 
 - `Supabase` stores project payloads in `photo_book_projects`
 - `S3-compatible object storage` stores uploaded photos
@@ -52,39 +211,129 @@ The web API now supports a hosted mode:
 
 See:
 
-- [`docs/supabase-photo-book-schema.sql`](C:\Users\Vince\Desktop\Coding%20Projects\Photo%20Book%20Maker\docs\supabase-photo-book-schema.sql)
-- [`docs/go-live-checklist.md`](C:\Users\Vince\Desktop\Coding%20Projects\Photo%20Book%20Maker\docs\go-live-checklist.md)
+- [`docs/supabase-photo-book-schema.sql`](docs/supabase-photo-book-schema.sql)
+- [`docs/go-live-checklist.md`](docs/go-live-checklist.md)
+- [`docs/web-alpha-provider-readiness.md`](docs/web-alpha-provider-readiness.md)
 
-## Android Tester Build
+## Validation
+
+```bash
+npm run test
+npm run test:alpha:local
+npm run test:alpha:hosted
+npm run test:e2e:web
+npm run test:readiness:contract
+npm run test:ai:health
+npm run test:worker:preflight
+npm run test:worker:e2e
+npm run test:proof:quality
+npm run typecheck
+npm run lint
+npm run build
+npm run typecheck -w @photo-book-maker/mobile
+cd apps/mobile && npx expo-doctor
+```
+
+`npm run test:alpha:local` is the one-command local family/friend readiness
+gate. It runs the readiness contract, self-contained local readiness,
+self-contained local AI health, private worker preflight, and the 13-photo plus
+50-70 photo local AI alpha benchmark sequentially against generated temporary
+projects and image files, so it does not depend on an operator's uncommitted
+local project store. It writes a combined JSON report to the system temp directory unless
+`LOCAL_ALPHA_ACCEPTANCE_REPORT_PATH` is set. Set
+`LOCAL_ALPHA_ACCEPTANCE_SKIP_BENCHMARK=1` only for quick script debugging; the
+outside-tester gate should include the benchmark.
+
+`npm run test:ai:alpha-benchmark` is the local outside-tester gate. It
+auto-selects the Cap Cana-style small project and the available 50-70 photo
+test project, runs both through the isolated benchmark temp store, and writes a
+combined `*-summary.json` report without mutating `apps/web/data/projects.json`.
+Use `AI_ALPHA_BENCHMARK_SMALL_PROJECT_ID` and `AI_ALPHA_BENCHMARK_60_PROJECT_ID`
+when you need to pin exact projects.
+
+`npm run test:ai:health` is the quick local Ollama/readiness gate. If
+`LOCAL_AI_HEALTH_BASE_URL` is not set, it auto-detects a running Photo Book
+Maker web app or starts an isolated local server on `LOCAL_AI_HEALTH_PORT`
+(`3224` by default), copies `apps/web/data/projects.json` and local uploads
+into a temp store, checks Ollama/model availability, and verifies the latest
+saved run quality without mutating the source project data.
+
+`npm run test:ai:benchmark` runs the health gate and a full local generation
+smoke against an isolated temporary copy of `apps/web/data/projects.json` and
+`apps/web/data/local-uploads`, then writes JSON benchmark reports to the system
+temp directory unless `AI_GENERATION_REPORT_PATH` is set. The generation report
+records elapsed time, prompt pressure, planner/fallback mode, quality score,
+photo usage, template support, planner candidate count, and acceptance
+failures. The benchmark now also runs the proof-quality gate against the same
+generated project, writes a companion `*-proof-quality.json` report, and
+summarizes proof render pass/fail, loaded image checks, layout rhythm, caption
+position variety, and photo coverage in the final benchmark output.
+Large uploads are pre-curated into a local planner candidate pool capped by
+`LOCAL_AI_PLANNER_MAX_PHOTOS`; the local planner context window is controlled by
+`LOCAL_AI_PLANNER_NUM_CTX`. Deterministic repair still validates coverage after
+the planner returns. Stop any running local Next dev server first; Next
+cannot run two dev servers for this app directory. To
+intentionally target a running app/store instead, set `AI_BENCHMARK_ISOLATED=0`
+and opt into live-store mutation.
+
+`npm run test:ai:local` still targets the current app and requires explicit
+opt-in because it saves a generation run to the selected project:
+
+`npm run test:proof:quality` is read-only by default. It boots an isolated
+copy of `apps/web/data/projects.json` and `apps/web/data/local-uploads`, fetches
+the selected project's print proof, checks that object-storage photos are
+re-signed into the proof, verifies rendered image URLs, and fails sparse or
+repetitive books with unsupported templates, duplicate photos, missing safe-area
+guides, placeholder copy, overfilled pages, or same-corner caption rhythm. Set
+`PROOF_QUALITY_PROJECT_ID` or `PROOF_QUALITY_PROJECT_TITLE` to target a specific
+book.
+
+```powershell
+npm run test:ai:alpha-benchmark
+npm run test:ai:benchmark
+npm run test:proof:quality
+$env:AI_BENCHMARK_PROJECT_IDS="trip-cap-cana-2026-trip-full-album,trip-madeira-island-60-photo-trip-1781039520416"; npm run test:ai:benchmark
+$env:AI_GENERATION_PROJECT_ID="trip-madeira-island-60-photo-trip-1781039520416"; $env:AI_GENERATION_CONTEXT_LABEL="Madeira"; $env:AI_GENERATION_CONTEXT_TERMS="madeira"; npm run test:ai:benchmark
+$env:PROOF_QUALITY_PROJECT_ID="trip-madeira-island-60-photo-trip-1781039520416"; $env:PROOF_QUALITY_CONTEXT_TERMS="madeira"; npm run test:proof:quality
+$env:AI_BENCHMARK_ISOLATED="0"; $env:AI_GENERATION_ALLOW_EXISTING_STORE="1"; npm run test:ai:benchmark
+$env:AI_GENERATION_ALLOW_EXISTING_STORE="1"; npm run test:ai:local
+```
+
+## iOS Preview Build
 
 ```bash
 cd apps/mobile
-npx eas-cli login
-npx eas-cli project:init
-npx eas-cli build --platform android --profile preview
+npx eas login
+npx eas project:init
+EXPO_PUBLIC_API_BASE_URL=https://YOUR-WEB-APP/api \
+EXPO_PUBLIC_SUPABASE_URL=https://YOUR-SUPABASE-PROJECT.supabase.co \
+EXPO_PUBLIC_SUPABASE_ANON_KEY=YOUR-SUPABASE-ANON-KEY \
+npx eas build --platform ios --profile preview
 ```
 
-- Android package name: `com.vince.photobookmaker`
 - iOS bundle identifier: `com.vince.photobookmaker`
-- Expo config is now environment-aware in `apps/mobile/app.config.ts`
-- For cloud builds, set `EXPO_PUBLIC_API_BASE_URL` before running `eas build`
+- Android package name: `com.vince.photobookmaker`
+- Expo config is environment-aware in `apps/mobile/app.config.ts`
+- For cloud builds, set `EXPO_PUBLIC_API_BASE_URL`, `EXPO_PUBLIC_SUPABASE_URL`, and `EXPO_PUBLIC_SUPABASE_ANON_KEY` before running `eas build`
 - If you want the build attached to an existing Expo project, also set `EXPO_PUBLIC_EAS_PROJECT_ID`
 
 ## Current Scope
 
-- Real phone photo import from the device library
+- Real iOS photo import from the device library
 - Persistent local project cache on the phone
 - Shared API state through the Next.js API
 - Hosted Supabase-backed project storage when `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` are configured
 - Remote photo upload flow for S3-compatible storage when `PHOTO_STORAGE_*` variables are configured
-- Draft regeneration from imported photos and notes
-- Proof PDF export from the mobile app
+- Web project creation, browser photo upload, invite, note, curation, blocker resolution, finalize, draft editor, and print-proof page
+- Native mobile template pack, theme, spread copy, spread approval, draft publish/load, preview, and proof export controls
+- Local AI Designer generation from imported photos and notes using a 16-pack / 88-spread controlled template catalog
+- Proof PDF export from iOS and web print-proof Save-as-PDF handoff
 - Finalization checks plus proof PDF export for handoff to a real print vendor
 
 ## Not Included Yet
 
 - Direct print-vendor checkout
-- Live AI enhancement, captioning, location inference, face recognition, and real print fulfillment
-- Production-grade permissions and secure multi-tenant access rules
+- Face recognition, live image enhancement, automatic location inference, payments, shipping, tax, SKU mapping, and real print fulfillment
+- True realtime multi-cursor editing; v1 uses revision-safe saves, activity, refresh, and conflict prevention
 
-This repo is now closer to a hosted tester build, but the final step to a real private mobile test is still deployment plus environment setup.
+This repo is ready for production-environment configuration and internal iOS distribution testing. Public App Store approval timing is outside engineering control.

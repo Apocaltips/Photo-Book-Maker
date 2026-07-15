@@ -2,13 +2,16 @@
 
 import {
   listOpenTasks,
+  type ProjectType,
   type Project,
 } from "@photo-book-maker/core";
 import type { Session } from "@supabase/supabase-js";
+import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import { ProjectCard } from "@/components/project-card";
 import { WorkspaceAuthCard } from "@/components/workspace-auth-card";
 import { getBrowserSupabaseClient } from "@/lib/browser-supabase";
+import { DEV_AUTH_EMAIL, getDevAuthHeaders } from "@/lib/dev-auth";
 
 type WorkspaceAuthConfig = {
   supabaseAnonKey: string;
@@ -33,6 +36,15 @@ export function WorkspaceHomeClient({
   const [error, setError] = useState<string | null>(null);
   const [isAuthLoading, setIsAuthLoading] = useState(true);
   const [isProjectsLoading, setIsProjectsLoading] = useState(false);
+  const [isCreatingProject, setIsCreatingProject] = useState(false);
+  const [newProjectType, setNewProjectType] = useState<ProjectType>("trip");
+  const [newProjectTitle, setNewProjectTitle] = useState("Coastal Weekend");
+  const [newProjectSubtitle, setNewProjectSubtitle] = useState(
+    "A polished keepsake from the best shared photos.",
+  );
+  const [newProjectStartDate, setNewProjectStartDate] = useState("2026-07-11");
+  const [newProjectEndDate, setNewProjectEndDate] = useState("2026-07-14");
+  const router = useRouter();
 
   const supabase = useMemo(() => {
     const supabaseUrl = normalizeConfigValue(authConfig.supabaseUrl);
@@ -47,6 +59,8 @@ export function WorkspaceHomeClient({
       anonKey: supabaseAnonKey,
     });
   }, [authConfig.supabaseAnonKey, authConfig.supabaseUrl]);
+  const isDevAuthMode = !supabase;
+  const devAuthHeaders = useMemo(() => getDevAuthHeaders(), []);
 
   useEffect(() => {
     if (!supabase) {
@@ -81,7 +95,7 @@ export function WorkspaceHomeClient({
   useEffect(() => {
     const accessToken = session?.access_token;
 
-    if (!accessToken) {
+    if (!accessToken && !isDevAuthMode) {
       setProjects([]);
       setError(null);
       return;
@@ -96,7 +110,9 @@ export function WorkspaceHomeClient({
       try {
         const response = await fetch("/api/projects", {
           headers: {
-            Authorization: `Bearer ${accessToken}`,
+            ...(accessToken
+              ? { Authorization: `Bearer ${accessToken}` }
+              : devAuthHeaders),
           },
           cache: "no-store",
         });
@@ -133,11 +149,15 @@ export function WorkspaceHomeClient({
     return () => {
       active = false;
     };
-  }, [session?.access_token]);
+  }, [devAuthHeaders, isDevAuthMode, session?.access_token]);
 
   async function signIn(input: { email: string; password: string }) {
     if (!supabase) {
-      throw new Error("Supabase browser auth is not configured.");
+      setSession({
+        access_token: "dev-token",
+        user: { email: input.email.trim() || DEV_AUTH_EMAIL },
+      } as Session);
+      return;
     }
 
     const { error: signInError } = await supabase.auth.signInWithPassword({
@@ -152,7 +172,11 @@ export function WorkspaceHomeClient({
 
   async function signUp(input: { email: string; name: string; password: string }) {
     if (!supabase) {
-      throw new Error("Supabase browser auth is not configured.");
+      setSession({
+        access_token: "dev-token",
+        user: { email: input.email.trim() || DEV_AUTH_EMAIL },
+      } as Session);
+      return;
     }
 
     const { error: signUpError } = await supabase.auth.signUp({
@@ -172,10 +196,57 @@ export function WorkspaceHomeClient({
 
   async function signOut() {
     if (!supabase) {
+      setSession(null);
       return;
     }
 
     await supabase.auth.signOut();
+  }
+
+  async function createProject() {
+    if ((!session?.access_token && !isDevAuthMode) || isCreatingProject) {
+      return;
+    }
+
+    setIsCreatingProject(true);
+    setError(null);
+
+    try {
+      const response = await fetch("/api/projects", {
+        method: "POST",
+        headers: {
+          ...(session?.access_token
+            ? { Authorization: `Bearer ${session.access_token}` }
+            : devAuthHeaders),
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          endDate: newProjectEndDate,
+          startDate: newProjectStartDate,
+          subtitle: newProjectSubtitle.trim(),
+          timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || "America/Denver",
+          title: newProjectTitle.trim(),
+          type: newProjectType,
+        }),
+      });
+      const body = (await response.json()) as { message?: string; project?: Project };
+
+      if (!response.ok || !body.project) {
+        throw new Error(body.message || "Unable to create this project.");
+      }
+
+      setProjects((current) => [
+        body.project!,
+        ...current.filter((project) => project.id !== body.project!.id),
+      ]);
+      router.push(`/projects/${body.project.id}`);
+    } catch (caughtError) {
+      setError(
+        caughtError instanceof Error ? caughtError.message : "Unable to create this project.",
+      );
+    } finally {
+      setIsCreatingProject(false);
+    }
   }
 
   if (isAuthLoading) {
@@ -191,12 +262,12 @@ export function WorkspaceHomeClient({
     );
   }
 
-  if (!session) {
+  if (!session && !isDevAuthMode) {
     return (
       <main className="mx-auto flex w-full max-w-[1100px] flex-1 flex-col gap-8 px-5 py-6 md:px-8 lg:px-10">
         <WorkspaceAuthCard
-          body="Sign in with the same account you use on mobile to open your real shared books, web editor drafts, collaborator invites, and printable previews."
-          helperText="Book creation and photo upload start on mobile. The web workspace is for review, editing, collaboration, and preview."
+          body="Sign in with the same account you use on mobile or web to open shared books, photo uploads, collaborator invites, and printable proofs."
+          helperText="You can start a book, add photos, make an AI draft, review, and save a proof PDF from web or mobile."
           isConfigured={Boolean(authConfig.supabaseUrl && authConfig.supabaseAnonKey)}
           onSignIn={signIn}
           onSignUp={signUp}
@@ -224,11 +295,11 @@ export function WorkspaceHomeClient({
         <div className="space-y-5">
           <div className="eyebrow">Live workspace</div>
           <h1 className="display max-w-3xl text-5xl leading-none text-[#1f1814] sm:text-6xl lg:text-7xl">
-            Real books, real collaborators, and the actual drafts tied to your account.
+            Turn shared trip photos into a printed book.
           </h1>
           <p className="max-w-2xl text-base leading-8 text-[#5c5048] md:text-lg">
-            Mobile handles capture and uploads. Web handles the shared draft board,
-            editor, collaborator acceptance, and book preview.
+            Start a book, add photos, let AI build the first draft, then review and
+            save a proof PDF.
           </p>
           <div className="grid gap-3 sm:grid-cols-3">
             <Highlight label="Projects" value={projects.length} />
@@ -240,15 +311,14 @@ export function WorkspaceHomeClient({
         <div className="rounded-[2rem] border border-[#00000012] bg-[linear-gradient(180deg,rgba(255,255,255,0.88),rgba(242,230,220,0.9))] p-6">
           <div className="eyebrow">Account</div>
           <div className="mt-4 text-2xl font-semibold text-[#1f1814]">
-            {session.user.email}
+            {isDevAuthMode ? DEV_AUTH_EMAIL : session?.user.email}
           </div>
           <p className="mt-3 text-sm leading-7 text-[#4d433d]">
-            Use this workspace to open proof boards, edit drafts, accept collaborator
-            invites, and review print-ready previews.
+            Open books, add photos, make AI drafts, invite collaborators, and save
+            proof PDFs from here.
           </p>
           <div className="mt-6 rounded-[1.5rem] bg-[#1f1814] px-5 py-4 text-sm text-[#f7efe7]">
-            Proof export still happens from the mobile app today. The web workspace is
-            now fully tied to the same live project data.
+            Simple path: start the book, add photos, make the draft, save the proof.
           </div>
           <button
             type="button"
@@ -272,13 +342,85 @@ export function WorkspaceHomeClient({
         </section>
       ) : null}
 
+      <section className="surface rounded-[2rem] p-6">
+        <div className="eyebrow">Step 0</div>
+        <h2 className="display mt-2 text-4xl text-[#1f1814]">Start a trip book</h2>
+        <div className="mt-5 grid gap-3 md:grid-cols-2">
+          <label className="block">
+            <span className="text-xs uppercase tracking-[0.18em] text-[#7a6e65]">
+              Project type
+            </span>
+            <select
+              value={newProjectType}
+              onChange={(event) => setNewProjectType(event.target.value as ProjectType)}
+              className="mt-2 w-full rounded-[1.1rem] border border-[#00000014] bg-[#fffaf5] px-4 py-3 text-sm text-[#1f1814] outline-none transition-colors focus:border-[#8f4f2e44]"
+            >
+              <option value="trip">Trip</option>
+              <option value="yearbook">Yearbook</option>
+            </select>
+          </label>
+          <label className="block">
+            <span className="text-xs uppercase tracking-[0.18em] text-[#7a6e65]">
+              Title
+            </span>
+            <input
+              type="text"
+              value={newProjectTitle}
+              onChange={(event) => setNewProjectTitle(event.target.value)}
+              className="mt-2 w-full rounded-[1.1rem] border border-[#00000014] bg-[#fffaf5] px-4 py-3 text-sm text-[#1f1814] outline-none transition-colors focus:border-[#8f4f2e44]"
+            />
+          </label>
+          <label className="block md:col-span-2">
+            <span className="text-xs uppercase tracking-[0.18em] text-[#7a6e65]">
+              Subtitle
+            </span>
+            <input
+              type="text"
+              value={newProjectSubtitle}
+              onChange={(event) => setNewProjectSubtitle(event.target.value)}
+              className="mt-2 w-full rounded-[1.1rem] border border-[#00000014] bg-[#fffaf5] px-4 py-3 text-sm text-[#1f1814] outline-none transition-colors focus:border-[#8f4f2e44]"
+            />
+          </label>
+          <label className="block">
+            <span className="text-xs uppercase tracking-[0.18em] text-[#7a6e65]">
+              Start date
+            </span>
+            <input
+              type="date"
+              value={newProjectStartDate}
+              onChange={(event) => setNewProjectStartDate(event.target.value)}
+              className="mt-2 w-full rounded-[1.1rem] border border-[#00000014] bg-[#fffaf5] px-4 py-3 text-sm text-[#1f1814] outline-none transition-colors focus:border-[#8f4f2e44]"
+            />
+          </label>
+          <label className="block">
+            <span className="text-xs uppercase tracking-[0.18em] text-[#7a6e65]">
+              End date
+            </span>
+            <input
+              type="date"
+              value={newProjectEndDate}
+              onChange={(event) => setNewProjectEndDate(event.target.value)}
+              className="mt-2 w-full rounded-[1.1rem] border border-[#00000014] bg-[#fffaf5] px-4 py-3 text-sm text-[#1f1814] outline-none transition-colors focus:border-[#8f4f2e44]"
+            />
+          </label>
+        </div>
+        <button
+          type="button"
+          disabled={isCreatingProject || !newProjectTitle.trim()}
+          onClick={() => void createProject()}
+          className="mt-5 rounded-full border border-[#1f18141f] bg-[#1f1814] px-5 py-2.5 text-sm font-medium text-[#f8efe7] disabled:cursor-not-allowed disabled:opacity-50"
+        >
+          {isCreatingProject ? "Starting..." : "Start book"}
+        </button>
+      </section>
+
       {!isProjectsLoading && !projects.length ? (
         <section className="surface rounded-[2rem] p-6">
           <div className="eyebrow">No books yet</div>
-          <h2 className="display mt-2 text-3xl text-[#1f1814]">Start your first project on mobile.</h2>
+          <h2 className="display mt-2 text-3xl text-[#1f1814]">Start your first project.</h2>
           <p className="mt-3 max-w-2xl text-sm leading-7 text-[#5f544d]">
-            The live app no longer boots into sample books. Create the trip or yearbook on
-            your phone, upload photos there, and then come back here to edit the draft.
+            Create the trip or yearbook here or on your phone, then add photos and
+            make the first draft.
           </p>
         </section>
       ) : null}
@@ -300,7 +442,7 @@ export function WorkspaceHomeClient({
 
           <aside className="surface rounded-[2rem] p-6">
             <div className="eyebrow">Needs attention</div>
-            <h2 className="display mt-2 text-3xl text-[#1f1814]">Resolution queue</h2>
+            <h2 className="display mt-2 text-3xl text-[#1f1814]">Fix before print</h2>
             <div className="mt-6 space-y-4">
               {openTasks.length ? (
                 openTasks.map((task) => (
@@ -323,8 +465,8 @@ export function WorkspaceHomeClient({
                 ))
               ) : (
                 <p className="text-sm text-[#5e534b]">
-                  No unresolved metadata blockers. Your current books are ready for
-                  proof review.
+                  Nothing is blocking print review. Your current books are ready for
+                  the next step.
                 </p>
               )}
             </div>

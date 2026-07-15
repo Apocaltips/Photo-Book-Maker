@@ -2,11 +2,15 @@
 
 import type {
   BookDraftEditorState,
+  BookGenerationQuestionnaire,
+  BookGenerationQuestionnaireAnswers,
+  GenerationRun,
   Project,
 } from "@photo-book-maker/core";
 import type { Session } from "@supabase/supabase-js";
 import { useEffect, useMemo, useState } from "react";
 import { getBrowserSupabaseClient } from "@/lib/browser-supabase";
+import { DEV_AUTH_EMAIL, getDevAuthHeaders } from "@/lib/dev-auth";
 
 type WorkspaceAuthConfig = {
   supabaseAnonKey: string;
@@ -19,6 +23,15 @@ type DraftMutationPayload = {
   selectedThemeId?: string;
   subtitle?: string;
   title?: string;
+};
+
+type GenerationRunPayload = {
+  questionnaire?: Partial<BookGenerationQuestionnaireAnswers>;
+};
+
+type GenerationRunStatusPayload = {
+  revision: number;
+  run: GenerationRun;
 };
 
 type AuthInput = {
@@ -61,6 +74,14 @@ export function useProjectWorkspace({
       anonKey: supabaseAnonKey,
     });
   }, [authConfig.supabaseAnonKey, authConfig.supabaseUrl]);
+  const isDevAuthMode = !supabase;
+  const devAuthHeaders = useMemo(() => getDevAuthHeaders(), []);
+
+  function getAuthorizedHeaders() {
+    return session?.access_token
+      ? { Authorization: `Bearer ${session.access_token}` }
+      : devAuthHeaders;
+  }
 
   useEffect(() => {
     if (!supabase) {
@@ -92,15 +113,13 @@ export function useProjectWorkspace({
     };
   }, [supabase]);
 
-  async function fetchProjectWithToken(token: string) {
+  async function fetchProjectWithHeaders(headers: Record<string, string>) {
     setIsProjectLoading(true);
     setError(null);
 
     try {
       const response = await fetch(`/api/projects/${projectId}`, {
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
+        headers,
         cache: "no-store",
       });
       const body = (await response.json()) as { message?: string; project?: Project };
@@ -122,42 +141,60 @@ export function useProjectWorkspace({
   }
 
   useEffect(() => {
+    if (session?.access_token) {
+      fetchProjectWithHeaders(getAuthorizedHeaders()).catch(() => {
+        // Surface the message through hook state and keep the previous project if available.
+      });
+      return;
+    }
+
+    if (isDevAuthMode) {
+      fetchProjectWithHeaders(getAuthorizedHeaders()).catch(() => {
+        // Surface the message through hook state and keep the previous project if available.
+      });
+      return;
+    }
+
     if (!session?.access_token) {
       setProject(null);
       return;
     }
-
-    fetchProjectWithToken(session.access_token).catch(() => {
-      // Surface the message through hook state and keep the previous project if available.
-    });
-  }, [projectId, session?.access_token]);
+  }, [devAuthHeaders, isDevAuthMode, projectId, session?.access_token]);
 
   async function requestProjectUpdate(
     path: string,
     init: RequestInit,
   ) {
-    if (!session?.access_token) {
+    if (!session?.access_token && !isDevAuthMode) {
       throw new Error("Sign in to save book drafts across devices.");
     }
 
     setError(null);
 
+    const requestBody =
+      typeof init.body === "string"
+        ? JSON.stringify({
+            ...JSON.parse(init.body),
+            expectedRevision: project?.revision,
+          })
+        : init.body;
     const response = await fetch(path, {
       ...init,
+      body: requestBody,
       headers: {
-        Authorization: `Bearer ${session.access_token}`,
+        ...getAuthorizedHeaders(),
         "Content-Type": "application/json",
         ...(init.headers ?? {}),
       },
     });
-    const body = (await response.json()) as { message?: string; project?: Project };
+    const responseBody = (await response.json()) as { message?: string; project?: Project };
 
-    if (!response.ok || !body.project) {
-      throw new Error(body.message || "Unable to update this project.");
+    if (!response.ok || !responseBody.project) {
+      throw new Error(responseBody.message || "Unable to update this project.");
     }
 
-    setProject(body.project);
-    return body.project;
+    setProject(responseBody.project);
+    return responseBody.project;
   }
 
   async function saveDraft(payload: DraftMutationPayload) {
@@ -184,9 +221,79 @@ export function useProjectWorkspace({
     });
   }
 
+  async function fetchGenerationQuestions() {
+    const response = await fetch(`/api/projects/${projectId}/generation/questions`, {
+      headers: getAuthorizedHeaders(),
+      cache: "no-store",
+    });
+    const body = (await response.json()) as {
+      message?: string;
+      questionnaire?: BookGenerationQuestionnaire;
+    };
+
+    if (!response.ok || !body.questionnaire) {
+      throw new Error(body.message || "Unable to load AI designer questions.");
+    }
+
+    return body.questionnaire;
+  }
+
+  async function generateAiBook(payload: GenerationRunPayload = {}) {
+    const response = await fetch(`/api/projects/${projectId}/generation/run`, {
+      method: "POST",
+      body: JSON.stringify({
+        ...payload,
+        expectedRevision: project?.revision,
+      }),
+      headers: {
+        ...getAuthorizedHeaders(),
+        "Content-Type": "application/json",
+      },
+    });
+    const responseBody = (await response.json()) as {
+      message?: string;
+      project?: Project;
+      run?: GenerationRun;
+    };
+
+    if (!response.ok || !responseBody.project) {
+      throw new Error(responseBody.message || "Unable to generate this AI-designed book.");
+    }
+
+    setProject(responseBody.project);
+    return {
+      project: responseBody.project,
+      run: responseBody.run,
+    };
+  }
+
+  async function fetchGenerationRun(runId: string) {
+    const response = await fetch(
+      `/api/projects/${projectId}/generation/runs/${runId}`,
+      {
+        headers: getAuthorizedHeaders(),
+        cache: "no-store",
+      },
+    );
+    const body = (await response.json().catch(() => ({}))) as
+      | GenerationRunStatusPayload
+      | { message?: string };
+
+    if (!response.ok || !("run" in body)) {
+      const message = "message" in body ? body.message : null;
+      throw new Error(message || "Unable to refresh AI book progress.");
+    }
+
+    return body;
+  }
+
   async function signIn(input: AuthInput) {
     if (!supabase) {
-      throw new Error("Supabase browser auth is not configured.");
+      setSession({
+        access_token: "dev-token",
+        user: { email: DEV_AUTH_EMAIL },
+      } as Session);
+      return;
     }
 
     const { error: signInError } = await supabase.auth.signInWithPassword({
@@ -201,7 +308,11 @@ export function useProjectWorkspace({
 
   async function signUp(input: AuthInput) {
     if (!supabase) {
-      throw new Error("Supabase browser auth is not configured.");
+      setSession({
+        access_token: "dev-token",
+        user: { email: input.email.trim() || DEV_AUTH_EMAIL },
+      } as Session);
+      return;
     }
 
     const { error: signUpError } = await supabase.auth.signUp({
@@ -221,6 +332,7 @@ export function useProjectWorkspace({
 
   async function signOut() {
     if (!supabase) {
+      setSession(null);
       return;
     }
 
@@ -228,7 +340,7 @@ export function useProjectWorkspace({
   }
 
   const mode =
-    session?.access_token
+    session?.access_token || isDevAuthMode
       ? "authenticated"
       : supabase
         ? "auth-required"
@@ -236,19 +348,23 @@ export function useProjectWorkspace({
 
   return {
     error,
+    fetchGenerationQuestions,
+    generateAiBook,
     isAuthLoading,
     isProjectLoading,
     mode,
     project,
     refreshAiDraft,
-    refreshProject: session?.access_token
-      ? () => fetchProjectWithToken(session.access_token)
-      : null,
+    refreshProject:
+      session?.access_token || isDevAuthMode
+        ? () => fetchProjectWithHeaders(getAuthorizedHeaders())
+        : null,
     saveDraft,
     session,
     signIn,
     signOut,
     signUp,
+    fetchGenerationRun,
     publishDraft,
   };
 }

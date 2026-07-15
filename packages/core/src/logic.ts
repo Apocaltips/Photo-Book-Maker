@@ -6,15 +6,20 @@ import {
   isDemoProjectId,
 } from "./mock-data";
 import { normalizeProjectDraftState } from "./editorial";
+import { getTemplatesForPack } from "./templates";
 import type {
   AddLocalPhotoInput,
   AddProjectNoteInput,
+  BookMakingGuide,
+  BookMakingStep,
+  BookMakingStepId,
   BookPage,
   CreateProjectInput,
   PhotoAsset,
   Project,
   ProjectNote,
   ResolutionTaskStatus,
+  SpreadTemplate,
   YearbookCycle,
 } from "./types";
 
@@ -120,6 +125,76 @@ export function listOpenTasks(projects: Project[]) {
   );
 }
 
+export function getBookMakingGuide(project: Project): BookMakingGuide {
+  const summary = getProjectSummary(project);
+  const approvedPageCount = project.bookDraft.pages.filter((page) => page.approved).length;
+  const hasApprovedPhotos = summary.approvedPhotos > 0;
+  const hasAiDraft = project.generationRuns?.some((run) => run.status === "saved") ?? false;
+  const hasReviewableDraft = hasApprovedPhotos && summary.pageCount > 0;
+  const allPagesApproved = summary.pageCount > 0 && approvedPageCount === summary.pageCount;
+  const printReady = project.status === "ready_to_print" || project.status === "printed";
+  const hasOpenBlockers = summary.openTasks > 0;
+
+  const steps: BookMakingStep[] = [
+    {
+      id: "upload",
+      label: "1. Add photos",
+      actionLabel: "Choose trip photos",
+      detail: hasApprovedPhotos
+        ? `${summary.approvedPhotos} photo${summary.approvedPhotos === 1 ? "" : "s"} ready for the book.`
+        : "Pick the trip photos from your phone or computer. You can upload a batch at once.",
+      status: hasApprovedPhotos ? "done" : "current",
+    },
+    {
+      id: "design",
+      label: "2. Let AI design it",
+      actionLabel: "Make my book",
+      detail: hasAiDraft
+        ? "AI Designer saved a draft you can edit."
+        : "Answer a few simple questions, then the local AI selects layouts and writes captions.",
+      status: !hasApprovedPhotos ? "waiting" : hasAiDraft ? "done" : "current",
+    },
+    {
+      id: "review",
+      label: "3. Review the book",
+      actionLabel: "Review and edit",
+      detail: allPagesApproved
+        ? "Every spread is approved."
+        : "Open the editor to adjust captions, swap layouts, and approve spreads before printing.",
+      status: !hasReviewableDraft ? "waiting" : allPagesApproved ? "done" : "current",
+    },
+    {
+      id: "print",
+      label: "4. Save for print",
+      actionLabel: "Save print PDF",
+      detail: hasOpenBlockers
+        ? `${summary.openTasks} open fix${summary.openTasks === 1 ? "" : "es"} must be cleared before print.`
+        : printReady
+          ? "The proof is ready to save as a PDF and send to a print vendor."
+          : "Run the final check, then save the proof as a PDF.",
+      status: hasOpenBlockers
+        ? "blocked"
+        : printReady
+          ? "done"
+          : allPagesApproved
+            ? "current"
+            : "waiting",
+    },
+  ];
+
+  const activeStep =
+    steps.find((step) => step.status === "current") ??
+    steps.find((step) => step.status === "blocked") ??
+    steps[steps.length - 1]!;
+
+  return {
+    currentStepId: activeStep.id as BookMakingStepId,
+    nextActionLabel: activeStep.actionLabel,
+    nextStepDetail: activeStep.detail,
+    steps,
+  };
+}
+
 function slugifyEmail(email: string) {
   return email.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "");
 }
@@ -215,6 +290,7 @@ export function acceptProjectInvite(
   const nextMember = existingMember
     ? {
         ...existingMember,
+        id: input.acceptedByUserId,
         name,
         email: normalizedEmail,
         avatarLabel: existingMember.avatarLabel || getAvatarLabel(name, normalizedEmail),
@@ -1065,7 +1141,24 @@ export function addPhotosToProject(
   project: Project,
   photos: AddLocalPhotoInput[],
 ): Project {
-  const nextPhotos = photos.map<PhotoAsset>((asset, index) => {
+  const knownPhotoKeys = new Set(
+    project.photos.map((photo) =>
+      getImportedPhotoDuplicateKey({
+        contentHash: photo.contentHash,
+        title: photo.title,
+      }),
+    ),
+  );
+  const nextPhotos = photos.flatMap<PhotoAsset>((asset, index) => {
+    const duplicateKey = getImportedPhotoDuplicateKey({
+      contentHash: asset.contentHash,
+      title: asset.title,
+    });
+    if (knownPhotoKeys.has(duplicateKey)) {
+      return [];
+    }
+    knownPhotoKeys.add(duplicateKey);
+
     const capturedAt = asset.capturedAt ?? new Date().toISOString();
     const orientation =
       asset.width === asset.height
@@ -1074,10 +1167,11 @@ export function addPhotosToProject(
           ? "landscape"
           : "portrait";
 
-    return {
+    return [{
       id: `photo-local-${Date.now()}-${index}`,
       title: asset.title,
       uploaderId: asset.uploaderId,
+      contentHash: asset.contentHash,
       imageUri: asset.uri,
       storagePath: asset.storagePath,
       mimeType: asset.mimeType,
@@ -1097,6 +1191,13 @@ export function addPhotosToProject(
               ? "GPS metadata was detected during import."
               : "Waiting on location inference or manual confirmation.",
           ],
+      uploadState: {
+        batchId: asset.storagePath?.split("/").slice(0, 3).join("/") ?? undefined,
+        progress: 100,
+        remoteUrl: asset.uri,
+        status: asset.storagePath ? "uploaded" : "queued",
+        updatedAt: new Date().toISOString(),
+      },
       versions: [
         {
           id: `preview-${Date.now()}-${index}`,
@@ -1113,8 +1214,12 @@ export function addPhotosToProject(
           height: asset.height,
         },
       ],
-    };
+    }];
   });
+
+  if (!nextPhotos.length) {
+    return project;
+  }
 
   const resolutionTasks = [
     ...project.resolutionTasks,
@@ -1142,6 +1247,40 @@ export function addPhotosToProject(
     ),
     resolutionTasks,
   });
+}
+
+export function summarizePhotoImport(project: Project, photos: AddLocalPhotoInput[]) {
+  const knownPhotoKeys = new Set(
+    project.photos.map((photo) =>
+      getImportedPhotoDuplicateKey({
+        contentHash: photo.contentHash,
+        title: photo.title,
+      }),
+    ),
+  );
+  let addedCount = 0;
+  let skippedDuplicateCount = 0;
+
+  for (const photo of photos) {
+    const duplicateKey = getImportedPhotoDuplicateKey({
+      contentHash: photo.contentHash,
+      title: photo.title,
+    });
+
+    if (knownPhotoKeys.has(duplicateKey)) {
+      skippedDuplicateCount += 1;
+      continue;
+    }
+
+    knownPhotoKeys.add(duplicateKey);
+    addedCount += 1;
+  }
+
+  return {
+    addedCount,
+    attemptedCount: photos.length,
+    skippedDuplicateCount,
+  };
 }
 
 export function toggleMustIncludePhoto(project: Project, photoId: string): Project {
@@ -1178,8 +1317,11 @@ export function regenerateBookDraft(project: Project): Project {
     buildEditorialPages(normalizedProject, chapter),
   );
 
-  const pages = generatedPages.map((page) =>
-    preserveExistingEditorialChoices(normalizedProject, page),
+  const pages = applyPageTemplates(
+    normalizedProject,
+    generatedPages.map((page) =>
+      preserveExistingEditorialChoices(normalizedProject, page),
+    ),
   );
   const heroPages = pages.filter((page) =>
     ["full_bleed", "hero"].includes(page.style),
@@ -1200,4 +1342,45 @@ export function regenerateBookDraft(project: Project): Project {
       summary: `Curated ${pages.length}-spread draft across ${chapters.length} chapters from ${orderedPhotos.length} approved photos: ${heroPages} hero spreads, ${densePages} detail grids, and ${unconfirmedCopy} prefilled copy blocks ready for confirmation.`,
     },
   };
+}
+
+function getImportedPhotoDuplicateKey(input: { contentHash?: string; title: string }) {
+  const normalizedHash = input.contentHash?.trim().toLowerCase();
+  if (normalizedHash) {
+    return `hash:${normalizedHash}`;
+  }
+
+  return `title:${input.title.trim().toLowerCase().replace(/[^a-z0-9]+/g, "-")}`;
+}
+
+function chooseTemplateForPage(
+  templates: SpreadTemplate[],
+  page: BookPage,
+  index: number,
+) {
+  return (
+    templates.find((template) => template.layoutStyle === page.style) ??
+    templates[index % templates.length]
+  );
+}
+
+function applyPageTemplates(project: Project, pages: BookPage[]) {
+  const templates = getTemplatesForPack(project.draftEditorState?.templatePackId);
+  if (!templates.length) {
+    return pages;
+  }
+
+  return pages.map((page, index) => {
+    const template = chooseTemplateForPage(templates, page, index);
+    if (!template) {
+      return page;
+    }
+
+    return {
+      ...page,
+      style: template.layoutStyle,
+      templateId: template.id,
+      layoutVariation: template.layoutVariation,
+    };
+  });
 }

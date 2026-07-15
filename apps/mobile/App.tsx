@@ -1,4 +1,5 @@
 import { StatusBar } from "expo-status-bar";
+import * as FileSystem from "expo-file-system/legacy";
 import * as ImagePicker from "expo-image-picker";
 import * as Print from "expo-print";
 import * as Sharing from "expo-sharing";
@@ -8,6 +9,7 @@ import {
   Alert,
   Image,
   KeyboardAvoidingView,
+  LogBox,
   Platform,
   Pressable,
   SafeAreaView,
@@ -22,12 +24,16 @@ import {
   addPhotosRemote,
   createPhotoUploadTicketRemote,
   createProjectRemote,
+  fetchGenerationRunRemote,
+  fetchProjectRemote,
   fetchProjectsRemote,
   finalizeProjectRemote,
-  getResolvedApiBaseUrl,
+  generateAiBookRemote,
   hasRemoteApi,
   inviteCollaboratorRemote,
+  publishDraftRemote,
   resolveTaskRemote,
+  saveDraftRemote,
   setThemeRemote,
   toggleMustIncludeRemote,
   togglePageApprovalRemote,
@@ -38,6 +44,7 @@ import {
   buildAnniversaryYearEndDate,
   buildCalendarYearRange,
   formatProjectRange,
+  getBookMakingGuide,
   getProjectSummary,
   getYearbookCycleLabel,
   isDemoProjectId,
@@ -45,10 +52,17 @@ import {
   togglePageApproval,
   updateBookPageCopy,
   type Project,
+  type BookGenerationQuestionnaireAnswers,
+  type BookMakingGuide,
+  type GenerationRun,
   type ProjectType,
+  type PublishedBookDraft,
   type YearbookCycle,
-} from "./src/core";
-import { buildProofHtml } from "./src/proof";
+  buildProofHtml,
+  getBookDraftFormatId,
+  getProofPrintDimensions,
+  applyBookTemplatePack,
+} from "@photo-book-maker/core";
 import { MobileEditorTab } from "./src/editor-tab";
 import { localStorage } from "./src/local-storage";
 import {
@@ -62,13 +76,34 @@ import {
 type AppTab = "projects" | "tasks" | "editor" | "print";
 type SyncMode = "checking" | "shared" | "offline";
 type OpenTask = ReturnType<typeof listOpenTasks>[number];
+type ImportProgress = {
+  duplicates: number;
+  failed: number;
+  phase: "uploading" | "saving";
+  total: number;
+  uploaded: number;
+};
+
+const activeGenerationStatuses = new Set<GenerationRun["status"]>([
+  "queued",
+  "analyzing_photos",
+  "planning",
+  "validating",
+]);
+const generationPollIntervalMs = 3_000;
+const generationPollTimeoutMs = 20 * 60_000;
+
+function wait(milliseconds: number) {
+  return new Promise((resolve) => setTimeout(resolve, milliseconds));
+}
 
 const STORAGE_KEY = "photo-book-maker-state-v2";
+const MAX_LIBRARY_IMPORT_SELECTION = 200;
 const tabOrder: AppTab[] = ["projects", "tasks", "editor", "print"];
 const tabLabels: Record<AppTab, string> = {
   projects: "Books",
   tasks: "Fixes",
-  editor: "Web Edit",
+  editor: "Edit",
   print: "Export",
 };
 const palette = {
@@ -84,6 +119,122 @@ const palette = {
   blueSoft: "#dbe7f2",
   plumSoft: "#ebe4f1",
 };
+
+LogBox.ignoreLogs(["SafeAreaView has been deprecated"]);
+
+function getProofImageExtension(uri: string, mimeType?: string) {
+  if (mimeType?.includes("png")) {
+    return "png";
+  }
+
+  if (mimeType?.includes("webp")) {
+    return "webp";
+  }
+
+  const extension = uri.split("?")[0]?.match(/\.([a-z0-9]+)$/i)?.[1]?.toLowerCase();
+  if (extension && ["jpg", "jpeg", "png", "webp"].includes(extension)) {
+    return extension;
+  }
+
+  return "jpg";
+}
+
+function getProofImageMimeType(uri: string, mimeType?: string) {
+  if (mimeType) {
+    return mimeType;
+  }
+
+  const extension = getProofImageExtension(uri);
+  if (extension === "png") {
+    return "image/png";
+  }
+
+  if (extension === "webp") {
+    return "image/webp";
+  }
+
+  return "image/jpeg";
+}
+
+function getProofPrintSize(project: Project) {
+  return getProofPrintDimensions(getBookDraftFormatId(project.bookDraft.format));
+}
+
+function getProofPhotoIds(project: Project) {
+  return new Set(project.bookDraft.pages.flatMap((page) => page.photoIds));
+}
+
+async function resolvePrintableImageUri(
+  photo: Project["photos"][number],
+): Promise<string | null> {
+  const uri = photo.imageUri;
+  if (!uri || uri.startsWith("data:")) {
+    return uri ?? null;
+  }
+
+  if (!FileSystem.cacheDirectory) {
+    return null;
+  }
+
+  const mimeType = getProofImageMimeType(uri, photo.mimeType);
+  const extension = getProofImageExtension(uri, mimeType);
+  const cacheUri = `${FileSystem.cacheDirectory}photo-book-proof-${photo.id}-${Date.now()}.${extension}`;
+  let readableUri = uri;
+
+  try {
+    if (/^https?:\/\//i.test(uri)) {
+      const download = await FileSystem.downloadAsync(uri, cacheUri);
+      readableUri = download.uri;
+    }
+
+    const base64 = await FileSystem.readAsStringAsync(readableUri, {
+      encoding: FileSystem.EncodingType.Base64,
+    });
+
+    return `data:${mimeType};base64,${base64}`;
+  } catch (error) {
+    console.warn("Unable to embed proof image", photo.id, error);
+    return null;
+  }
+}
+
+async function buildPrintReadyProject(project: Project) {
+  const proofPhotoIds = getProofPhotoIds(project);
+  const imageCache = new Map<string, string>();
+  let failedEmbeds = 0;
+  const photos: Project["photos"] = [];
+
+  for (const photo of project.photos) {
+    if (!proofPhotoIds.has(photo.id) || !photo.imageUri) {
+      photos.push(photo);
+      continue;
+    }
+
+    const cachedUri = imageCache.get(photo.imageUri);
+    if (cachedUri) {
+      photos.push({ ...photo, imageUri: cachedUri });
+      continue;
+    }
+
+    const printableUri = await resolvePrintableImageUri(photo);
+    if (printableUri) {
+      imageCache.set(photo.imageUri, printableUri);
+      photos.push({ ...photo, imageUri: printableUri });
+      continue;
+    }
+
+    failedEmbeds += 1;
+    photos.push(photo);
+  }
+
+  return {
+    failedEmbeds,
+    project: {
+      ...project,
+      photos,
+    },
+  };
+}
 
 function parseExifDateTime(value: unknown) {
   if (typeof value !== "string") {
@@ -144,6 +295,40 @@ function parseExifCoordinate(value: unknown, ref: unknown) {
   }
 
   return null;
+}
+
+async function getPickedAssetContentHash(input: {
+  capturedAt: string;
+  fileName: string;
+  height?: number;
+  uri: string;
+  width?: number;
+  assetId?: string | null;
+  fileSize?: number | null;
+}) {
+  if (input.uri.startsWith("file://")) {
+    try {
+      const fileInfo = await FileSystem.getInfoAsync(input.uri, { md5: true });
+      if (fileInfo.exists && "md5" in fileInfo && fileInfo.md5) {
+        return `md5:${fileInfo.md5}`;
+      }
+    } catch {
+      // Fall back to stable picker metadata when the file hash is unavailable.
+    }
+  }
+
+  return [
+    "metadata",
+    input.assetId ?? "",
+    input.fileName,
+    input.fileSize ?? "",
+    input.width ?? "",
+    input.height ?? "",
+    input.capturedAt,
+  ]
+    .join(":")
+    .toLowerCase()
+    .replace(/[^a-z0-9:._-]+/g, "-");
 }
 
 function getProjectCoverPhoto(project: Project) {
@@ -243,6 +428,8 @@ export default function App() {
     null,
   );
   const [resolutionLocationInput, setResolutionLocationInput] = useState("");
+  const [importProgress, setImportProgress] = useState<ImportProgress | null>(null);
+  const [isAiGenerating, setIsAiGenerating] = useState(false);
 
   useEffect(() => {
     let isMounted = true;
@@ -399,7 +586,6 @@ export default function App() {
   const safeCalendarYear = Number.isFinite(Number.parseInt(draftCalendarYear, 10))
     ? Number.parseInt(draftCalendarYear, 10)
     : Number(draftStartDate.slice(0, 4));
-  const resolvedApiBaseUrl = getResolvedApiBaseUrl();
   const syncSummary =
     syncMode === "shared"
       ? `Shared account mode${lastSyncedAt ? ` - synced ${lastSyncedAt}` : ""}`
@@ -408,6 +594,7 @@ export default function App() {
         : "Checking shared store";
   const featuredPhoto = selectedProject ? getProjectCoverPhoto(selectedProject) : undefined;
   const featuredSummary = selectedProject ? getProjectSummary(selectedProject) : null;
+  const selectedBookGuide = selectedProject ? getBookMakingGuide(selectedProject) : null;
   const testerId =
     testerEmail.toLowerCase().replace(/[^a-z0-9]+/g, "-") || "tester";
   const plannedProjectDates =
@@ -440,6 +627,24 @@ export default function App() {
       current.map((project) =>
         project.id === updatedProject.id ? updatedProject : project,
       ),
+    );
+  }
+
+  function upsertLocalGenerationRun(projectId: string, run: GenerationRun) {
+    setProjects((current) =>
+      current.map((project) => {
+        if (project.id !== projectId) {
+          return project;
+        }
+
+        return {
+          ...project,
+          generationRuns: [
+            run,
+            ...(project.generationRuns ?? []).filter((entry) => entry.id !== run.id),
+          ],
+        };
+      }),
     );
   }
 
@@ -600,6 +805,7 @@ async function handleInviteCollaborator() {
     const remoteInvite = await inviteCollaboratorRemote(selectedProject.id, {
       name: inviteName,
       email: inviteEmail,
+      expectedRevision: selectedProject.revision,
     }).catch((caughtError) => {
       Alert.alert(
         "Invite could not be sent",
@@ -675,6 +881,7 @@ async function handleInviteCollaborator() {
 
     const remoteProject = await resolveTaskRemote(projectId, taskId, {
       locationLabel: trimmedLocation,
+      expectedRevision: project.revision,
     }).catch((caughtError) => {
       Alert.alert(
         "Task could not be resolved",
@@ -701,15 +908,25 @@ async function handleInviteCollaborator() {
       return;
     }
 
-    const localProject = togglePageApproval(selectedProject, pageId);
     const remoteProject = await togglePageApprovalRemote(
       selectedProject.id,
       pageId,
-    ).catch(() => null);
-    if (remoteProject) {
-      markSharedSync();
+      selectedProject.revision,
+    ).catch((caughtError) => {
+      Alert.alert(
+        "Spread approval failed",
+        caughtError instanceof Error
+          ? caughtError.message
+          : "The shared project service rejected this edit.",
+      );
+      return null;
+    });
+    if (!remoteProject) {
+      return;
     }
-    replaceProject(remoteProject ?? localProject);
+
+    markSharedSync();
+    replaceProject(remoteProject);
   }
 
   async function handleUpdatePageCopy(
@@ -720,14 +937,24 @@ async function handleInviteCollaborator() {
       return;
     }
 
-    const localProject = updateBookPageCopy(selectedProject, pageId, input);
-    const remoteProject = await updatePageCopyRemote(selectedProject.id, pageId, input).catch(
-      () => null,
-    );
-    if (remoteProject) {
-      markSharedSync();
+    const remoteProject = await updatePageCopyRemote(selectedProject.id, pageId, {
+      ...input,
+      expectedRevision: selectedProject.revision,
+    }).catch((caughtError) => {
+      Alert.alert(
+        "Spread copy failed",
+        caughtError instanceof Error
+          ? caughtError.message
+          : "The shared project service rejected this edit.",
+      );
+      return null;
+    });
+    if (!remoteProject) {
+      return;
     }
-    replaceProject(remoteProject ?? localProject);
+
+    markSharedSync();
+    replaceProject(remoteProject);
   }
 
   async function handleToggleMustInclude(photoId: string) {
@@ -738,6 +965,7 @@ async function handleInviteCollaborator() {
     const remoteProject = await toggleMustIncludeRemote(
       selectedProject.id,
       photoId,
+      selectedProject.revision,
     ).catch((caughtError) => {
       Alert.alert(
         "Photo update failed",
@@ -760,21 +988,233 @@ async function handleInviteCollaborator() {
       return;
     }
 
-    const localProject = {
-      ...selectedProject,
-      selectedThemeId: themeId,
-      bookDraft: {
-        ...selectedProject.bookDraft,
-        themeId,
-      },
-    };
-    const remoteProject = await setThemeRemote(selectedProject.id, themeId).catch(
-      () => null,
-    );
-    if (remoteProject) {
-      markSharedSync();
+    const remoteProject = await setThemeRemote(
+      selectedProject.id,
+      themeId,
+      selectedProject.revision,
+    ).catch((caughtError) => {
+      Alert.alert(
+        "Theme change failed",
+        caughtError instanceof Error
+          ? caughtError.message
+          : "The shared project service rejected this theme change.",
+      );
+      return null;
+    });
+    if (!remoteProject) {
+      return;
     }
-    replaceProject(remoteProject ?? localProject);
+
+    markSharedSync();
+    replaceProject(remoteProject);
+  }
+
+  async function handleTemplatePackSelect(templatePackId: string) {
+    if (!selectedProject) {
+      return;
+    }
+
+    const templatedProject = applyBookTemplatePack(selectedProject, templatePackId);
+    const remoteProject = await saveDraftRemote(selectedProject.id, {
+      bookDraft: templatedProject.bookDraft,
+      draftEditorState: templatedProject.draftEditorState,
+      expectedRevision: selectedProject.revision,
+      selectedThemeId: templatedProject.selectedThemeId,
+      subtitle: templatedProject.subtitle,
+      title: templatedProject.title,
+    }).catch((caughtError) => {
+      Alert.alert(
+        "Template change failed",
+        caughtError instanceof Error
+          ? caughtError.message
+          : "The shared project service rejected this template change.",
+      );
+      return null;
+    });
+    if (!remoteProject) {
+      return;
+    }
+
+    markSharedSync();
+    replaceProject(remoteProject);
+  }
+
+  async function handlePublishDraft(name: string) {
+    if (!selectedProject) {
+      return;
+    }
+
+    const remoteProject = await publishDraftRemote(selectedProject.id, {
+      bookDraft: selectedProject.bookDraft,
+      draftEditorState: selectedProject.draftEditorState,
+      expectedRevision: selectedProject.revision,
+      name,
+      selectedThemeId: selectedProject.selectedThemeId,
+      subtitle: selectedProject.subtitle,
+      title: selectedProject.title,
+    }).catch((caughtError) => {
+      Alert.alert(
+        "Draft publish failed",
+        caughtError instanceof Error
+          ? caughtError.message
+          : "The shared project service rejected this draft publish.",
+      );
+      return null;
+    });
+    if (!remoteProject) {
+      return;
+    }
+
+    markSharedSync();
+    replaceProject(remoteProject);
+  }
+
+  async function handleLoadPublishedDraft(snapshot: PublishedBookDraft) {
+    if (!selectedProject) {
+      return;
+    }
+
+    const remoteProject = await saveDraftRemote(selectedProject.id, {
+      bookDraft: snapshot.bookDraft,
+      draftEditorState: snapshot.editorState,
+      expectedRevision: selectedProject.revision,
+      selectedThemeId: snapshot.selectedThemeId,
+      subtitle: snapshot.projectSubtitle,
+      title: snapshot.projectTitle,
+    }).catch((caughtError) => {
+      Alert.alert(
+        "Draft load failed",
+        caughtError instanceof Error
+          ? caughtError.message
+          : "The shared project service rejected this draft load.",
+      );
+      return null;
+    });
+    if (!remoteProject) {
+      return;
+    }
+
+    markSharedSync();
+    replaceProject(remoteProject);
+  }
+
+  async function handleGenerateAiBook(
+    questionnaire?: Partial<BookGenerationQuestionnaireAnswers>,
+  ) {
+    if (!selectedProject || isAiGenerating) {
+      return;
+    }
+
+    setIsAiGenerating(true);
+    try {
+      const result = await generateAiBookRemote(selectedProject.id, {
+        expectedRevision: selectedProject.revision,
+        questionnaire,
+      });
+
+      if (!result?.project) {
+        return;
+      }
+
+      markSharedSync();
+      replaceProject(result.project);
+
+      if (result.run && activeGenerationStatuses.has(result.run.status)) {
+        upsertLocalGenerationRun(result.project.id, result.run);
+        Alert.alert(
+          "AI book started",
+          "The private local AI worker is making your book. Keep the app open to see the draft as soon as it is ready.",
+        );
+        const completedRun = await pollGenerationRun(result.project.id, result.run.id);
+
+        if (activeGenerationStatuses.has(completedRun.status)) {
+          return;
+        }
+
+        if (completedRun.status === "saved") {
+          const refreshedProject = await fetchProjectRemote(result.project.id);
+          if (refreshedProject) {
+            markSharedSync();
+            replaceProject(refreshedProject);
+            setActiveTab("editor");
+            Alert.alert(
+              "AI draft ready",
+              `${refreshedProject.bookDraft.pages.length} spreads are ready to review in the editor.`,
+            );
+          }
+          if (!refreshedProject) {
+            Alert.alert(
+              "AI draft ready",
+              "The worker saved the draft. Refresh this project to load the latest book.",
+            );
+          }
+          return;
+        }
+
+        if (completedRun.status === "failed") {
+          Alert.alert(
+            "AI Designer failed",
+            completedRun.errorMessage ??
+              "The AI book job failed safely and did not overwrite the draft.",
+          );
+          return;
+        }
+      }
+
+      if (result.run?.status === "failed") {
+        Alert.alert(
+          "AI Designer failed",
+          result.run.errorMessage ??
+            "The AI book job failed safely and did not overwrite the draft.",
+        );
+        return;
+      }
+
+      setActiveTab("editor");
+      Alert.alert(
+        "AI draft generated",
+        `${result.project.bookDraft.pages.length} spreads are ready to review in the editor.`,
+      );
+    } catch (caughtError) {
+      Alert.alert(
+        "AI Designer failed",
+        caughtError instanceof Error
+          ? caughtError.message
+          : "The local AI generation service could not build this book.",
+      );
+    } finally {
+      setIsAiGenerating(false);
+    }
+  }
+
+  async function pollGenerationRun(projectId: string, runId: string) {
+    const startedAt = Date.now();
+    let latestRun: GenerationRun | null = null;
+
+    while (Date.now() - startedAt < generationPollTimeoutMs) {
+      await wait(generationPollIntervalMs);
+      const status = await fetchGenerationRunRemote(projectId, runId);
+      if (!status?.run) {
+        throw new Error("Unable to refresh AI book progress.");
+      }
+
+      latestRun = status.run;
+      upsertLocalGenerationRun(projectId, latestRun);
+
+      if (!activeGenerationStatuses.has(latestRun.status)) {
+        return latestRun;
+      }
+    }
+
+    if (!latestRun) {
+      throw new Error("The AI book job did not return progress yet.");
+    }
+
+    Alert.alert(
+      "AI book still running",
+      "The private local AI worker is still making your book. Come back to this project and refresh when it finishes.",
+    );
+    return latestRun;
   }
 
   async function handleFinalizeProject() {
@@ -782,8 +1222,10 @@ async function handleInviteCollaborator() {
       return;
     }
 
-    const remoteProject = await finalizeProjectRemote(selectedProject.id).catch(
-      (caughtError) => {
+    const remoteProject = await finalizeProjectRemote(
+      selectedProject.id,
+      selectedProject.revision,
+    ).catch((caughtError) => {
         Alert.alert(
           "Finalize check failed",
           caughtError instanceof Error
@@ -791,8 +1233,7 @@ async function handleInviteCollaborator() {
             : "The shared project service could not run the finalize check.",
         );
         return null;
-      },
-    );
+      });
     if (!remoteProject) {
       return;
     }
@@ -807,6 +1248,14 @@ async function handleInviteCollaborator() {
       return;
     }
 
+    if (importProgress) {
+      Alert.alert(
+        "Import already running",
+        "Wait for the current photo batch to finish before starting another one.",
+      );
+      return;
+    }
+
     const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (!permission.granted) {
       Alert.alert(
@@ -818,20 +1267,38 @@ async function handleInviteCollaborator() {
 
     const result = await ImagePicker.launchImageLibraryAsync({
       allowsMultipleSelection: true,
+      base64: false,
+      defaultTab: Platform.OS === "android" ? "albums" : undefined,
       mediaTypes: ["images"],
       exif: true,
-      quality: 1,
+      legacy: false,
+      orderedSelection: true,
+      quality: 0.92,
+      selectionLimit: MAX_LIBRARY_IMPORT_SELECTION,
     });
 
     if (result.canceled || !result.assets.length) {
       return;
     }
 
-    let importedPhotos;
+    const importedPhotos: Parameters<typeof addPhotosRemote>[1] = [];
+    const failedFileNames: string[] = [];
+    const duplicateFileNames: string[] = [];
+    const knownContentHashes = new Set(
+      selectedProject.photos
+        .map((photo) => photo.contentHash?.trim().toLowerCase())
+        .filter((hash): hash is string => Boolean(hash)),
+    );
+    setImportProgress({
+      duplicates: 0,
+      failed: 0,
+      phase: "uploading",
+      total: result.assets.length,
+      uploaded: 0,
+    });
 
-    try {
-      importedPhotos = await Promise.all(
-        result.assets.map(async (asset, index) => {
+    for (const [index, asset] of result.assets.entries()) {
+      try {
         const capturedAt =
           parseExifDateTime(asset.exif?.DateTimeOriginal) ??
           parseExifDateTime(asset.exif?.DateTimeDigitized) ??
@@ -846,7 +1313,9 @@ async function handleInviteCollaborator() {
           asset.exif?.GPSLongitudeRef,
         );
         const hasExactGps =
-          typeof latitude === "number" && typeof longitude === "number";
+          typeof latitude === "number" &&
+          typeof longitude === "number" &&
+          !(Math.abs(latitude) < 0.0001 && Math.abs(longitude) < 0.0001);
         const gpsLabel = hasExactGps
           ? `GPS ${latitude.toFixed(4)}, ${longitude.toFixed(4)}`
           : undefined;
@@ -856,6 +1325,23 @@ async function handleInviteCollaborator() {
         const contentType = asset.mimeType ?? "image/jpeg";
         const fileName =
           asset.fileName ?? `imported-${Date.now()}-${index}.${contentType.split("/")[1] ?? "jpg"}`;
+        const contentHash = await getPickedAssetContentHash({
+          assetId: asset.assetId,
+          capturedAt,
+          fileName,
+          fileSize: asset.fileSize,
+          height: asset.height,
+          uri: asset.uri,
+          width: asset.width,
+        });
+        const normalizedContentHash = contentHash.trim().toLowerCase();
+
+        if (knownContentHashes.has(normalizedContentHash)) {
+          duplicateFileNames.push(fileName);
+          continue;
+        }
+        knownContentHashes.add(normalizedContentHash);
+
         const remoteUpload =
           hasRemoteApi() && !asset.uri.startsWith("http")
             ? await createPhotoUploadTicketRemote(selectedProject.id, {
@@ -863,9 +1349,10 @@ async function handleInviteCollaborator() {
                 contentType,
               })
                 .then((upload) =>
-                  upload ? uploadFileToRemoteStorage(upload, asset.uri) : null,
+                  upload
+                    ? uploadFileToRemoteStorage(upload, asset.uri, asset.base64)
+                    : null,
                 )
-                .catch(() => null)
             : null;
 
         if (!remoteUpload && !asset.uri.startsWith("http")) {
@@ -874,7 +1361,8 @@ async function handleInviteCollaborator() {
           );
         }
 
-        return {
+        importedPhotos.push({
+          contentHash,
           title: fileName.replace(/\.[^.]+$/, "") || `Imported photo ${index + 1}`,
           uri: remoteUpload?.downloadUrl ?? asset.uri,
           storagePath: remoteUpload?.storagePath,
@@ -892,21 +1380,54 @@ async function handleInviteCollaborator() {
               : "No GPS metadata found during import.",
           ],
           uploaderId: getCurrentMemberId(selectedProject),
-        };
-        }),
+        });
+      } catch {
+        failedFileNames.push(
+          asset.fileName ?? `photo ${index + 1}`,
+        );
+      }
+
+      setImportProgress((current) =>
+        current
+          ? {
+              ...current,
+              duplicates: duplicateFileNames.length,
+              failed: failedFileNames.length,
+              uploaded: importedPhotos.length,
+            }
+          : current,
       );
-    } catch (caughtError) {
+    }
+
+    if (!importedPhotos.length) {
+      setImportProgress(null);
       Alert.alert(
-        "Photo upload failed",
-        caughtError instanceof Error
-          ? caughtError.message
-          : "The live shared photo upload did not complete.",
+        "No photos uploaded",
+        duplicateFileNames.length
+          ? `${duplicateFileNames.length} duplicate photo${duplicateFileNames.length === 1 ? "" : "s"} already ${duplicateFileNames.length === 1 ? "exists" : "exist"} in this book.`
+          : failedFileNames.length
+          ? `${failedFileNames.length} photos failed before the project could be updated.`
+          : "The selected album did not return any importable photos.",
       );
       return;
     }
 
-    const remoteProject = await addPhotosRemote(selectedProject.id, importedPhotos).catch(
-      (caughtError) => {
+    setImportProgress((current) =>
+      current
+        ? {
+            ...current,
+            duplicates: duplicateFileNames.length,
+            failed: failedFileNames.length,
+            phase: "saving",
+          }
+        : current,
+    );
+
+    const remoteProject = await addPhotosRemote(
+      selectedProject.id,
+      importedPhotos,
+      selectedProject.revision,
+    ).catch((caughtError) => {
         Alert.alert(
           "Photo import failed",
           caughtError instanceof Error
@@ -914,14 +1435,29 @@ async function handleInviteCollaborator() {
             : "The shared project service could not save these photos.",
         );
         return null;
-      },
-    );
+      });
+    setImportProgress(null);
     if (!remoteProject) {
       return;
     }
 
     markSharedSync();
     replaceProject(remoteProject);
+    setSelectedProjectId(remoteProject.id);
+    if (failedFileNames.length || duplicateFileNames.length) {
+      Alert.alert(
+        failedFileNames.length ? "Partial import saved" : "Duplicate photos skipped",
+        `${importedPhotos.length} photo${importedPhotos.length === 1 ? "" : "s"} were saved.${
+          duplicateFileNames.length
+            ? ` ${duplicateFileNames.length} duplicate${duplicateFileNames.length === 1 ? "" : "s"} already in this book ${duplicateFileNames.length === 1 ? "was" : "were"} skipped.`
+            : ""
+        }${
+          failedFileNames.length
+            ? ` ${failedFileNames.length} photo${failedFileNames.length === 1 ? "" : "s"} failed upload and can be retried.`
+            : ""
+        }`,
+      );
+    }
   }
 
   async function handleAddNote() {
@@ -934,8 +1470,10 @@ async function handleInviteCollaborator() {
       title: noteTitle.trim(),
       body: noteBody.trim(),
     };
-    const remoteProject = await addNoteRemote(selectedProject.id, input).catch(
-      (caughtError) => {
+    const remoteProject = await addNoteRemote(selectedProject.id, {
+      ...input,
+      expectedRevision: selectedProject.revision,
+    }).catch((caughtError) => {
         Alert.alert(
           "Note could not be saved",
           caughtError instanceof Error
@@ -943,8 +1481,7 @@ async function handleInviteCollaborator() {
             : "The shared project service rejected this note.",
         );
         return null;
-      },
-    );
+      });
     if (!remoteProject) {
       return;
     }
@@ -975,10 +1512,23 @@ async function handleInviteCollaborator() {
       return;
     }
 
+    const { failedEmbeds, project: printReadyProject } = await buildPrintReadyProject(
+      selectedProject,
+    );
+    const printSize = getProofPrintSize(printReadyProject);
     const { uri } = await Print.printToFileAsync({
-      html: buildProofHtml(selectedProject),
+      html: buildProofHtml(printReadyProject),
+      width: printSize.width,
+      height: printSize.height,
       base64: false,
     });
+
+    if (failedEmbeds > 0) {
+      Alert.alert(
+        "Proof saved with missing photos",
+        `${failedEmbeds} photo${failedEmbeds === 1 ? "" : "s"} could not be embedded before export. Reopen the book while connected to the shared store and try again if a page looks empty.`,
+      );
+    }
 
     if (await Sharing.isAvailableAsync()) {
       await Sharing.shareAsync(uri, {
@@ -989,6 +1539,23 @@ async function handleInviteCollaborator() {
     }
 
     Alert.alert("Proof exported", uri);
+  }
+
+  function handleNextGuideAction(guide: BookMakingGuide) {
+    switch (guide.currentStepId) {
+      case "upload":
+        void handlePickPhotos();
+        return;
+      case "design":
+        void handleGenerateAiBook();
+        return;
+      case "review":
+        setActiveTab("editor");
+        return;
+      case "print":
+        setActiveTab("print");
+        return;
+    }
   }
 
   if (!authReady) {
@@ -1065,7 +1632,6 @@ async function handleInviteCollaborator() {
                 </Text>
                 <Text style={styles.syncSummary}>
                   {syncSummary}
-                  {resolvedApiBaseUrl ? ` - API ${resolvedApiBaseUrl}` : ""}
                 </Text>
               </View>
 
@@ -1106,6 +1672,13 @@ async function handleInviteCollaborator() {
                 value={featuredSummary?.approvedPhotos ?? 0}
               />
             </View>
+            {selectedBookGuide ? (
+              <NextBookStepCard
+                guide={selectedBookGuide}
+                isGenerating={isAiGenerating}
+                onPress={() => handleNextGuideAction(selectedBookGuide)}
+              />
+            ) : null}
             <View style={styles.inlineActionRow}>
               <PrimaryButton
                 label="Refresh shared state"
@@ -1153,6 +1726,7 @@ async function handleInviteCollaborator() {
               onCreateProject={handleCreateProject}
               onInviteCollaborator={handleInviteCollaborator}
               onAddNote={handleAddNote}
+              importProgress={importProgress}
               onPickPhotos={handlePickPhotos}
               onOpenEditor={() => setActiveTab("editor")}
               onSelectProject={(projectId) => {
@@ -1180,7 +1754,15 @@ async function handleInviteCollaborator() {
           {activeTab === "editor" ? (
             <MobileEditorTab
               project={selectedProject}
+              isAiGenerating={isAiGenerating}
+              onGenerateAiBook={handleGenerateAiBook}
               onExportProof={handleExportProof}
+              onSelectTemplatePack={handleTemplatePackSelect}
+              onSelectTheme={handleThemeSelect}
+              onPublishDraft={handlePublishDraft}
+              onLoadPublishedDraft={handleLoadPublishedDraft}
+              onTogglePage={handleTogglePage}
+              onUpdatePageCopy={handleUpdatePageCopy}
             />
           ) : null}
 
@@ -1189,6 +1771,7 @@ async function handleInviteCollaborator() {
               project={selectedProject}
               onFinalizeProject={handleFinalizeProject}
               onExportProof={handleExportProof}
+              onOpenEditor={() => setActiveTab("editor")}
             />
           ) : null}
         </ScrollView>
@@ -1218,6 +1801,32 @@ async function handleInviteCollaborator() {
         </View>
       </KeyboardAvoidingView>
     </SafeAreaView>
+  );
+}
+
+function NextBookStepCard({
+  guide,
+  isGenerating,
+  onPress,
+}: {
+  guide: BookMakingGuide;
+  isGenerating: boolean;
+  onPress: () => void;
+}) {
+  return (
+    <View style={styles.nextStepCard}>
+      <View style={styles.nextStepCopy}>
+        <Text style={styles.nextStepEyebrow}>Next step</Text>
+        <Text style={styles.nextStepTitle}>{guide.nextActionLabel}</Text>
+        <Text style={styles.nextStepBody}>{guide.nextStepDetail}</Text>
+      </View>
+      <PrimaryButton
+        label={isGenerating ? "Making the book..." : guide.nextActionLabel}
+        onPress={onPress}
+        compact
+        dark
+      />
+    </View>
   );
 }
 
@@ -1258,6 +1867,7 @@ function ProjectsTab({
   onCreateProject,
   onInviteCollaborator,
   onAddNote,
+  importProgress,
   onPickPhotos,
   onOpenEditor,
   onSelectProject,
@@ -1299,6 +1909,7 @@ function ProjectsTab({
   onCreateProject: () => void;
   onInviteCollaborator: () => void;
   onAddNote: () => void;
+  importProgress: ImportProgress | null;
   onPickPhotos: () => void;
   onOpenEditor: () => void;
   onSelectProject: (projectId: string) => void;
@@ -1316,7 +1927,7 @@ function ProjectsTab({
       <SurfaceCard
         title="Your book board"
         subtitle="Library"
-        body="Trips and yearly books stay in one visual board so you can see what is still collecting, what needs fixes, and what is almost ready to print."
+        body="Pick a book, add photos, make the first draft, and save the print proof from one board."
       >
         <View style={styles.libraryPillRow}>
           <LibraryPill label="Working" value={workingProjects.length} />
@@ -1339,10 +1950,29 @@ function ProjectsTab({
             </View>
 
             <View style={styles.featuredWorkspaceActions}>
-              <PrimaryButton label="Import photos" onPress={onPickPhotos} compact />
-              <PrimaryButton label="Open web editor" onPress={onOpenEditor} compact />
+              <PrimaryButton
+                label={importProgress ? "Importing..." : "Add photos"}
+                onPress={onPickPhotos}
+                compact
+              />
+              <PrimaryButton label="Edit book" onPress={onOpenEditor} compact />
               <PrimaryButton label="Save note" onPress={onAddNote} compact dark />
             </View>
+            {importProgress ? (
+              <Text style={styles.importProgressText}>
+                {importProgress.phase === "saving"
+                  ? `Saving ${importProgress.uploaded} uploaded photos to the shared book...`
+                  : `Uploading ${importProgress.uploaded}/${importProgress.total} photos${
+                      importProgress.duplicates
+                        ? ` - ${importProgress.duplicates} duplicate${importProgress.duplicates === 1 ? "" : "s"} skipped`
+                        : ""
+                    }${
+                      importProgress.failed
+                        ? ` - ${importProgress.failed} failed`
+                        : ""
+                    }`}
+              </Text>
+            ) : null}
           </View>
         ) : null}
 
@@ -1396,7 +2026,7 @@ function ProjectsTab({
       <SurfaceCard
         title="Create a new project"
         subtitle="Start on phone"
-        body="Start a trip for one weekend or a yearbook that rolls on a calendar year, dating anniversary, or wedding anniversary."
+        body="Name the trip or yearbook, then add the photos you want printed."
       >
         {testerProfileLocked ? (
           <View style={styles.accountCard}>
@@ -1534,12 +2164,12 @@ function ProjectsTab({
         <>
           <SurfaceCard
             title={`${selectedProject.title} workspace`}
-            subtitle="Capture and curation"
-            body="Keep the selected book moving by importing more photos, saving memory notes, and promoting the frames that really have to make the final cut."
+            subtitle="Photos and notes"
+            body="Add more photos, save memory notes, and mark the frames that need to make the final book."
           >
             <View style={styles.inlineActionRow}>
-              <PrimaryButton label="Import from library" onPress={onPickPhotos} />
-              <PrimaryButton label="Open web editor" onPress={onOpenEditor} compact />
+              <PrimaryButton label="Add photos from phone" onPress={onPickPhotos} />
+              <PrimaryButton label="Edit book" onPress={onOpenEditor} compact />
               <PrimaryButton label="Add note" onPress={onAddNote} compact dark />
             </View>
             <Field
@@ -1603,7 +2233,7 @@ function ProjectsTab({
           <SurfaceCard
             title={`${selectedProject.title} collaborators`}
             subtitle="Invite workflow"
-            body="Only the owner finalizes, but collaborators can upload, tag, and resolve blockers. Invites stay pending until the recipient joins from their email link."
+            body="Only the owner finalizes, but collaborators can upload, tag favorites, and fix missing details. Invites stay pending until the recipient joins from their email link."
           >
             <View style={styles.memberGrid}>
               {selectedProject.members.map((member) => (
@@ -1786,9 +2416,9 @@ function TasksTab({
 }) {
   return (
     <SurfaceCard
-      title="Resolution queue"
-      subtitle="Export blockers"
-      body="Location gaps, unknown face clusters, and ordering ambiguity all stop the final export until somebody fixes them."
+      title="Things to fix before printing"
+      subtitle="Open fixes"
+      body="Missing locations, unclear people, and ordering questions should be fixed before the final PDF."
     >
       <View style={styles.cardStack}>
         {tasks.map((task) => (
@@ -1837,7 +2467,7 @@ function TasksTab({
                 onPress={() => onStartTaskResolution(task)}
               >
                 <Text style={styles.inlineButtonText}>
-                  {task.type === "location" ? "Add location" : "Resolve"}
+                  {task.type === "location" ? "Add location" : "Mark fixed"}
                 </Text>
               </Pressable>
             </View>
@@ -1845,7 +2475,7 @@ function TasksTab({
         ))}
         {tasks.length === 0 ? (
           <Text style={styles.emptyState}>
-            No blockers left. This project set is clean enough to move straight into proofing.
+            No open fixes. This project set is ready for proof review.
           </Text>
         ) : null}
       </View>
@@ -1975,7 +2605,7 @@ function EditorTab({
       </SurfaceCard>
 
       <SurfaceCard
-        title="Draft pages"
+        title="Book spreads"
         subtitle="Approve or tweak"
         body="Every spread should feel professionally curated. Tighten the title, refine the caption, and explicitly confirm the copy that is ready to print."
       >
@@ -2135,30 +2765,41 @@ function PrintTab({
   project,
   onFinalizeProject,
   onExportProof,
+  onOpenEditor,
 }: {
   project?: Project;
   onFinalizeProject: () => void;
   onExportProof: () => void;
+  onOpenEditor: () => void;
 }) {
   if (!project) {
     return null;
   }
 
   const summary = getProjectSummary(project);
-  const confirmedCopyCount = project.bookDraft.pages.filter(
-    (page) => page.copyStatus === "confirmed",
-  ).length;
+  const draftSpreadCount = project.bookDraft.pages.length;
+  const approvedSpreadCount = project.bookDraft.pages.filter((page) => page.approved).length;
+  const remainingApprovalCount = Math.max(draftSpreadCount - approvedSpreadCount, 0);
+  const hasOpenFixes = summary.openTasks > 0;
 
   return (
     <View style={styles.sectionStack}>
       <SurfaceCard
-        title="Export proof package"
+        title="Save the print proof"
         subtitle="Print prep"
-        body="This is now an honest export workflow. Run the finalize check, clear remaining blockers, and export the proof PDF you will actually review or send to a print vendor."
+        body={
+          remainingApprovalCount
+            ? "Review every spread before treating this book as ready for print."
+            : "Run the final check, clear any open fixes, and export the PDF proof for review."
+        }
       >
         <View style={styles.inlineActionRow}>
           <PrimaryButton label="Run finalize check" onPress={onFinalizeProject} compact />
-          <PrimaryButton label="Export proof PDF" onPress={onExportProof} compact dark />
+          {remainingApprovalCount ? (
+            <PrimaryButton label="Review spreads" onPress={onOpenEditor} compact dark />
+          ) : (
+            <PrimaryButton label="Export proof PDF" onPress={onExportProof} compact dark />
+          )}
         </View>
         <Text style={styles.finalizeText}>Current project status: {project.status}</Text>
       </SurfaceCard>
@@ -2167,14 +2808,28 @@ function PrintTab({
         <Text style={styles.printEyebrow}>Ready-to-print check</Text>
         <Text style={styles.printTitle}>{project.title}</Text>
         <Text style={styles.printBody}>
-          {confirmedCopyCount} confirmed spreads - {summary.approvedPhotos} approved photos
+          {draftSpreadCount} draft spreads - {summary.approvedPhotos} photos ready
         </Text>
+        <Text style={styles.printBody}>{approvedSpreadCount} spreads marked approved.</Text>
+        {remainingApprovalCount ? (
+          <Text style={styles.printBody}>
+            {remainingApprovalCount} spread{remainingApprovalCount === 1 ? "" : "s"} still need
+            approval before print.
+          </Text>
+        ) : null}
         <Text style={styles.printBody}>
-          {summary.openTasks === 0
-            ? "No unresolved metadata blockers remain."
-            : `${summary.openTasks} blockers still need resolution before you treat this as print-ready.`}
+          {!hasOpenFixes
+            ? "No open fixes remain."
+            : `${summary.openTasks} open fix${summary.openTasks === 1 ? "" : "es"} must be cleared before you treat this as print-ready.`}
         </Text>
-        <Text style={styles.printStatus}>Next step: export and review the proof PDF.</Text>
+        <Text style={styles.printStatus}>
+          Next step:{" "}
+          {remainingApprovalCount
+            ? "review and approve every spread."
+            : hasOpenFixes
+              ? "clear the open fixes."
+              : "export the proof PDF."}
+        </Text>
       </View>
     </View>
   );
@@ -2212,9 +2867,14 @@ function BookTile({
         <Image source={{ uri: coverPhoto.imageUri }} style={styles.bookTileImage} />
       ) : (
         <View style={[styles.bookTileFallback, { backgroundColor: `${accent}22` }]}>
-          <Text style={[styles.bookTileFallbackText, { color: accent }]}>
-            {project.type === "trip" ? "Trip edit" : "Yearbook"}
-          </Text>
+          <View style={[styles.bookTileFallbackBand, { backgroundColor: `${accent}55` }]} />
+          <View
+            style={[
+              styles.bookTileFallbackBand,
+              styles.bookTileFallbackBandShort,
+              { backgroundColor: `${accent}33` },
+            ]}
+          />
         </View>
       )}
       <View style={styles.bookTileScrim} />
@@ -2495,6 +3155,36 @@ const styles = StyleSheet.create({
     flexWrap: "wrap",
     gap: 10,
     marginTop: 18,
+  },
+  nextStepCard: {
+    marginTop: 16,
+    borderRadius: 24,
+    borderWidth: 1,
+    borderColor: "rgba(46,92,77,0.18)",
+    backgroundColor: "rgba(255,255,255,0.78)",
+    padding: 16,
+    gap: 12,
+  },
+  nextStepCopy: {
+    gap: 5,
+  },
+  nextStepEyebrow: {
+    fontSize: 11,
+    letterSpacing: 1.8,
+    textTransform: "uppercase",
+    color: palette.forest,
+    fontWeight: "700",
+  },
+  nextStepTitle: {
+    fontSize: 22,
+    lineHeight: 25,
+    color: palette.ink,
+    fontWeight: "700",
+  },
+  nextStepBody: {
+    fontSize: 14,
+    lineHeight: 22,
+    color: "#5d524a",
   },
   statCard: {
     width: "48%",
@@ -2789,6 +3479,16 @@ const styles = StyleSheet.create({
     flexWrap: "wrap",
     gap: 10,
   },
+  importProgressText: {
+    borderRadius: 16,
+    backgroundColor: palette.forestSoft,
+    color: palette.forest,
+    fontSize: 13,
+    fontWeight: "700",
+    lineHeight: 20,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+  },
   galleryHeader: {
     gap: 8,
   },
@@ -2855,14 +3555,17 @@ const styles = StyleSheet.create({
   },
   bookTileFallback: {
     ...StyleSheet.absoluteFillObject,
-    alignItems: "center",
-    justifyContent: "center",
+    gap: 10,
+    justifyContent: "flex-start",
+    padding: 18,
   },
-  bookTileFallbackText: {
-    fontSize: 12,
-    textTransform: "uppercase",
-    letterSpacing: 2,
-    fontWeight: "700",
+  bookTileFallbackBand: {
+    borderRadius: 999,
+    height: 9,
+    width: "70%",
+  },
+  bookTileFallbackBandShort: {
+    width: "48%",
   },
   bookTileScrim: {
     ...StyleSheet.absoluteFillObject,

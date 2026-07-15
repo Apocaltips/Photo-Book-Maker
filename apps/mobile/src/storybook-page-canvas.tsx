@@ -7,7 +7,7 @@ import {
   View,
   type ViewStyle,
 } from "react-native";
-import type { BookPage, PhotoAsset, Project } from "./core";
+import type { BookPage, PhotoAsset, Project } from "@photo-book-maker/core";
 import {
   getCanvasAspectRatio,
   mapBookFormatToLayoutFormat,
