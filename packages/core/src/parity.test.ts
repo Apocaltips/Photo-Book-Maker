@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   BOOK_TEMPLATE_PACKS,
   SPREAD_TEMPLATES,
+  acceptProjectInvite,
   addPhotosToProject,
   applyBookTemplatePack,
   buildBookGenerationQuestionnaire,
@@ -11,6 +12,7 @@ import {
   getBookMakingGuide,
   getAiTemplateCatalogForPrompt,
   getPhotoInsightCacheKey,
+  inviteCollaborator,
   listOpenTasks,
   markGenerationRunFailed,
   materializeAiBookPlan,
@@ -85,6 +87,62 @@ describe("project identity", () => {
     expect(project.ownerId).toBe("supabase-user-id");
     expect(project.members[0]?.id).toBe("supabase-user-id");
     expect(project.invites[0]?.acceptedByUserId).toBe("supabase-user-id");
+  });
+
+  it("binds an accepted collaborator to the authenticated user identity", () => {
+    const project = createProjectRecord({
+      type: "trip",
+      title: "Shared Trip",
+      subtitle: "A private shared book",
+      startDate: "2026-07-11",
+      endDate: "2026-07-14",
+      timezone: "America/Denver",
+      ownerName: "Vince",
+      ownerEmail: "vince@example.com",
+      ownerId: "owner-user-id",
+    });
+    const invited = inviteCollaborator(project, {
+      name: "Family Friend",
+      email: "friend@example.com",
+      sentAt: "2026-07-14T12:00:00.000Z",
+      token: "hashed-token",
+    });
+    const invite = invited.invites.find(
+      (entry) => entry.email === "friend@example.com",
+    );
+
+    expect(invite).toBeTruthy();
+
+    const accepted = acceptProjectInvite(
+      {
+        ...invited,
+        members: [
+          ...invited.members,
+          {
+            id: "legacy-email-member",
+            name: "Family Friend",
+            email: "friend@example.com",
+            role: "collaborator",
+            avatarLabel: "F",
+            homeBase: "Legacy membership",
+          },
+        ],
+      },
+      {
+        inviteId: invite!.id,
+        acceptedAt: "2026-07-14T12:05:00.000Z",
+        acceptedByUserId: "supabase-friend-id",
+        acceptedEmail: "friend@example.com",
+        acceptedName: "Family Friend",
+      },
+    );
+
+    expect(
+      accepted.members.find((member) => member.email === "friend@example.com")?.id,
+    ).toBe("supabase-friend-id");
+    expect(
+      accepted.invites.find((entry) => entry.id === invite!.id)?.acceptedByUserId,
+    ).toBe("supabase-friend-id");
   });
 });
 

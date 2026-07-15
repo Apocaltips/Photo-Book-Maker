@@ -182,7 +182,7 @@ The authoritative API for v1 is the Next.js app in `apps/web`.
     `ALPHA_READINESS_SECRET` set in the local shell. Hosted mode calls the
     protected `/api/alpha/readiness` route so the deployed app proves its own
     Supabase, R2, project-store, template-catalog, private-worker setup,
-    direct Supabase project-table access denial, signed photo upload-ticket
+    anonymous Supabase project-table access denial, signed photo upload-ticket
     creation, exact-origin browser CORS, private signed reads, a byte-verified
     object-storage write/read/delete canary, clean generation queue state, and
     the latest saved AI generation quality score.
@@ -199,8 +199,11 @@ The authoritative API for v1 is the Next.js app in `apps/web`.
     `HOSTED_ALPHA_PROOF_PROJECT_ID` or `HOSTED_ALPHA_PROOF_PROJECT_TITLE`,
     `LOCAL_AI_WORKER_SECRET`, and `LOCAL_AI_WORKER_PROCESSOR_BASE_URL`.
     This is the outside-tester gate because it proves the deployed app can
-    report readiness, render a real authenticated proof, and reach the private
-    worker processor. Keep the combined `HOSTED_ALPHA_ACCEPTANCE_REPORT_PATH`
+    report readiness, render a real authenticated proof, reach the private
+    worker processor, and use that valid tester token to prove direct Supabase
+    project-table access returns `403`. A `401` does not count because an
+    expired token cannot prove authenticated-role isolation. Keep the combined
+    `HOSTED_ALPHA_ACCEPTANCE_REPORT_PATH`
     report and its companion hosted-alpha reports with the tester-session notes.
 13. Leave `PRINT_PROVIDER=manual_pdf` for Phase 1. When direct print checkout
     starts, set `PRINT_PROVIDER` to the selected API candidate, configure the

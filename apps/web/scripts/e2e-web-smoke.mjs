@@ -48,6 +48,10 @@ const otherDevAuthHeaders = {
   "X-Photo-Book-Dev-Id": "family-friend",
   "X-Photo-Book-Dev-Name": "Family Friend",
 };
+const recycledCollaboratorDevAuthHeaders = {
+  ...otherDevAuthHeaders,
+  "X-Photo-Book-Dev-Id": "different-account-reusing-collaborator-email",
+};
 const intruderDevAuthHeaders = {
   "X-Photo-Book-Dev-Email": "wrong-invite-user@example.com",
   "X-Photo-Book-Dev-Id": "wrong-invite-user",
@@ -287,6 +291,27 @@ async function expireStoredPhotoImageUri(projectId, photoId) {
   return staleUri;
 }
 
+async function makeStoredProjectUseLegacyEmailOwner(projectId) {
+  if (!fileStoreDir) {
+    return false;
+  }
+
+  const projectStorePath = path.join(fileStoreDir, "projects.json");
+  const projects = JSON.parse(await readFile(projectStorePath, "utf8"));
+  const project = projects.find((entry) => entry.id === projectId);
+  const owner = project?.members?.find((member) => member.id === project.ownerId);
+
+  if (!project || !owner) {
+    throw new Error(`Could not find project owner for legacy identity test: ${projectId}`);
+  }
+
+  owner.id = "owner-generated";
+  project.ownerId = "owner-generated";
+  await writeFile(projectStorePath, `${JSON.stringify(projects, null, 2)}\n`, "utf8");
+
+  return true;
+}
+
 async function assertAlphaReadinessRoute() {
   if (reuseExistingServer && !process.env.E2E_ALPHA_READINESS_SECRET) {
     return;
@@ -426,6 +451,32 @@ async function runProjectE2E() {
     throw new Error("Duplicate-title projects did not receive isolated server identities.");
   }
 
+  const legacyOwnerProject = (
+    await apiJson("/api/projects", {
+      method: "POST",
+      body: JSON.stringify({
+        endDate: "2026-07-14",
+        startDate: "2026-07-11",
+        subtitle: "Legacy email ownership must not authorize a replacement account",
+        timezone: "America/Denver",
+        title: `Legacy owner E2E ${stamp}`,
+        type: "trip",
+      }),
+    })
+  ).project;
+
+  if (await makeStoredProjectUseLegacyEmailOwner(legacyOwnerProject.id)) {
+    const legacyEmailReuseResponse = await fetchWithTimeout(
+      `${baseUrl}/api/projects/${legacyOwnerProject.id}`,
+      { headers: recycledEmailDevAuthHeaders },
+    );
+    if (legacyEmailReuseResponse.status !== 403) {
+      throw new Error(
+        `Legacy email ownership authorized a replacement account: ${legacyEmailReuseResponse.status}`,
+      );
+    }
+  }
+
   const recycledEmailProjectResponse = await fetchWithTimeout(
     `${baseUrl}/api/projects/${project.id}`,
     { headers: recycledEmailDevAuthHeaders },
@@ -523,6 +574,47 @@ async function runProjectE2E() {
     )
   ) {
     throw new Error("Invite acceptance did not add the collaborator as a project member.");
+  }
+
+  const recycledCollaboratorReplay = await fetchWithTimeout(
+    `${baseUrl}/api/projects/${project.id}/invites/${inviteId}/accept`,
+    {
+      method: "POST",
+      headers: {
+        ...recycledCollaboratorDevAuthHeaders,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ token: inviteToken }),
+    },
+  );
+  if (recycledCollaboratorReplay.status !== 403) {
+    throw new Error(
+      `Accepted invite leaked to a replacement account with the same email: ${recycledCollaboratorReplay.status}`,
+    );
+  }
+
+  const acceptedInviteReplay = await apiJsonAs(
+    `/api/projects/${project.id}/invites/${inviteId}/accept`,
+    otherDevAuthHeaders,
+    {
+      method: "POST",
+      body: JSON.stringify({}),
+    },
+  );
+  const acceptedInviteActivityCount = acceptedInvite.project.activity?.filter(
+    (entry) => entry.type === "invite_accepted",
+  ).length;
+  const replayedInviteActivityCount = acceptedInviteReplay.project?.activity?.filter(
+    (entry) => entry.type === "invite_accepted",
+  ).length;
+  if (
+    acceptedInviteReplay.project?.id !== project.id ||
+    acceptedInviteReplay.project.revision !== acceptedInvite.project.revision ||
+    replayedInviteActivityCount !== acceptedInviteActivityCount
+  ) {
+    throw new Error(
+      "Reopening an accepted invite changed its revision or duplicated its activity event.",
+    );
   }
 
   const collaboratorProject = await apiJsonAs(

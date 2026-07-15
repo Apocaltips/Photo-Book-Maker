@@ -9,6 +9,7 @@ import {
   MIN_HOSTED_SHARED_SECRET_LENGTH,
   collectPhaseTwoProviderChecks,
   getReadinessContractEnvNames,
+  isAuthenticatedSupabaseAccessDenied,
   isUnsignedObjectReadDenied,
   makeSharedSecretStrengthCheck,
   shouldCheckPhaseTwoProviders,
@@ -20,6 +21,10 @@ const envExampleUrl = new URL("../../../.env.example", import.meta.url);
 const supabaseSchemaUrl = new URL("../../../docs/supabase-photo-book-schema.sql", import.meta.url);
 const alphaReadinessRouteUrl = new URL(
   "../src/app/api/alpha/readiness/route.ts",
+  import.meta.url,
+);
+const inviteAcceptanceRouteUrl = new URL(
+  "../src/app/api/projects/[projectId]/invites/[inviteId]/accept/route.ts",
   import.meta.url,
 );
 const aiWorkerHealthRouteUrl = new URL(
@@ -187,6 +192,8 @@ function assertHostedAlphaAcceptanceFails(overrides, expectedText) {
 const envExample = await readFile(envExampleUrl, "utf8");
 const supabaseSchema = normalizeSql(await readFile(supabaseSchemaUrl, "utf8"));
 const alphaReadinessRoute = await readFile(alphaReadinessRouteUrl, "utf8");
+const alphaReadinessScriptSource = await readFile(alphaReadinessScriptPath, "utf8");
+const inviteAcceptanceRoute = await readFile(inviteAcceptanceRouteUrl, "utf8");
 const aiWorkerHealthRoute = await readFile(aiWorkerHealthRouteUrl, "utf8");
 const localAiWorkerScript = await readFile(localAiWorkerScriptUrl, "utf8");
 const hostedAlphaAcceptanceSource = await readFile(hostedAlphaAcceptancePath, "utf8");
@@ -258,8 +265,18 @@ assert(
   "Hosted alpha acceptance must require the authenticated hosted worker handshake.",
 );
 assert(
+  inviteAcceptanceRoute.includes("expectedRevision: currentProject.revision") &&
+    inviteAcceptanceRoute.includes("isRevisionConflictError"),
+  "Invite acceptance must use compare-and-set and resolve concurrent idempotent accepts safely.",
+);
+assert(
   alphaReadinessRoute.includes("isDirectAccessDenied"),
   "Alpha readiness route must fail closed unless the anon direct-access probe is denied.",
+);
+assert(
+  alphaReadinessScriptSource.includes("isAuthenticatedSupabaseAccessDenied") &&
+    alphaReadinessScriptSource.includes("authenticated Supabase direct access"),
+  "Hosted alpha readiness must probe direct table access with a signed-in tester token.",
 );
 assert(
   alphaReadinessRoute.includes("photo upload ticket signing"),
@@ -295,6 +312,16 @@ for (const status of [200, 302, 500]) {
   assert(
     !isUnsignedObjectReadDenied(status),
     `Unsigned object-read status ${status} must not count as an explicit denial.`,
+  );
+}
+assert(
+  isAuthenticatedSupabaseAccessDenied(403),
+  "A valid authenticated Supabase user must prove direct-table denial with 403.",
+);
+for (const status of [200, 401, 404, 500]) {
+  assert(
+    !isAuthenticatedSupabaseAccessDenied(status),
+    `Authenticated direct-table status ${status} must not count as proven isolation.`,
   );
 }
 assert(

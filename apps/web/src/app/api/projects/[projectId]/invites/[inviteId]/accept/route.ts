@@ -6,7 +6,11 @@ import {
 } from "@/lib/server/auth";
 import { findInvite, isValidInviteToken } from "@/lib/server/invites";
 import { mutationErrorResponse } from "@/lib/server/mutation-response";
-import { readProjects, updateProject } from "@/lib/server/project-store";
+import {
+  isRevisionConflictError,
+  readProjects,
+  updateProject,
+} from "@/lib/server/project-store";
 import { hydrateProjectForClient } from "@/lib/server/project-response";
 import { getRequestOrigin } from "@/lib/server/request-origin";
 
@@ -45,47 +49,77 @@ export async function POST(
 
   const alreadyAccepted =
     invite.status === "accepted" &&
-    currentProject.members.some(
-      (member) => member.email.toLowerCase() === user.email.toLowerCase(),
-    );
+    invite.acceptedByUserId === user.id &&
+    currentProject.members.some((member) => member.id === user.id);
 
-  if (!alreadyAccepted && !isValidInviteToken(invite, body.token)) {
+  if (invite.status === "accepted" && !alreadyAccepted) {
+    return NextResponse.json(
+      { message: "This invite was already accepted by a different account." },
+      { status: 403 },
+    );
+  }
+
+  if (alreadyAccepted) {
+    return NextResponse.json({
+      message: "Invite already accepted. Opening the shared book now.",
+      project: await hydrateProjectForClient(currentProject, getRequestOrigin(request)),
+    });
+  }
+
+  if (!isValidInviteToken(invite, body.token)) {
     return NextResponse.json(
       { message: "This invite link is invalid or has expired. Ask the owner to send it again." },
       { status: 403 },
     );
   }
 
-  const updatedProject = await updateProject(
-    projectId,
-    (project) => {
-      if (alreadyAccepted) {
-        return project;
-      }
+  let updatedProject;
 
-      return acceptProjectInvite(project, {
+  try {
+    updatedProject = await updateProject(
+      projectId,
+      (project) => acceptProjectInvite(project, {
         inviteId,
         acceptedAt: new Date().toISOString(),
         acceptedByUserId: user.id,
         acceptedEmail: user.email,
         acceptedName: user.name,
-      });
-    },
-    {
-      activity: alreadyAccepted
-        ? undefined
-        : {
-            actorEmail: user.email,
-            actorId: user.id,
-            message: `${user.name} accepted the invite.`,
-            type: "invite_accepted",
-          },
-      skipRevisionAdvance: alreadyAccepted,
-    },
-  ).catch((error) => error);
+      }),
+      {
+        activity: {
+          actorEmail: user.email,
+          actorId: user.id,
+          message: `${user.name} accepted the invite.`,
+          type: "invite_accepted",
+        },
+        expectedRevision: currentProject.revision,
+      },
+    );
+  } catch (error) {
+    if (isRevisionConflictError(error)) {
+      const latestProject = findProjectById(await readProjects(), projectId);
+      const latestInvite = latestProject ? findInvite(latestProject, inviteId) : null;
+      const acceptedByCurrentUser =
+        latestInvite?.status === "accepted" &&
+        latestInvite.acceptedByUserId === user.id &&
+        latestProject?.members.some((member) => member.id === user.id);
 
-  if (updatedProject instanceof Error) {
-    return mutationErrorResponse(updatedProject, "Unable to accept this invite.");
+      if (acceptedByCurrentUser && latestProject) {
+        return NextResponse.json({
+          message: "Invite already accepted. Opening the shared book now.",
+          project: await hydrateProjectForClient(latestProject, getRequestOrigin(request)),
+        });
+      }
+
+      if (latestInvite?.status === "accepted") {
+        return NextResponse.json(
+          { message: "This invite was already accepted by a different account." },
+          { status: 403 },
+        );
+      }
+    }
+
+    return mutationErrorResponse(error, "Unable to accept this invite.");
   }
 
   if (!updatedProject) {
@@ -93,9 +127,7 @@ export async function POST(
   }
 
   return NextResponse.json({
-    message: alreadyAccepted
-      ? "Invite already accepted. Opening the shared book now."
-      : "Invite accepted. You can edit this shared book now.",
+    message: "Invite accepted. You can edit this shared book now.",
     project: await hydrateProjectForClient(updatedProject, getRequestOrigin(request)),
   });
 }

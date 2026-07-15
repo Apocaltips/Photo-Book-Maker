@@ -110,16 +110,9 @@ export async function getAuthenticatedUser(request: Request): Promise<Authentica
 
 export function getProjectAccess(
   project: Project,
-  user: Pick<AuthenticatedUser, "email" | "id">,
+  user: Pick<AuthenticatedUser, "id">,
 ) {
-  const normalizedEmail = user.email.toLowerCase();
-  const memberByUserId = project.members.find((member) => member.id === user.id);
-  const legacyOwnerByEmail = project.members.find(
-    (member) =>
-      member.id === "owner-generated" &&
-      member.email.toLowerCase() === normalizedEmail,
-  );
-  const member = memberByUserId ?? legacyOwnerByEmail;
+  const member = project.members.find((entry) => entry.id === user.id);
   const isMember = Boolean(member);
   const isOwner = member?.id === project.ownerId;
 
@@ -132,7 +125,7 @@ export function getProjectAccess(
 
 export function filterProjectsForUser(
   projects: Project[],
-  user: Pick<AuthenticatedUser, "email" | "id">,
+  user: Pick<AuthenticatedUser, "id">,
 ) {
   return projects.filter((project) => getProjectAccess(project, user).canView);
 }

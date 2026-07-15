@@ -290,6 +290,7 @@ export function acceptProjectInvite(
   const nextMember = existingMember
     ? {
         ...existingMember,
+        id: input.acceptedByUserId,
         name,
         email: normalizedEmail,
         avatarLabel: existingMember.avatarLabel || getAvatarLabel(name, normalizedEmail),

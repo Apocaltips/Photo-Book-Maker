@@ -6,6 +6,7 @@ import { fileURLToPath } from "node:url";
 import {
   collectPhaseTwoProviderChecks,
   getMissingEnv,
+  isAuthenticatedSupabaseAccessDenied,
   makeSharedSecretStrengthCheck,
   shouldRequirePrivateWorker,
   shouldRequireProviderInfrastructure,
@@ -49,6 +50,10 @@ const requireExplicitTargetUrl = mode === "hosted" || mode === "provider";
 const checkCallerEnvironment =
   process.env.ALPHA_READINESS_CHECK_CALLER_ENV === "1" ||
   (process.env.ALPHA_READINESS_CHECK_CALLER_ENV !== "0" && mode === "local");
+const authenticatedProofBearerToken =
+  process.env.HOSTED_ALPHA_PROOF_BEARER_TOKEN ??
+  process.env.PROOF_QUALITY_BEARER_TOKEN ??
+  "";
 
 const checks = [];
 let fileStoreDir;
@@ -482,6 +487,83 @@ async function checkAuthGate() {
   }
 }
 
+async function checkAuthenticatedSupabaseIsolation() {
+  if (mode !== "hosted" && mode !== "provider") {
+    skip(
+      "authenticated Supabase direct access",
+      "Authenticated direct-table isolation is checked only for hosted/provider readiness.",
+      { mode },
+    );
+    return;
+  }
+
+  const supabaseUrl = (
+    process.env.NEXT_PUBLIC_SUPABASE_URL ?? process.env.SUPABASE_URL ?? ""
+  ).replace(/\/$/, "");
+  const anonKey =
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ?? process.env.SUPABASE_ANON_KEY ?? "";
+  const table = process.env.SUPABASE_PROJECTS_TABLE?.trim() || "photo_book_projects";
+  const missing = [];
+
+  if (!supabaseUrl) {
+    missing.push("NEXT_PUBLIC_SUPABASE_URL or SUPABASE_URL");
+  }
+  if (!anonKey) {
+    missing.push("NEXT_PUBLIC_SUPABASE_ANON_KEY or SUPABASE_ANON_KEY");
+  }
+  if (!authenticatedProofBearerToken) {
+    missing.push("HOSTED_ALPHA_PROOF_BEARER_TOKEN or PROOF_QUALITY_BEARER_TOKEN");
+  }
+
+  if (missing.length) {
+    warn(
+      "authenticated Supabase direct access",
+      `Authenticated direct-table isolation was not probed because the caller is missing: ${missing.join(", ")}.`,
+      { missing, table },
+    );
+    return;
+  }
+
+  try {
+    const response = await fetch(
+      `${supabaseUrl}/rest/v1/${encodeURIComponent(table)}?select=id&limit=1`,
+      {
+        headers: {
+          apikey: anonKey,
+          Authorization: `Bearer ${authenticatedProofBearerToken}`,
+        },
+        signal: AbortSignal.timeout(10_000),
+      },
+    );
+    await response.text();
+
+    if (isAuthenticatedSupabaseAccessDenied(response.status)) {
+      pass(
+        "authenticated Supabase direct access",
+        "A valid signed-in tester is denied direct project-table access.",
+        { status: response.status, table },
+      );
+      return;
+    }
+
+    fail(
+      "authenticated Supabase direct access",
+      response.status === 401
+        ? "The tester token was not accepted, so authenticated table isolation was not proven."
+        : `Expected authenticated direct-table denial with 403, got ${response.status}.`,
+      { status: response.status, table },
+    );
+  } catch (error) {
+    fail(
+      "authenticated Supabase direct access",
+      error instanceof Error
+        ? error.message
+        : "Authenticated Supabase direct-table probe failed.",
+      { table },
+    );
+  }
+}
+
 async function checkAiHealth() {
   if (missingRequiredTargetUrl) {
     skip("local AI health", "Skipped because ALPHA_READINESS_BASE_URL is not configured.", {
@@ -663,6 +745,7 @@ async function main() {
   await checkHomePage();
   await checkTemplateCatalog();
   await checkAuthGate();
+  await checkAuthenticatedSupabaseIsolation();
   await checkAiHealth();
 
   const failCount = checks.filter((check) => check.status === "fail").length;

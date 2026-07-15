@@ -95,6 +95,10 @@ export function isUnsignedObjectReadDenied(status) {
   return [400, 401, 403, 404].includes(status);
 }
 
+export function isAuthenticatedSupabaseAccessDenied(status) {
+  return status === 403;
+}
+
 export function getSharedSecretStrengthIssue(
   value,
   { label = "Shared secret", minLength = MIN_HOSTED_SHARED_SECRET_LENGTH } = {},
